@@ -224,6 +224,11 @@ export function syncCrearLead(institucionId, leadData) {
       insertData.asignado_a = leadData.asignado_a;
     }
     
+    // Incluir creado_por si es UUID válido
+    if (leadData.creado_por && leadData.creado_por.includes('-') && leadData.creado_por.length > 30) {
+      insertData.creado_por = leadData.creado_por;
+    }
+    
     console.log('📤 Enviando a Supabase:', insertData);
     
     const { data, error } = await supabase

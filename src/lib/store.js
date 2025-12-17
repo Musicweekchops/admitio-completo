@@ -22,6 +22,15 @@ import {
   CORREOS_ENVIADOS_INICIAL
 } from '../data/mockData'
 
+// Importar funciones de sincronización con Supabase
+import { 
+  syncCrearLead, 
+  syncActualizarLead, 
+  syncEliminarLead,
+  syncCrearAccion,
+  getInstitucionIdFromStore 
+} from './storeSync'
+
 const STORAGE_KEY = 'admitio_data'
 const STORAGE_VERSION = '2.6' // Incrementar cuando cambie la estructura - Agregado historial importaciones
 
@@ -308,8 +317,12 @@ export function getConsultas(userId = null, rol = null) {
   if (rol === 'encargado' && userId) {
     consultas = consultas.filter(c => c.asignado_a === userId)
   }
-  if (rol === 'rector' || rol === 'asistente') {
-    return [] // No ven leads
+  // Asistente ve solo los leads que creó
+  if (rol === 'asistente' && userId) {
+    consultas = consultas.filter(c => c.creado_por === userId)
+  }
+  if (rol === 'rector') {
+    return [] // Rector no ve leads, solo reportes
   }
   
   // Agregar datos relacionados
@@ -403,6 +416,13 @@ export function createConsulta(data, userId, userRol = null) {
   }
   
   saveStore()
+  
+  // ========== SYNC CON SUPABASE ==========
+  const institucionId = getInstitucionIdFromStore()
+  if (institucionId) {
+    syncCrearLead(institucionId, newConsulta)
+  }
+  // ========================================
   
   // Log para debugging
   const encargado = store.usuarios.find(u => u.id === asignado_a)
@@ -656,6 +676,11 @@ export function updateConsulta(id, updates, userId) {
   
   store.consultas[index] = newConsulta
   saveStore()
+  
+  // ========== SYNC CON SUPABASE ==========
+  syncActualizarLead(id, updates)
+  // ========================================
+  
   return newConsulta
 }
 
@@ -665,6 +690,10 @@ export function deleteConsulta(id) {
   store.recordatorios = store.recordatorios.filter(r => r.lead_id !== id)
   store.cola_leads = store.cola_leads.filter(c => c.lead_id !== id)
   saveStore()
+  
+  // ========== SYNC CON SUPABASE ==========
+  syncEliminarLead(id)
+  // ========================================
 }
 
 // Reactivar un lead descartado
@@ -795,7 +824,7 @@ export function asignarDesdeColaA(leadId, userId, asignadoPor) {
 // ============================================
 function addActividad(leadId, userId, tipo, descripcion, metadata = {}) {
   const usuario = store.usuarios.find(u => u.id === userId)
-  store.actividad.push({
+  const actividad = {
     id: `a-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     lead_id: leadId,
     user_id: userId,
@@ -804,7 +833,12 @@ function addActividad(leadId, userId, tipo, descripcion, metadata = {}) {
     descripcion,
     metadata,
     created_at: new Date().toISOString()
-  })
+  }
+  store.actividad.push(actividad)
+  
+  // ========== SYNC CON SUPABASE ==========
+  syncCrearAccion(leadId, { tipo, descripcion }, userId)
+  // ========================================
 }
 
 export function getActividad(leadId) {

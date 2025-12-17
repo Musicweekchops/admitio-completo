@@ -155,6 +155,7 @@ export function AuthProvider({ children }) {
           prioridad: lead.prioridad || 'media',
           notas: lead.notas,
           asignado_a: lead.asignado_a,
+          creado_por: lead.creado_por,  // Para filtrar por asistente
           created_at: lead.created_at,
           fecha_primer_contacto: lead.fecha_primer_contacto,
           fecha_cierre: lead.fecha_cierre
