@@ -3,67 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Icon from '../components/Icon'
 import * as store from '../lib/store'
-import { cargarDatosInstitucion } from '../lib/storeSync'
-import { ESTADOS, MEDIOS, TIPOS_ALUMNO } from '../data/mockData'
-
-// Componente para input de campo extra (evita re-renders al escribir)
-const CampoExtraInput = ({ campo, onUpdate, onRemove }) => {
-  const [label, setLabel] = useState(campo.label || '')
-  
-  useEffect(() => {
-    setLabel(campo.label || '')
-  }, [campo.id])
-  
-  const handleBlur = () => {
-    if (label !== campo.label) {
-      onUpdate(campo.id, 'label', label)
-    }
-  }
-  
-  return (
-    <div className="flex items-start gap-2 p-3 bg-slate-50 rounded-lg">
-      <div className="flex-1 grid grid-cols-2 gap-2">
-        <input 
-          type="text" 
-          placeholder="Nombre del campo"
-          value={label}
-          onChange={e => setLabel(e.target.value)}
-          onBlur={handleBlur}
-          className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" 
-        />
-        <select 
-          value={campo.tipo}
-          onChange={e => onUpdate(campo.id, 'tipo', e.target.value)}
-          className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-        >
-          <option value="text">Texto</option>
-          <option value="email">Email</option>
-          <option value="tel">Teléfono</option>
-          <option value="number">Número</option>
-          <option value="date">Fecha</option>
-          <option value="textarea">Área de texto</option>
-          <option value="select">Selector</option>
-        </select>
-      </div>
-      <label className="flex items-center gap-1 text-sm text-slate-600 whitespace-nowrap">
-        <input 
-          type="checkbox" 
-          checked={campo.requerido}
-          onChange={e => onUpdate(campo.id, 'requerido', e.target.checked)}
-          className="rounded border-slate-300" 
-        />
-        Req.
-      </label>
-      <button 
-        type="button" 
-        onClick={() => onRemove(campo.id)}
-        className="p-1 text-red-500 hover:bg-red-50 rounded"
-      >
-        <Icon name="X" size={16} />
-      </button>
-    </div>
-  )
-}
+import { ESTADOS, CARRERAS, MEDIOS, TIPOS_ALUMNO } from '../data/mockData'
 
 // Componente separado para el textarea de notas (evita re-renders)
 const NotasTextarea = ({ consulta, userId, onSaved }) => {
@@ -133,7 +73,6 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
   const [selectedDuplicado, setSelectedDuplicado] = useState(null)
   
   const encargados = store.getUsuarios().filter(u => u.rol_id === 'encargado')
-  const carrerasModal = store.getCarreras()
   
   const resetForm = () => {
     setFormData({
@@ -177,7 +116,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
     
     const newConsulta = store.createConsulta({
       ...formData,
-      carrera_id: formData.carrera_id || null,
+      carrera_id: parseInt(formData.carrera_id),
       asignado_a: formData.asignado_a || null
     }, userId, userRol)
     
@@ -197,7 +136,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
     setSubmitting(true)
     const resultado = store.agregarCarreraALead(
       selectedDuplicado.id, 
-      formData.carrera_id, 
+      parseInt(formData.carrera_id), 
       userId
     )
     setSubmitting(false)
@@ -249,7 +188,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
   
   // Modal de alerta de duplicado
   if (showDuplicadoAlert && selectedDuplicado) {
-    const carreraNueva = carrerasModal.find(c => c.id === formData.carrera_id)
+    const carreraNueva = CARRERAS.find(c => c.id === parseInt(formData.carrera_id))
     const carreraExistente = selectedDuplicado.carrera
     
     // Mostrar botón "Agregar Carrera" si:
@@ -311,7 +250,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
                 <p className="text-xs text-slate-500 mb-1">Carreras de interés actuales:</p>
                 <div className="flex flex-wrap gap-1">
                   {selectedDuplicado.carreras_interes.map(cid => {
-                    const carr = carrerasModal.find(c => c.id === cid)
+                    const carr = CARRERAS.find(c => c.id === cid)
                     return carr ? (
                       <span key={cid} className="px-2 py-0.5 bg-violet-100 text-violet-700 text-xs rounded-full">
                         {carr.nombre}
@@ -463,7 +402,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
                     onChange={e => setFormData({...formData, carrera_id: e.target.value})}
                     className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
               <option value="">Seleccionar carrera</option>
-              {carrerasModal.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              {CARRERAS.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
           </div>
           <div>
@@ -590,7 +529,7 @@ const PieChart = ({ data, size = 200 }) => {
 }
 
 export default function Dashboard() {
-  const { user, institucion, signOut, isKeyMaster, isRector, isEncargado, isAsistente, canViewAll, canEdit, canConfig, canCreateLeads, canReasignar } = useAuth()
+  const { user, signOut, isKeyMaster, isRector, isEncargado, isAsistente, canViewAll, canEdit, canConfig, canCreateLeads, canReasignar } = useAuth()
   const navigate = useNavigate()
   
   const [activeTab, setActiveTab] = useState(isRector ? 'reportes' : 'dashboard')
@@ -613,8 +552,6 @@ export default function Dashboard() {
   const [metricasGlobales, setMetricasGlobales] = useState(null)
   const [leadsHoy, setLeadsHoy] = useState([])
   const [formularios, setFormularios] = useState([])
-  const [carreras, setCarreras] = useState([])
-  const [showCarrerasModal, setShowCarrerasModal] = useState(false)
   const [embedCode, setEmbedCode] = useState('')
   const [notification, setNotification] = useState(null)
   
@@ -628,76 +565,15 @@ export default function Dashboard() {
     mostrar_carreras: true,
     campos_extra: []
   })
-  
-  // Estado para refresh desde Supabase
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [lastRefresh, setLastRefresh] = useState(null)
 
-  // Función para recargar datos desde Supabase
-  const refreshFromSupabase = useCallback(async () => {
-    if (!institucion?.id || isRefreshing) return
-    
-    setIsRefreshing(true)
-    try {
-      console.log('🔄 Recargando datos desde Supabase...')
-      await cargarDatosInstitucion(institucion.id)
-      store.reloadStore()
-      loadData()
-      setLastRefresh(new Date())
-      console.log('✅ Datos actualizados desde Supabase')
-    } catch (error) {
-      console.error('❌ Error al recargar:', error)
-    } finally {
-      setIsRefreshing(false)
-    }
-  }, [institucion?.id, isRefreshing])
-
-  // Cargar datos inicial y cuando cambie la institución
+  // Cargar datos inicial
   useEffect(() => {
-    // Función para recargar datos
-    const doLoadData = () => {
-      store.reloadStore() // Recargar store desde localStorage
-      loadData()
-    }
-    
-    // Cargar inmediatamente
-    doLoadData()
-    
-    // Auto-refresh cada 30 segundos para mantener datos sincronizados
-    const autoRefreshInterval = setInterval(() => {
-      if (institucion?.id && !isRefreshing) {
-        console.log('⏰ Auto-refresh desde Supabase...')
-        refreshFromSupabase()
-      }
-    }, 30000) // 30 segundos
-    
-    // Escuchar cuando el store se actualice desde Supabase
-    const handleStoreUpdate = (e) => {
-      console.log('🔄 Store actualizado desde Supabase:', e.detail)
-      doLoadData()
-    }
-    window.addEventListener('admitio-store-updated', handleStoreUpdate)
-    
-    // También escuchar cambios en localStorage (otras pestañas)
-    const handleStorageChange = (e) => {
-      if (e.key === 'admitio_data') {
-        console.log('🔄 Store actualizado en localStorage')
-        doLoadData()
-      }
-    }
-    window.addEventListener('storage', handleStorageChange)
-    
-    return () => {
-      clearInterval(autoRefreshInterval)
-      window.removeEventListener('admitio-store-updated', handleStoreUpdate)
-      window.removeEventListener('storage', handleStorageChange)
-    }
-  }, [user, institucion, refreshFromSupabase])
+    loadData()
+  }, [user])
 
   function loadData() {
     const data = store.getConsultas(user?.id, user?.rol_id)
     setConsultas(data)
-    setCarreras(store.getCarreras())
     
     if (isEncargado) {
       setMetricas(store.getMetricasEncargado(user.id))
@@ -776,8 +652,7 @@ export default function Dashboard() {
       { id: 'dashboard', icon: 'Home', label: 'Dashboard', show: !isRector },
       { id: 'consultas', icon: 'Users', label: 'Consultas', show: !isRector, badge: consultas.filter(c => c.estado === 'nueva').length },
       { id: 'historial', icon: 'Archive', label: 'Historial', show: !isRector },
-      { id: 'reportes', icon: 'BarChart3', label: isRector ? 'Dashboard' : 'Reportes', show: isKeyMaster || isRector || isEncargado || user?.rol_id === 'superadmin' },
-      { id: 'carreras', icon: 'Tag', label: 'Carreras', show: isKeyMaster || user?.rol_id === 'superadmin' },
+      { id: 'reportes', icon: 'BarChart', label: isRector ? 'Dashboard' : 'Reportes', show: isKeyMaster || isRector || isEncargado || user?.rol_id === 'superadmin' },
       { id: 'formularios', icon: 'FileCode', label: 'Formularios', show: isKeyMaster || user?.rol_id === 'superadmin' },
       { id: 'usuarios', icon: 'User', label: 'Usuarios', show: isKeyMaster || user?.rol_id === 'superadmin' },
       { id: 'config', icon: 'Upload', label: 'Importar', show: isKeyMaster || user?.rol_id === 'superadmin' },
@@ -812,20 +687,12 @@ export default function Dashboard() {
             <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} mb-4`}>
               <div className={`flex items-center ${sidebarCollapsed ? '' : 'gap-3'}`}>
                 <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <span className="text-white font-bold">{institucion?.nombre?.charAt(0) || 'A'}</span>
+                  <span className="text-white font-bold">P</span>
                 </div>
                 {!sidebarCollapsed && (
                   <div className="overflow-hidden">
-                    <p className="font-bold text-slate-800 truncate">{institucion?.nombre || 'Mi Institución'}</p>
-                    <p className="text-xs text-slate-500">
-                      Plan: <span className={`font-semibold ${
-                        institucion?.plan === 'prueba' ? 'text-slate-500' :
-                        institucion?.plan === 'inicial' ? 'text-blue-600' :
-                        institucion?.plan === 'profesional' ? 'text-violet-600' :
-                        institucion?.plan === 'premium' ? 'text-amber-600' :
-                        'text-emerald-600'
-                      }`}>{institucion?.plan?.charAt(0).toUpperCase() + institucion?.plan?.slice(1) || 'Prueba'}</span>
-                    </p>
+                    <p className="font-bold text-slate-800">PROJAZZ</p>
+                    <p className="text-xs text-slate-400">Sistema de Admisión</p>
                   </div>
                 )}
               </div>
@@ -1277,25 +1144,14 @@ export default function Dashboard() {
             <h2 className="text-2xl font-bold text-slate-800">Gestión de Consultas</h2>
             <p className="text-slate-500">
               {isKeyMaster ? 'Todas las consultas' : 'Mis leads asignados'}
-              {lastRefresh && <span className="text-xs ml-2">• Actualizado {lastRefresh.toLocaleTimeString()}</span>}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button 
-            onClick={refreshFromSupabase} 
-            disabled={isRefreshing}
-            className={`p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors ${isRefreshing ? 'opacity-50' : ''}`}
-            title="Actualizar datos desde servidor"
-          >
-            <Icon name="RefreshCw" size={20} className={`text-slate-600 ${isRefreshing ? 'animate-spin' : ''}`} />
+        {canEdit && (
+          <button onClick={() => setShowModal(true)} className="px-4 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 transition-colors flex items-center gap-2">
+            <Icon name="Plus" size={20} /> Nueva Consulta
           </button>
-          {canEdit && (
-            <button onClick={() => setShowModal(true)} className="px-4 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 transition-colors flex items-center gap-2">
-              <Icon name="Plus" size={20} /> Nueva Consulta
-            </button>
-          )}
-        </div>
+        )}
       </div>
 
       {/* Filtros */}
@@ -1310,7 +1166,7 @@ export default function Dashboard() {
           <select value={filterCarrera} onChange={(e) => setFilterCarrera(e.target.value)}
                   className="px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
             <option value="todas">Todas las carreras</option>
-            {carreras.map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
+            {CARRERAS.map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
           </select>
           <select value={filterEstado} onChange={(e) => setFilterEstado(e.target.value)}
                   className="px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
@@ -1678,24 +1534,6 @@ export default function Dashboard() {
                   value={c.tipo_alumno === 'nuevo' ? 'Alumno Nuevo' : 'Alumno Antiguo'} 
                   iconColor={c.tipo_alumno === 'nuevo' ? 'text-blue-500' : 'text-violet-500'} 
                 />
-                {/* Tiempo de respuesta */}
-                {(() => {
-                  const tiempoResp = store.getTiempoRespuestaLead(c.id)
-                  if (tiempoResp) {
-                    return (
-                      <InfoCard 
-                        icon="Clock" 
-                        label={tiempoResp.esperando ? "Tiempo sin contactar" : "Tiempo de respuesta"} 
-                        value={tiempoResp.texto} 
-                        iconColor={tiempoResp.esperando 
-                          ? (tiempoResp.valor > 24 ? 'text-red-500' : 'text-amber-500')
-                          : (tiempoResp.valor < 2 ? 'text-green-500' : tiempoResp.valor < 24 ? 'text-amber-500' : 'text-red-500')
-                        } 
-                      />
-                    )
-                  }
-                  return null
-                })()}
               </div>
               
               {/* Carreras de interés (si tiene más de una) */}
@@ -1707,7 +1545,7 @@ export default function Dashboard() {
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {c.carreras_interes.map(carreraId => {
-                      const carrera = carreras.find(ca => ca.id === carreraId)
+                      const carrera = CARRERAS.find(ca => ca.id === carreraId)
                       return carrera ? (
                         <span key={carreraId} 
                               className={`px-3 py-1 rounded-full text-sm font-medium ${
@@ -2693,252 +2531,6 @@ export default function Dashboard() {
   }
 
   // ============================================
-  // CARRERAS VIEW - Gestión de carreras/intereses
-  // ============================================
-  const CarrerasView = () => {
-    const [showCarreraModal, setShowCarreraModal] = useState(false)
-    const [editingCarrera, setEditingCarrera] = useState(null)
-    const [carreraForm, setCarreraForm] = useState({ nombre: '', color: '#7c3aed' })
-    
-    const coloresDisponibles = [
-      { id: '#ec4899', nombre: 'Rosa', clase: 'bg-pink-500' },
-      { id: '#f97316', nombre: 'Naranja', clase: 'bg-orange-500' },
-      { id: '#ef4444', nombre: 'Rojo', clase: 'bg-red-500' },
-      { id: '#a855f7', nombre: 'Púrpura', clase: 'bg-purple-500' },
-      { id: '#3b82f6', nombre: 'Azul', clase: 'bg-blue-500' },
-      { id: '#22c55e', nombre: 'Verde', clase: 'bg-green-500' },
-      { id: '#14b8a6', nombre: 'Teal', clase: 'bg-teal-500' },
-      { id: '#06b6d4', nombre: 'Cyan', clase: 'bg-cyan-500' },
-      { id: '#eab308', nombre: 'Amarillo', clase: 'bg-yellow-500' },
-      { id: '#64748b', nombre: 'Gris', clase: 'bg-slate-500' },
-    ]
-    
-    const handleCreateCarrera = (e) => {
-      e.preventDefault()
-      if (!carreraForm.nombre.trim()) return
-      
-      if (editingCarrera) {
-        store.updateCarrera(editingCarrera.id, carreraForm)
-        setNotification({ type: 'success', message: 'Carrera actualizada' })
-      } else {
-        store.createCarrera(carreraForm)
-        setNotification({ type: 'success', message: 'Carrera creada exitosamente' })
-      }
-      
-      setCarreraForm({ nombre: '', color: '#7c3aed' })
-      setEditingCarrera(null)
-      setShowCarreraModal(false)
-      loadData()
-      setTimeout(() => setNotification(null), 2000)
-    }
-    
-    const handleEditCarrera = (carrera) => {
-      setEditingCarrera(carrera)
-      setCarreraForm({ nombre: carrera.nombre, color: carrera.color || '#7c3aed' })
-      setShowCarreraModal(true)
-    }
-    
-    const handleDeleteCarrera = (carrera) => {
-      if (confirm(`¿Eliminar la carrera "${carrera.nombre}"? Los leads asociados perderán esta referencia.`)) {
-        store.deleteCarrera(carrera.id)
-        loadData()
-        setNotification({ type: 'success', message: 'Carrera eliminada' })
-        setTimeout(() => setNotification(null), 2000)
-      }
-    }
-    
-    // Contar leads por carrera
-    const getLeadsCount = (carreraId) => {
-      return consultas.filter(c => c.carrera_id === carreraId).length
-    }
-    
-    return (
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-violet-100 rounded-xl flex items-center justify-center">
-              <Icon name="Tag" className="text-violet-600" size={24} />
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold text-slate-800">Gestión de Carreras</h2>
-              <p className="text-slate-500">Define las carreras o áreas de interés de tu institución</p>
-            </div>
-          </div>
-          <button 
-            onClick={() => { setEditingCarrera(null); setCarreraForm({ nombre: '', color: '#7c3aed' }); setShowCarreraModal(true); }}
-            className="px-4 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 transition-colors flex items-center gap-2"
-          >
-            <Icon name="Plus" size={20} /> Nueva Carrera
-          </button>
-        </div>
-        
-        {/* Info */}
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-          <div className="flex gap-3">
-            <Icon name="AlertCircle" className="text-blue-500 flex-shrink-0" size={20} />
-            <div className="text-sm text-blue-700">
-              <p className="font-medium">Las carreras son fundamentales para tu CRM</p>
-              <p>Se utilizan en formularios de captación, filtros de búsqueda, reportes por área y seguimiento de leads. Configura todas las opciones que tu institución ofrece.</p>
-            </div>
-          </div>
-        </div>
-        
-        {/* Lista de carreras */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-          {carreras.length === 0 ? (
-            <div className="p-12 text-center">
-              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Icon name="Tag" className="text-slate-400" size={32} />
-              </div>
-              <h3 className="text-lg font-medium text-slate-800 mb-2">No hay carreras configuradas</h3>
-              <p className="text-slate-500 mb-4">Agrega las carreras o áreas de interés que ofrece tu institución</p>
-              <button 
-                onClick={() => setShowCarreraModal(true)}
-                className="px-4 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700"
-              >
-                Crear primera carrera
-              </button>
-            </div>
-          ) : (
-            <table className="w-full">
-              <thead className="bg-slate-50 border-b border-slate-100">
-                <tr>
-                  <th className="text-left p-4 text-sm font-medium text-slate-600">Color</th>
-                  <th className="text-left p-4 text-sm font-medium text-slate-600">Nombre</th>
-                  <th className="text-center p-4 text-sm font-medium text-slate-600">Leads</th>
-                  <th className="text-center p-4 text-sm font-medium text-slate-600">Estado</th>
-                  <th className="text-right p-4 text-sm font-medium text-slate-600">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {carreras.map((carrera, idx) => (
-                  <tr key={carrera.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
-                    <td className="p-4">
-                      <div 
-                        className="w-8 h-8 rounded-lg" 
-                        style={{ backgroundColor: carrera.color || '#7c3aed' }}
-                      />
-                    </td>
-                    <td className="p-4">
-                      <span className="font-medium text-slate-800">{carrera.nombre}</span>
-                    </td>
-                    <td className="p-4 text-center">
-                      <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-full text-sm">
-                        {getLeadsCount(carrera.id)} leads
-                      </span>
-                    </td>
-                    <td className="p-4 text-center">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        carrera.activa !== false 
-                          ? 'bg-green-100 text-green-700' 
-                          : 'bg-slate-100 text-slate-500'
-                      }`}>
-                        {carrera.activa !== false ? 'Activa' : 'Inactiva'}
-                      </span>
-                    </td>
-                    <td className="p-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button 
-                          onClick={() => handleEditCarrera(carrera)}
-                          className="p-2 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors"
-                          title="Editar"
-                        >
-                          <Icon name="Edit" size={16} />
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteCarrera(carrera)}
-                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Eliminar"
-                        >
-                          <Icon name="Trash" size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-        
-        {/* Modal crear/editar carrera */}
-        {showCarreraModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl p-6 w-full max-w-md">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-slate-800">
-                  {editingCarrera ? 'Editar Carrera' : 'Nueva Carrera'}
-                </h3>
-                <button 
-                  onClick={() => { setShowCarreraModal(false); setEditingCarrera(null); }}
-                  className="p-2 hover:bg-slate-100 rounded-lg"
-                >
-                  <Icon name="X" size={20} />
-                </button>
-              </div>
-              
-              <form onSubmit={handleCreateCarrera} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Nombre de la carrera *
-                  </label>
-                  <input 
-                    type="text"
-                    required
-                    value={carreraForm.nombre}
-                    onChange={e => setCarreraForm({ ...carreraForm, nombre: e.target.value })}
-                    placeholder="Ej: Ingeniería en Sonido, Canto Popular..."
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Color identificador
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {coloresDisponibles.map(color => (
-                      <button
-                        key={color.id}
-                        type="button"
-                        onClick={() => setCarreraForm({ ...carreraForm, color: color.id })}
-                        className={`w-10 h-10 rounded-lg transition-all ${
-                          carreraForm.color === color.id 
-                            ? 'ring-2 ring-offset-2 ring-violet-500 scale-110' 
-                            : 'hover:scale-105'
-                        }`}
-                        style={{ backgroundColor: color.id }}
-                        title={color.nombre}
-                      />
-                    ))}
-                  </div>
-                </div>
-                
-                <div className="flex gap-3 pt-4">
-                  <button 
-                    type="button"
-                    onClick={() => { setShowCarreraModal(false); setEditingCarrera(null); }}
-                    className="flex-1 px-4 py-2 border border-slate-200 rounded-lg font-medium hover:bg-slate-50"
-                  >
-                    Cancelar
-                  </button>
-                  <button 
-                    type="submit"
-                    className="flex-1 px-4 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700"
-                  >
-                    {editingCarrera ? 'Guardar Cambios' : 'Crear Carrera'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  // ============================================
   // FORMULARIOS VIEW - Editor mejorado
   // ============================================
   const FormulariosView = () => {
@@ -3018,6 +2610,12 @@ export default function Dashboard() {
               </select>
             </div>
           )}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">¿Has estudiado en ProJazz antes?</label>
+            <select disabled className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50">
+              <option>No, sería mi primera vez</option>
+            </select>
+          </div>
           {formConfig.campos_extra?.map(campo => (
             <div key={campo.id}>
               <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -3214,12 +2812,35 @@ export default function Dashboard() {
                     </div>
                     <div className="space-y-3">
                       {formFormData.campos_extra.map(campo => (
-                        <CampoExtraInput 
-                          key={campo.id}
-                          campo={campo}
-                          onUpdate={updateCampoExtra}
-                          onRemove={removeCampoExtra}
-                        />
+                        <div key={campo.id} className="flex items-start gap-2 p-3 bg-slate-50 rounded-lg">
+                          <div className="flex-1 grid grid-cols-2 gap-2">
+                            <input type="text" placeholder="Nombre del campo"
+                                   value={campo.label}
+                                   onChange={e => updateCampoExtra(campo.id, 'label', e.target.value)}
+                                   className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                            <select value={campo.tipo}
+                                    onChange={e => updateCampoExtra(campo.id, 'tipo', e.target.value)}
+                                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+                              <option value="text">Texto</option>
+                              <option value="email">Email</option>
+                              <option value="tel">Teléfono</option>
+                              <option value="number">Número</option>
+                              <option value="date">Fecha</option>
+                              <option value="textarea">Área de texto</option>
+                              <option value="select">Selector</option>
+                            </select>
+                          </div>
+                          <label className="flex items-center gap-1 text-sm text-slate-600 whitespace-nowrap">
+                            <input type="checkbox" checked={campo.requerido}
+                                   onChange={e => updateCampoExtra(campo.id, 'requerido', e.target.checked)}
+                                   className="rounded border-slate-300" />
+                            Req.
+                          </label>
+                          <button type="button" onClick={() => removeCampoExtra(campo.id)}
+                                  className="p-1 text-red-500 hover:bg-red-50 rounded">
+                            <Icon name="X" size={16} />
+                          </button>
+                        </div>
                       ))}
                       {formFormData.campos_extra.length === 0 && (
                         <p className="text-sm text-slate-400 text-center py-4">Sin campos adicionales</p>
@@ -4507,7 +4128,6 @@ const handleImportCSV = async () => {
         {activeTab === 'detalle' && <DetalleView />}
         {activeTab === 'historial' && <HistorialView />}
         {activeTab === 'reportes' && <ReportesView />}
-        {activeTab === 'carreras' && <CarrerasView />}
         {activeTab === 'formularios' && <FormulariosView />}
         {activeTab === 'usuarios' && <UsuariosView />}
         {activeTab === 'config' && <ConfigView />}

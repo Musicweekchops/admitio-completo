@@ -1,6 +1,6 @@
 // ============================================
 // ADMITIO - Store Local Completo
-// Con sincronización a Supabase
+// Simula todas las funcionalidades del SaaS
 // ============================================
 
 import { 
@@ -22,48 +22,12 @@ import {
   CORREOS_ENVIADOS_INICIAL
 } from '../data/mockData'
 
-// Importar funciones de sincronización con Supabase
-import { 
-  syncCrearLead, 
-  syncActualizarLead, 
-  syncEliminarLead,
-  syncCrearAccion,
-  syncCrearUsuario,
-  syncActualizarUsuario,
-  syncImportarLeads,
-  syncCrearCarrera,
-  getInstitucionIdFromStore
-} from './storeSync'
-
 const STORAGE_KEY = 'admitio_data'
 const STORAGE_VERSION = '2.6' // Incrementar cuando cambie la estructura - Agregado historial importaciones
 
 // ============================================
 // INICIALIZACIÓN
 // ============================================
-
-// Crear store vacío (sin datos mock)
-function createEmptyStore(institucionId = null) {
-  return {
-    consultas: [],
-    actividad: [],
-    usuarios: [],
-    carreras: [],
-    medios: MEDIOS, // Los medios son genéricos, no por institución
-    plantillas: [],
-    formularios: [],
-    config: CONFIG_ORG,
-    metricas_encargados: {},
-    recordatorios: [],
-    cola_leads: [],
-    correos_enviados: [],
-    notificaciones: [],
-    importaciones: [],
-    _institucion_id: institucionId,
-    _supabase_sync: true
-  }
-}
-
 function initStore() {
   const stored = localStorage.getItem(STORAGE_KEY)
   const version = localStorage.getItem('admitio_version')
@@ -72,9 +36,8 @@ function initStore() {
   if (stored && version === STORAGE_VERSION) {
     try {
       const data = JSON.parse(stored)
-      // Verificar que tenga la estructura básica Y que tenga institucion_id (datos de Supabase)
-      if (data.consultas && data.usuarios && data._institucion_id) {
-        console.log(`✅ Store cargado para institución: ${data._institucion_id}`)
+      // Verificar que tenga la estructura básica
+      if (data.consultas && data.usuarios && data.carreras) {
         return data
       }
     } catch (e) {
@@ -82,27 +45,29 @@ function initStore() {
     }
   }
   
-  // Crear store vacío (NO usar datos mock)
-  console.log('🔄 Inicializando store vacío (esperando login)...')
-  const emptyStore = createEmptyStore()
+  // Crear datos iniciales
+  console.log('🔄 Inicializando datos de prueba...')
+  const initialData = {
+    consultas: CONSULTAS_INICIALES,
+    actividad: ACTIVIDAD_INICIAL,
+    usuarios: USUARIOS,
+    carreras: CARRERAS,
+    medios: MEDIOS,
+    plantillas: PLANTILLAS_CORREO,
+    formularios: FORMULARIOS,
+    config: CONFIG_ORG,
+    metricas_encargados: METRICAS_ENCARGADOS,
+    recordatorios: RECORDATORIOS_INICIALES,
+    cola_leads: COLA_LEADS_INICIAL,
+    correos_enviados: CORREOS_ENVIADOS_INICIAL,
+    notificaciones: [],
+    importaciones: [], // Historial de importaciones CSV
+  }
   
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(emptyStore))
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(initialData))
   localStorage.setItem('admitio_version', STORAGE_VERSION)
-  return emptyStore
-}
-
-// Función para limpiar store al cambiar de institución
-export function clearStoreForNewInstitution() {
-  console.log('🧹 Limpiando store para nueva institución...')
-  const emptyStore = createEmptyStore()
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(emptyStore))
-  store = emptyStore
-  return store
-}
-
-// Función para verificar si el store es de la institución correcta
-export function isStoreForInstitution(institucionId) {
-  return store._institucion_id === institucionId
+  console.log(`✅ Datos inicializados (v${STORAGE_VERSION}): ${initialData.consultas.length} leads, ${initialData.usuarios.length} usuarios`)
+  return initialData
 }
 
 let store = initStore()
@@ -194,14 +159,6 @@ export function createUsuario(data) {
   }
   store.usuarios.push(nuevoUsuario)
   saveStore()
-  
-  // === SINCRONIZAR CON SUPABASE ===
-  const institucionId = getInstitucionIdFromStore()
-  if (institucionId) {
-    syncCrearUsuario(institucionId, nuevoUsuario)
-  }
-  // === FIN SINCRONIZACIÓN ===
-  
   return nuevoUsuario
 }
 
@@ -210,11 +167,6 @@ export function updateUsuario(id, updates) {
   if (index === -1) return null
   store.usuarios[index] = { ...store.usuarios[index], ...updates }
   saveStore()
-  
-  // === SINCRONIZAR CON SUPABASE ===
-  syncActualizarUsuario(id, updates)
-  // === FIN SINCRONIZACIÓN ===
-  
   return store.usuarios[index]
 }
 
@@ -451,24 +403,6 @@ export function createConsulta(data, userId, userRol = null) {
   }
   
   saveStore()
-  
-  // === SINCRONIZAR CON SUPABASE ===
-  const institucionId = getInstitucionIdFromStore()
-  if (institucionId) {
-    syncCrearLead(institucionId, {
-      id: newConsulta.id,
-      nombre: data.nombre,
-      email: data.email,
-      telefono: data.telefono,
-      carrera_id: data.carrera_id,
-      carrera_nombre: data.carrera_nombre || store.carreras.find(c => c.id === data.carrera_id)?.nombre,
-      medio_id: data.medio_id,
-      estado: 'nueva',
-      asignado_a: asignado_a,
-      notas: data.notas
-    })
-  }
-  // === FIN SINCRONIZACIÓN ===
   
   // Log para debugging
   const encargado = store.usuarios.find(u => u.id === asignado_a)
@@ -722,25 +656,10 @@ export function updateConsulta(id, updates, userId) {
   
   store.consultas[index] = newConsulta
   saveStore()
-  
-  // === SINCRONIZAR CON SUPABASE ===
-  const institucionId = getInstitucionIdFromStore()
-  if (institucionId) {
-    syncActualizarLead(id, updates)
-  }
-  // === FIN SINCRONIZACIÓN ===
-  
   return newConsulta
 }
 
 export function deleteConsulta(id) {
-  // === SINCRONIZAR CON SUPABASE ===
-  const institucionId = getInstitucionIdFromStore()
-  if (institucionId) {
-    syncEliminarLead(id)
-  }
-  // === FIN SINCRONIZACIÓN ===
-  
   store.consultas = store.consultas.filter(c => c.id !== id)
   store.actividad = store.actividad.filter(a => a.lead_id !== id)
   store.recordatorios = store.recordatorios.filter(r => r.lead_id !== id)
@@ -876,7 +795,7 @@ export function asignarDesdeColaA(leadId, userId, asignadoPor) {
 // ============================================
 function addActividad(leadId, userId, tipo, descripcion, metadata = {}) {
   const usuario = store.usuarios.find(u => u.id === userId)
-  const nuevaActividad = {
+  store.actividad.push({
     id: `a-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     lead_id: leadId,
     user_id: userId,
@@ -885,14 +804,7 @@ function addActividad(leadId, userId, tipo, descripcion, metadata = {}) {
     descripcion,
     metadata,
     created_at: new Date().toISOString()
-  }
-  
-  store.actividad.push(nuevaActividad)
-  
-  // Sincronizar con Supabase si el lead tiene UUID válido
-  if (leadId && leadId.includes('-') && !leadId.startsWith('c-') && !leadId.startsWith('a-')) {
-    syncCrearAccion(leadId, { tipo, descripcion }, userId)
-  }
+  })
 }
 
 export function getActividad(leadId) {
@@ -1269,36 +1181,6 @@ function calcularDiasEntre(fechaInicio, fechaFin) {
   const inicio = new Date(fechaInicio)
   const fin = new Date(fechaFin)
   return Math.round((fin - inicio) / (1000 * 60 * 60 * 24) * 10) / 10 // Una decimal
-}
-
-// Obtener tiempo de respuesta de un lead específico (en horas o días)
-export function getTiempoRespuestaLead(leadId) {
-  const lead = store.consultas.find(c => c.id === leadId)
-  if (!lead) return null
-  
-  // Si tiene fecha de primer contacto, calcular tiempo
-  if (lead.fecha_primer_contacto && lead.created_at) {
-    const horas = calcularHorasEntre(lead.created_at, lead.fecha_primer_contacto)
-    if (horas < 24) {
-      return { valor: horas, unidad: 'horas', texto: `${horas}h` }
-    } else {
-      const dias = calcularDiasEntre(lead.created_at, lead.fecha_primer_contacto)
-      return { valor: dias, unidad: 'días', texto: `${dias} días` }
-    }
-  }
-  
-  // Si no ha sido contactado, calcular tiempo de espera
-  if (lead.estado === 'nueva' && lead.created_at) {
-    const horas = calcularHorasEntre(lead.created_at, new Date().toISOString())
-    if (horas < 24) {
-      return { valor: horas, unidad: 'horas', texto: `${horas}h esperando`, esperando: true }
-    } else {
-      const dias = calcularDiasEntre(lead.created_at, new Date().toISOString())
-      return { valor: dias, unidad: 'días', texto: `${dias} días esperando`, esperando: true }
-    }
-  }
-  
-  return null
 }
 
 export function getMetricasGlobales() {
@@ -1687,53 +1569,11 @@ export function updateConfig(updates) {
 }
 
 export function getCarreras() {
-  return store.carreras || []
-}
-
-export function createCarrera(data) {
-  // Generar un ID temporal tipo UUID (será reemplazado por Supabase)
-  const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9)
-  
-  const nuevaCarrera = {
-    id: tempId,
-    nombre: data.nombre,
-    color: data.color || '#7c3aed',
-    activa: true,
-    created_at: new Date().toISOString()
-  }
-  
-  if (!store.carreras) store.carreras = []
-  store.carreras.push(nuevaCarrera)
-  saveStore()
-  
-  // Sincronizar con Supabase
-  const institucionId = getInstitucionIdFromStore()
-  if (institucionId) {
-    syncCrearCarrera(institucionId, nuevaCarrera)
-  }
-  
-  console.log('✅ Carrera creada:', nuevaCarrera.nombre)
-  return nuevaCarrera
-}
-
-export function updateCarrera(id, updates) {
-  const index = store.carreras?.findIndex(c => c.id === id)
-  if (index === -1) return null
-  
-  store.carreras[index] = { ...store.carreras[index], ...updates }
-  saveStore()
-  return store.carreras[index]
-}
-
-export function deleteCarrera(id) {
-  if (!store.carreras) return false
-  store.carreras = store.carreras.filter(c => c.id !== id)
-  saveStore()
-  return true
+  return store.carreras
 }
 
 export function getMedios() {
-  return store.medios || []
+  return store.medios
 }
 
 // Confirmar que se contactó al lead por nuevo interés (limpia el flag)
