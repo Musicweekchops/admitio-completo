@@ -32,7 +32,7 @@ import {
 } from './storeSync'
 
 const STORAGE_KEY = 'admitio_data'
-const STORAGE_VERSION = '2.6' // Incrementar cuando cambie la estructura - Agregado historial importaciones
+const STORAGE_VERSION = '2.7' // Incrementar - Modo Supabase real
 
 // ============================================
 // INICIALIZACIÓN
@@ -40,22 +40,58 @@ const STORAGE_VERSION = '2.6' // Incrementar cuando cambie la estructura - Agreg
 function initStore() {
   const stored = localStorage.getItem(STORAGE_KEY)
   const version = localStorage.getItem('admitio_version')
+  const userSession = localStorage.getItem('admitio_user')
   
-  // Si hay datos y la versión coincide, usarlos
+  // Si hay datos guardados y versión coincide, usarlos
   if (stored && version === STORAGE_VERSION) {
     try {
       const data = JSON.parse(stored)
-      // Verificar que tenga la estructura básica
-      if (data.consultas && data.usuarios && data.carreras) {
+      // Verificar estructura básica
+      if (data.consultas !== undefined && data.usuarios !== undefined) {
+        console.log(`📦 Store cargado: ${data.consultas?.length || 0} leads, ${data._supabase_sync ? '(Supabase)' : '(Local)'}`)
         return data
       }
     } catch (e) {
-      console.warn('⚠️ Error al parsear localStorage, reiniciando...')
+      console.warn('⚠️ Error al parsear localStorage')
     }
   }
   
-  // Crear datos iniciales
-  console.log('🔄 Inicializando datos de prueba...')
+  // Verificar si hay sesión de usuario de Supabase
+  let isSupabaseUser = false
+  if (userSession) {
+    try {
+      const user = JSON.parse(userSession)
+      isSupabaseUser = user.institucion_id && user.institucion_id.includes('-')
+    } catch (e) {}
+  }
+  
+  // Si es usuario de Supabase, inicializar VACÍO (los datos vendrán del login)
+  if (isSupabaseUser) {
+    console.log('🔄 Inicializando store vacío para Supabase...')
+    const emptyData = {
+      consultas: [],
+      actividad: [],
+      usuarios: [],
+      carreras: [],
+      medios: MEDIOS, // Estos son estáticos, los mantenemos
+      plantillas: [],
+      formularios: [],
+      config: { nombre: 'Mi Institución' },
+      metricas_encargados: {},
+      recordatorios: [],
+      cola_leads: [],
+      correos_enviados: [],
+      notificaciones: [],
+      importaciones: [],
+      _supabase_sync: true
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(emptyData))
+    localStorage.setItem('admitio_version', STORAGE_VERSION)
+    return emptyData
+  }
+  
+  // Si NO hay usuario de Supabase, cargar mockData (modo demo)
+  console.log('🔄 Inicializando datos de demostración...')
   const initialData = {
     consultas: CONSULTAS_INICIALES,
     actividad: ACTIVIDAD_INICIAL,
@@ -70,12 +106,13 @@ function initStore() {
     cola_leads: COLA_LEADS_INICIAL,
     correos_enviados: CORREOS_ENVIADOS_INICIAL,
     notificaciones: [],
-    importaciones: [], // Historial de importaciones CSV
+    importaciones: [],
+    _supabase_sync: false
   }
   
   localStorage.setItem(STORAGE_KEY, JSON.stringify(initialData))
   localStorage.setItem('admitio_version', STORAGE_VERSION)
-  console.log(`✅ Datos inicializados (v${STORAGE_VERSION}): ${initialData.consultas.length} leads, ${initialData.usuarios.length} usuarios`)
+  console.log(`✅ Datos demo cargados: ${initialData.consultas.length} leads`)
   return initialData
 }
 

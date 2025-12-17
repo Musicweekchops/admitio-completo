@@ -25,6 +25,11 @@ export function AuthProvider({ children }) {
         if (userData.institucion_id && isSupabaseConfigured()) {
           setUser(userData)
           setInstitucion({ id: userData.institucion_id, nombre: userData.institucion_nombre })
+          
+          // IMPORTANTE: Recargar datos de Supabase al hacer refresh
+          console.log('🔄 Recargando datos de Supabase...')
+          await loadInstitucionData(userData.institucion_id)
+          
         } else {
           // Usuario local (mockData)
           const fullUser = USUARIOS.find(u => u.id === userData.id)
