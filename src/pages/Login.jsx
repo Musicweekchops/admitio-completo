@@ -9,7 +9,7 @@ const Login = () => {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
-  const { login } = useAuth()
+  const { signIn } = useAuth()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -17,7 +17,7 @@ const Login = () => {
     setLoading(true)
 
     try {
-      const result = await login(email, password)
+      const result = await signIn(email, password)
       if (result.success) {
         navigate('/app')
       } else {
@@ -31,22 +31,22 @@ const Login = () => {
   }
 
   return (
-    <div className="auth-container">
-      {/* Left Side - Branding */}
-      <div className="auth-left items-center justify-center p-12">
+    <div className="min-h-screen flex">
+      {/* Left Side - Branding (hidden on mobile) */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-violet-600 to-violet-800 relative overflow-hidden items-center justify-center p-12">
         <div className="relative z-10 max-w-lg">
           {/* Floating shapes */}
-          <div className="absolute -top-20 -left-20 w-40 h-40 bg-white/10 rounded-full animate-float"></div>
-          <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-white/10 rounded-full animate-float" style={{ animationDelay: '-2s' }}></div>
+          <div className="absolute -top-20 -left-20 w-40 h-40 bg-white/10 rounded-full animate-pulse"></div>
+          <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-white/10 rounded-full animate-pulse"></div>
           
           <div className="flex items-center gap-3 mb-8">
             <div className="w-14 h-14 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
               <Icon name="GraduationCap" className="text-white" size={32} />
             </div>
-            <span className="font-display text-3xl font-bold text-white">Admitio</span>
+            <span className="text-3xl font-bold text-white">Admitio</span>
           </div>
           
-          <h1 className="font-display text-4xl font-bold text-white mb-4 leading-tight">
+          <h1 className="text-4xl font-bold text-white mb-4 leading-tight">
             Transforma tus admisiones en matrículas
           </h1>
           <p className="text-white/80 text-lg">
@@ -55,17 +55,17 @@ const Login = () => {
           
           <div className="mt-12 flex items-center gap-6">
             <div className="text-center">
-              <div className="font-display text-3xl font-bold text-white">+85%</div>
+              <div className="text-3xl font-bold text-white">+85%</div>
               <div className="text-white/60 text-sm">Conversión</div>
             </div>
             <div className="w-px h-12 bg-white/20"></div>
             <div className="text-center">
-              <div className="font-display text-3xl font-bold text-white">-60%</div>
+              <div className="text-3xl font-bold text-white">-60%</div>
               <div className="text-white/60 text-sm">Tiempo resp.</div>
             </div>
             <div className="w-px h-12 bg-white/20"></div>
             <div className="text-center">
-              <div className="font-display text-3xl font-bold text-white">24/7</div>
+              <div className="text-3xl font-bold text-white">24/7</div>
               <div className="text-white/60 text-sm">Captura</div>
             </div>
           </div>
@@ -73,18 +73,18 @@ const Login = () => {
       </div>
 
       {/* Right Side - Form */}
-      <div className="auth-right bg-slate-50">
-        <div className="auth-form">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-slate-50">
+        <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
             <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-violet-700 rounded-xl flex items-center justify-center">
               <Icon name="GraduationCap" className="text-white" size={28} />
             </div>
-            <span className="font-display text-2xl font-bold text-slate-800">Admitio</span>
+            <span className="text-2xl font-bold text-slate-800">Admitio</span>
           </div>
 
           <div className="text-center mb-8">
-            <h2 className="font-display text-2xl font-bold text-slate-800 mb-2">
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">
               Bienvenido de vuelta
             </h2>
             <p className="text-slate-500">
@@ -93,7 +93,7 @@ const Login = () => {
           </div>
 
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-600 animate-slide-up">
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-600">
               <Icon name="AlertCircle" size={20} />
               <span className="text-sm">{error}</span>
             </div>
@@ -101,16 +101,18 @@ const Login = () => {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="form-label">Correo electrónico</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Correo electrónico
+              </label>
               <div className="relative">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                   <Icon name="Mail" size={20} />
-                </div>
+                </span>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="form-input pl-12"
+                  className="w-full pl-12 pr-4 py-3.5 border-2 border-slate-200 rounded-xl text-base bg-slate-50 focus:outline-none focus:border-violet-400 focus:bg-white focus:ring-4 focus:ring-violet-500/10 transition-all"
                   placeholder="tu@institucion.cl"
                   required
                 />
@@ -118,16 +120,18 @@ const Login = () => {
             </div>
 
             <div>
-              <label className="form-label">Contraseña</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Contraseña
+              </label>
               <div className="relative">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                   <Icon name="Lock" size={20} />
-                </div>
+                </span>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="form-input pl-12"
+                  className="w-full pl-12 pr-4 py-3.5 border-2 border-slate-200 rounded-xl text-base bg-slate-50 focus:outline-none focus:border-violet-400 focus:bg-white focus:ring-4 focus:ring-violet-500/10 transition-all"
                   placeholder="••••••••"
                   required
                 />
@@ -147,11 +151,11 @@ const Login = () => {
             <button
               type="submit"
               disabled={loading}
-              className="btn btn-primary w-full justify-center py-4"
+              className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-br from-violet-500 to-violet-700 text-white rounded-xl font-semibold shadow-lg shadow-violet-500/35 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-500/45 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <>
-                  <div className="spinner"></div>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                   Ingresando...
                 </>
               ) : (
