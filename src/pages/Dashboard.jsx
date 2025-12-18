@@ -4,10 +4,11 @@ import { useAuth } from '../context/AuthContext'
 import Icon from '../components/Icon'
 import * as store from '../lib/store'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import { useLockLead } from '../hooks/useLockLead'
 import { ESTADOS, CARRERAS, MEDIOS, TIPOS_ALUMNO } from '../data/mockData'
 
 // Componente separado para el textarea de notas (evita re-renders)
-const NotasTextarea = ({ consulta, userId, onSaved }) => {
+const NotasTextarea = ({ consulta, userId, onSaved, disabled = false, lockedByName = null }) => {
   const [notas, setNotas] = useState(consulta?.notas || '')
   const [saved, setSaved] = useState(true)
   
@@ -17,11 +18,13 @@ const NotasTextarea = ({ consulta, userId, onSaved }) => {
   }, [consulta?.id, consulta?.notas])
   
   const handleChange = (e) => {
+    if (disabled) return
     setNotas(e.target.value)
     setSaved(e.target.value === (consulta?.notas || ''))
   }
   
   const handleSave = () => {
+    if (disabled) return
     if (notas !== (consulta?.notas || '')) {
       store.updateConsulta(consulta.id, { notas }, userId)
       setSaved(true)
@@ -30,28 +33,35 @@ const NotasTextarea = ({ consulta, userId, onSaved }) => {
   }
   
   return (
-    <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+    <div className={`bg-slate-50 rounded-lg p-4 border ${disabled ? 'border-amber-200 bg-amber-50/30' : 'border-slate-200'}`}>
       <div className="flex items-center justify-between mb-2">
         <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
           <Icon name="FileText" size={16} />
           Notas de seguimiento
         </label>
-        {!saved && (
+        {!saved && !disabled && (
           <span className="text-xs text-amber-600">Sin guardar</span>
+        )}
+        {disabled && lockedByName && (
+          <span className="text-xs text-amber-600 flex items-center gap-1">
+            <Icon name="Lock" size={12} />
+            Bloqueado por {lockedByName}
+          </span>
         )}
       </div>
       <textarea
         value={notas}
         onChange={handleChange}
         onBlur={handleSave}
-        placeholder="Escribe notas sobre este lead... (se guardan automáticamente)"
-        className="w-full h-32 px-3 py-2 border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white"
+        disabled={disabled}
+        placeholder={disabled ? "Solo lectura mientras otro usuario edita" : "Escribe notas sobre este lead... (se guardan automáticamente)"}
+        className={`w-full h-32 px-3 py-2 border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-violet-500 ${disabled ? 'bg-slate-100 cursor-not-allowed opacity-60' : 'bg-white'}`}
       />
       <div className="flex items-center justify-between mt-2">
         <p className="text-xs text-slate-400">Las notas se guardan en el historial</p>
         <button 
           onClick={handleSave}
-          disabled={saved}
+          disabled={saved || disabled}
           className={`px-3 py-1 text-sm rounded-lg font-medium flex items-center gap-1 ${saved ? 'bg-slate-100 text-slate-400' : 'bg-violet-600 text-white hover:bg-violet-700'}`}
         >
           <Icon name="Save" size={14} />
@@ -1492,12 +1502,116 @@ export default function Dashboard() {
   }, [selectedConsulta?.id, user?.id])
 
   // ============================================
-  // DETALLE VIEW - Con notas editables
+  // DETALLE VIEW - Con notas editables y sistema de locks
   // ============================================
   const DetalleView = () => {
     if (!selectedConsulta) return null
     const c = selectedConsulta
     const encargados = store.getUsuarios().filter(u => u.rol_id === 'encargado')
+    
+    // Sistema de bloqueo de leads
+    const {
+      lockInfo,
+      isLocked,
+      isMyLock,
+      loading: lockLoading,
+      canEdit,
+      lockedByName,
+      lockedSince,
+      acquireLock,
+      releaseLock,
+      forceAcquireLock
+    } = useLockLead(c.id, user, isKeyMaster)
+    
+    const [isEditing, setIsEditing] = useState(false)
+    const [saveStatus, setSaveStatus] = useState(null) // 'saving', 'saved', 'error'
+    const [showForceConfirm, setShowForceConfirm] = useState(false)
+    
+    // Calcular tiempo desde el bloqueo
+    const getTimeSinceLock = () => {
+      if (!lockedSince) return ''
+      const diff = Date.now() - new Date(lockedSince).getTime()
+      const minutes = Math.floor(diff / 60000)
+      if (minutes < 1) return 'hace unos segundos'
+      if (minutes === 1) return 'hace 1 minuto'
+      if (minutes < 60) return `hace ${minutes} minutos`
+      const hours = Math.floor(minutes / 60)
+      return `hace ${hours} hora${hours > 1 ? 's' : ''}`
+    }
+    
+    // Iniciar edición (adquirir lock)
+    const handleStartEditing = async () => {
+      const result = await acquireLock()
+      if (result.success) {
+        setIsEditing(true)
+        setNotification({ type: 'info', message: 'Modo edición activado' })
+        setTimeout(() => setNotification(null), 2000)
+      } else {
+        setNotification({ type: 'error', message: result.error || 'No se pudo iniciar edición' })
+        setTimeout(() => setNotification(null), 3000)
+      }
+    }
+    
+    // Terminar edición (liberar lock)
+    const handleStopEditing = async () => {
+      await releaseLock()
+      setIsEditing(false)
+      setNotification({ type: 'success', message: 'Edición finalizada' })
+      setTimeout(() => setNotification(null), 2000)
+    }
+    
+    // Guardar cambios
+    const handleSaveChanges = async () => {
+      if (!canEdit) {
+        setNotification({ type: 'error', message: 'No tienes permiso para editar' })
+        setTimeout(() => setNotification(null), 3000)
+        return
+      }
+      
+      setSaveStatus('saving')
+      
+      try {
+        // Los cambios ya se guardan en localStorage, forzar sync a Supabase
+        await reloadFromSupabase()
+        loadData()
+        
+        // Refrescar el lead seleccionado
+        const updated = store.getConsultaById(c.id)
+        if (updated) setSelectedConsulta(updated)
+        
+        setSaveStatus('saved')
+        setNotification({ type: 'success', message: '✓ Cambios guardados en Supabase' })
+        setTimeout(() => {
+          setNotification(null)
+          setSaveStatus(null)
+        }, 2000)
+      } catch (error) {
+        setSaveStatus('error')
+        setNotification({ type: 'error', message: 'Error al guardar. Intenta de nuevo.' })
+        setTimeout(() => {
+          setNotification(null)
+          setSaveStatus(null)
+        }, 3000)
+      }
+    }
+    
+    // KeyMaster toma control
+    const handleForceControl = async () => {
+      const result = await forceAcquireLock(c.nombre)
+      setShowForceConfirm(false)
+      
+      if (result.success) {
+        setIsEditing(true)
+        setNotification({ 
+          type: 'warning', 
+          message: `Control tomado. ${result.previousUser} fue notificado.` 
+        })
+        setTimeout(() => setNotification(null), 3000)
+      } else {
+        setNotification({ type: 'error', message: result.error })
+        setTimeout(() => setNotification(null), 3000)
+      }
+    }
     
     // Handler para confirmar contacto por nuevo interés
     const handleConfirmarNuevoInteres = () => {
@@ -1509,13 +1623,159 @@ export default function Dashboard() {
       setNotification({ type: 'success', message: 'Contacto confirmado' })
       setTimeout(() => setNotification(null), 2000)
     }
+    
+    // Limpiar lock al salir de la vista
+    const handleBack = async () => {
+      if (isMyLock) {
+        await releaseLock()
+      }
+      setSelectedConsulta(null)
+      setActiveTab('consultas')
+    }
 
     return (
       <div className="space-y-6">
-        <button onClick={() => { setSelectedConsulta(null); setActiveTab('consultas'); }}
+        <button onClick={handleBack}
                 className="flex items-center gap-2 text-slate-600 hover:text-slate-800">
           <Icon name="ArrowLeft" size={20} /> Volver
         </button>
+        
+        {/* ========== INDICADOR DE BLOQUEO ========== */}
+        {!lockLoading && (
+          <div className={`rounded-xl p-4 border ${
+            isMyLock 
+              ? 'bg-emerald-50 border-emerald-200' 
+              : isLocked 
+                ? 'bg-amber-50 border-amber-200'
+                : 'bg-slate-50 border-slate-200'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                  isMyLock 
+                    ? 'bg-emerald-100' 
+                    : isLocked 
+                      ? 'bg-amber-100'
+                      : 'bg-slate-100'
+                }`}>
+                  <Icon 
+                    name={isMyLock ? 'Edit' : isLocked ? 'Lock' : 'Unlock'} 
+                    className={isMyLock ? 'text-emerald-600' : isLocked ? 'text-amber-600' : 'text-slate-500'}
+                    size={20} 
+                  />
+                </div>
+                <div>
+                  {isMyLock ? (
+                    <>
+                      <h4 className="font-semibold text-emerald-800">Estás editando este lead</h4>
+                      <p className="text-sm text-emerald-600">Otros usuarios no pueden modificarlo mientras editas</p>
+                    </>
+                  ) : isLocked ? (
+                    <>
+                      <h4 className="font-semibold text-amber-800">
+                        <Icon name="User" size={14} className="inline mr-1" />
+                        {lockedByName} está editando este lead
+                      </h4>
+                      <p className="text-sm text-amber-600">{getTimeSinceLock()} · Solo lectura</p>
+                    </>
+                  ) : (
+                    <>
+                      <h4 className="font-semibold text-slate-700">Lead disponible para edición</h4>
+                      <p className="text-sm text-slate-500">Haz clic en "Editar" para comenzar</p>
+                    </>
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                {isMyLock ? (
+                  <>
+                    <button
+                      onClick={handleSaveChanges}
+                      disabled={saveStatus === 'saving'}
+                      className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors ${
+                        saveStatus === 'saving'
+                          ? 'bg-slate-300 text-slate-500 cursor-wait'
+                          : saveStatus === 'saved'
+                            ? 'bg-emerald-500 text-white'
+                            : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      }`}
+                    >
+                      <Icon name={saveStatus === 'saving' ? 'Loader' : saveStatus === 'saved' ? 'Check' : 'Save'} size={16} />
+                      {saveStatus === 'saving' ? 'Guardando...' : saveStatus === 'saved' ? 'Guardado' : 'Guardar'}
+                    </button>
+                    <button
+                      onClick={handleStopEditing}
+                      className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-300 transition-colors flex items-center gap-2"
+                    >
+                      <Icon name="X" size={16} />
+                      Terminar
+                    </button>
+                  </>
+                ) : isLocked ? (
+                  <>
+                    <span className="px-3 py-2 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium flex items-center gap-2">
+                      <Icon name="Eye" size={14} />
+                      Solo lectura
+                    </span>
+                    {isKeyMaster && (
+                      <button
+                        onClick={() => setShowForceConfirm(true)}
+                        className="px-4 py-2 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition-colors flex items-center gap-2"
+                      >
+                        <Icon name="AlertTriangle" size={16} />
+                        Tomar control
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <button
+                    onClick={handleStartEditing}
+                    className="px-4 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 transition-colors flex items-center gap-2"
+                  >
+                    <Icon name="Edit" size={16} />
+                    Editar lead
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Modal confirmación tomar control */}
+        {showForceConfirm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                  <Icon name="AlertTriangle" className="text-red-600" size={24} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800">¿Tomar control del lead?</h3>
+                  <p className="text-sm text-slate-500">{lockedByName} perderá acceso de edición</p>
+                </div>
+              </div>
+              <p className="text-slate-600 mb-6">
+                Esta acción quedará registrada en el historial del lead. {lockedByName} verá que tomaste el control.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowForceConfirm(false)}
+                  className="flex-1 px-4 py-2 bg-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-300"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleForceControl}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 flex items-center justify-center gap-2"
+                >
+                  <Icon name="Lock" size={16} />
+                  Sí, tomar control
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         
         {/* Alerta de nuevo interés */}
         {c.nuevo_interes && (
@@ -1613,6 +1873,8 @@ export default function Dashboard() {
               <NotasTextarea 
                 consulta={c} 
                 userId={user.id} 
+                disabled={!isMyLock}
+                lockedByName={isLocked && !isMyLock ? lockedByName : null}
                 onSaved={() => {
                   setSelectedConsulta(store.getConsultaById(c.id))
                   loadData()
@@ -1662,30 +1924,38 @@ export default function Dashboard() {
           {/* Acciones */}
           <div className="space-y-6">
             {canEdit && !c.matriculado && !c.descartado && (
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+              <div className={`bg-white rounded-xl p-6 shadow-sm border ${isMyLock ? 'border-slate-100' : 'border-slate-200 opacity-60'}`}>
                 <h3 className="font-semibold text-slate-800 mb-4">Cambiar Estado</h3>
                 <div className="space-y-2">
                   {Object.values(ESTADOS).filter(e => e.id !== c.estado).map(estado => (
                     <button key={estado.id}
-                            onClick={() => handleUpdateEstado(c.id, estado.id)}
-                            className={`w-full px-4 py-3 rounded-lg text-left transition-colors ${estado.bg} ${estado.text} hover:opacity-80`}>
+                            onClick={() => isMyLock && handleUpdateEstado(c.id, estado.id)}
+                            disabled={!isMyLock}
+                            className={`w-full px-4 py-3 rounded-lg text-left transition-colors ${estado.bg} ${estado.text} ${isMyLock ? 'hover:opacity-80 cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
                       {estado.label}
                     </button>
                   ))}
                 </div>
+                {!isMyLock && isLocked && (
+                  <p className="text-xs text-amber-600 mt-3 flex items-center gap-1">
+                    <Icon name="Lock" size={12} /> Bloqueado por {lockedByName}
+                  </p>
+                )}
               </div>
             )}
 
             {canEdit && !c.matriculado && !c.descartado && (
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+              <div className={`bg-white rounded-xl p-6 shadow-sm border ${isMyLock ? 'border-slate-100' : 'border-slate-200 opacity-60'}`}>
                 <h3 className="font-semibold text-slate-800 mb-4">Tipo de Alumno</h3>
                 <div className="flex gap-2">
-                  <button onClick={() => handleTipoAlumnoChange(c.id, 'nuevo')}
-                          className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'nuevo' ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                  <button onClick={() => isMyLock && handleTipoAlumnoChange(c.id, 'nuevo')}
+                          disabled={!isMyLock}
+                          className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'nuevo' ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300' : 'bg-slate-100 text-slate-600'} ${isMyLock ? 'hover:bg-slate-200 cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
                     Nuevo
                   </button>
-                  <button onClick={() => handleTipoAlumnoChange(c.id, 'antiguo')}
-                          className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'antiguo' ? 'bg-violet-100 text-violet-700 ring-2 ring-violet-300' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                  <button onClick={() => isMyLock && handleTipoAlumnoChange(c.id, 'antiguo')}
+                          disabled={!isMyLock}
+                          className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'antiguo' ? 'bg-violet-100 text-violet-700 ring-2 ring-violet-300' : 'bg-slate-100 text-slate-600'} ${isMyLock ? 'hover:bg-slate-200 cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
                     Antiguo
                   </button>
                 </div>
@@ -1767,13 +2037,19 @@ export default function Dashboard() {
             )}
 
             {isKeyMaster && !c.matriculado && !c.descartado && (
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+              <div className={`bg-white rounded-xl p-6 shadow-sm border ${isMyLock ? 'border-slate-100' : 'border-slate-200 opacity-60'}`}>
                 <h3 className="font-semibold text-slate-800 mb-4">Reasignar</h3>
                 <select value={c.asignado_a || ''}
-                        onChange={(e) => handleReasignar(c.id, e.target.value)}
-                        className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
+                        onChange={(e) => isMyLock && handleReasignar(c.id, e.target.value)}
+                        disabled={!isMyLock}
+                        className={`w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 ${!isMyLock ? 'opacity-50 cursor-not-allowed bg-slate-100' : ''}`}>
                   {encargados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
                 </select>
+                {!isMyLock && isLocked && (
+                  <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
+                    <Icon name="Lock" size={12} /> Bloqueado por {lockedByName}
+                  </p>
+                )}
               </div>
             )}
           </div>
