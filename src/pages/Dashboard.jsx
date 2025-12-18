@@ -74,6 +74,8 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
   const [selectedDuplicado, setSelectedDuplicado] = useState(null)
   
   const encargados = store.getUsuarios().filter(u => u.rol_id === 'encargado')
+  // Usar carreras de Supabase, fallback a mockData
+  const carrerasDisponibles = store.getCarreras().length > 0 ? store.getCarreras() : CARRERAS
   
   const resetForm = () => {
     setFormData({
@@ -115,9 +117,12 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
   const crearLeadNuevo = () => {
     setSubmitting(true)
     
+    const carreraSeleccionada = carrerasDisponibles.find(c => String(c.id) === String(formData.carrera_id))
+    
     const newConsulta = store.createConsulta({
       ...formData,
-      carrera_id: parseInt(formData.carrera_id),
+      carrera_id: formData.carrera_id || null,  // Mantener como string (UUID)
+      carrera_nombre: carreraSeleccionada?.nombre || null,  // Guardar nombre también
       asignado_a: formData.asignado_a || null
     }, userId, userRol)
     
@@ -137,7 +142,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
     setSubmitting(true)
     const resultado = store.agregarCarreraALead(
       selectedDuplicado.id, 
-      parseInt(formData.carrera_id), 
+      formData.carrera_id,  // Mantener como string
       userId
     )
     setSubmitting(false)
@@ -189,7 +194,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
   
   // Modal de alerta de duplicado
   if (showDuplicadoAlert && selectedDuplicado) {
-    const carreraNueva = CARRERAS.find(c => c.id === parseInt(formData.carrera_id))
+    const carreraNueva = carrerasDisponibles.find(c => String(c.id) === String(formData.carrera_id))
     const carreraExistente = selectedDuplicado.carrera
     
     // Mostrar botón "Agregar Carrera" si:
@@ -197,7 +202,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
     // 2. El duplicado no tiene esa carrera (o no tiene carrera)
     const puedeAgregarCarrera = carreraNueva && (
       !carreraExistente || 
-      carreraNueva.id !== carreraExistente.id ||
+      String(carreraNueva.id) !== String(carreraExistente.id) ||
       (selectedDuplicado.carreras_interes && !selectedDuplicado.carreras_interes.includes(carreraNueva.id))
     )
     
@@ -403,7 +408,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
                     onChange={e => setFormData({...formData, carrera_id: e.target.value})}
                     className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
               <option value="">Seleccionar carrera</option>
-              {CARRERAS.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              {carrerasDisponibles.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
           </div>
           <div>
@@ -854,7 +859,7 @@ export default function Dashboard() {
     <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-100 flex items-center justify-between px-4 z-30">
       <button 
         onClick={() => setMobileMenuOpen(true)}
-        className="p-2 text-violet-600 hover:bg-violet-50 rounded-lg"
+        className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
       >
         <Icon name="Menu" size={24} />
       </button>
@@ -3160,7 +3165,7 @@ export default function Dashboard() {
                         {puedeEliminar(u) && (
                           <button
                             onClick={() => openDeleteModal(u)}
-                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                             title="Eliminar"
                           >
                             <Icon name="Trash2" size={18} />

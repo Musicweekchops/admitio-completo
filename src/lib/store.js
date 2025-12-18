@@ -427,9 +427,17 @@ export function createConsulta(data, userId, userRol = null) {
   // Obtener info del creador
   const creador = store.usuarios.find(u => u.id === userId)
   
+  // Extraer nombre de carrera si hay carrera_id
+  let carrera_nombre = data.carrera_nombre || null
+  if (data.carrera_id && !carrera_nombre) {
+    const carrera = store.carreras.find(c => c.id === data.carrera_id || c.id === String(data.carrera_id))
+    carrera_nombre = carrera?.nombre || null
+  }
+  
   const newConsulta = {
     id: `c-${Date.now()}`,
     ...data,
+    carrera_nombre, // Asegurar que siempre tenga el nombre
     estado: 'nueva',
     emails_enviados: 0,
     created_at: new Date().toISOString(),
