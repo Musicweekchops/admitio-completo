@@ -214,18 +214,18 @@ export function syncCrearLead(institucionId, leadData) {
       notas: leadData.notas || null
     };
     
-    // Solo incluir carrera_id si es UUID válido (contiene guiones y es largo)
-    if (leadData.carrera_id && leadData.carrera_id.includes('-') && leadData.carrera_id.length > 30) {
+    // Solo incluir carrera_id si es UUID válido (string con guiones y largo)
+    if (leadData.carrera_id && typeof leadData.carrera_id === 'string' && leadData.carrera_id.includes('-') && leadData.carrera_id.length > 30) {
       insertData.carrera_id = leadData.carrera_id;
     }
     
     // Solo incluir asignado_a si parece UUID (contiene guiones en formato UUID)
-    if (leadData.asignado_a && leadData.asignado_a.includes('-') && leadData.asignado_a.length > 30) {
+    if (leadData.asignado_a && typeof leadData.asignado_a === 'string' && leadData.asignado_a.includes('-') && leadData.asignado_a.length > 30) {
       insertData.asignado_a = leadData.asignado_a;
     }
     
     // Incluir creado_por si es UUID válido
-    if (leadData.creado_por && leadData.creado_por.includes('-') && leadData.creado_por.length > 30) {
+    if (leadData.creado_por && typeof leadData.creado_por === 'string' && leadData.creado_por.includes('-') && leadData.creado_por.length > 30) {
       insertData.creado_por = leadData.creado_por;
     }
     
@@ -269,7 +269,7 @@ export function syncActualizarLead(leadId, updates) {
     // Solo sincronizar asignado_a si parece UUID
     if (updates.asignado_a !== undefined) {
       console.log('🔄 Sincronizando asignado_a:', updates.asignado_a);
-      if (updates.asignado_a && updates.asignado_a.includes('-') && updates.asignado_a.length > 30) {
+      if (updates.asignado_a && typeof updates.asignado_a === 'string' && updates.asignado_a.includes('-') && updates.asignado_a.length > 30) {
         supabaseUpdates.asignado_a = updates.asignado_a;
         console.log('✅ asignado_a es UUID válido, sincronizando');
       } else if (!updates.asignado_a) {
@@ -333,7 +333,7 @@ export function syncCrearAccion(leadId, accion, usuarioId) {
     };
     
     // Solo agregar usuario_id si parece UUID válido
-    if (usuarioId && usuarioId.includes('-') && usuarioId.length > 30) {
+    if (usuarioId && typeof usuarioId === 'string' && usuarioId.includes('-') && usuarioId.length > 30) {
       insertData.usuario_id = usuarioId;
     }
     
