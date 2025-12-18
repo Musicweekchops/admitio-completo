@@ -859,11 +859,7 @@ export default function Dashboard() {
     <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-100 flex items-center justify-between px-4 z-30">
       <button 
         onClick={() => setMobileMenuOpen(true)}
-<<<<<<< HEAD
         className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-=======
-        className="p-2 text-violet-700 hover:bg-violet-50 rounded-lg"
->>>>>>> d430e39bd1f137fe271a8df4d86875a8e54430bd
       >
         <Icon name="Menu" size={24} />
       </button>
