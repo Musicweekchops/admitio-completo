@@ -296,6 +296,23 @@ export function AuthProvider({ children }) {
     console.log('👋 Sesión cerrada')
   }
 
+  // Recargar datos desde Supabase (para sincronización en tiempo real)
+  async function reloadFromSupabase() {
+    if (!user?.institucion_id || !isSupabaseConfigured()) {
+      console.log('⚠️ No se puede recargar: sin institución o Supabase no configurado')
+      return false
+    }
+    
+    console.log('🔄 Recargando datos desde Supabase...')
+    try {
+      await loadInstitucionData(user.institucion_id)
+      return true
+    } catch (error) {
+      console.error('❌ Error recargando desde Supabase:', error)
+      return false
+    }
+  }
+
   // Aliases para compatibilidad
   const login = signIn
   const logout = signOut
@@ -328,6 +345,7 @@ export function AuthProvider({ children }) {
       signIn,
       signOut,
       signUp,
+      reloadFromSupabase,
       // Aliases
       login,
       logout,

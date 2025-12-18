@@ -535,7 +535,7 @@ const PieChart = ({ data, size = 200 }) => {
 }
 
 export default function Dashboard() {
-  const { user, institucion, signOut, isKeyMaster, isRector, isEncargado, isAsistente, canViewAll, canEdit, canConfig, canCreateLeads, canReasignar } = useAuth()
+  const { user, institucion, signOut, isKeyMaster, isRector, isEncargado, isAsistente, canViewAll, canEdit, canConfig, canCreateLeads, canReasignar, reloadFromSupabase } = useAuth()
   
   // Nombre dinámico de la institución
   const nombreInstitucion = institucion?.nombre || user?.institucion_nombre || store.getConfig()?.nombre || 'Mi Institución'
@@ -591,17 +591,19 @@ export default function Dashboard() {
       .channel('db-changes')
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'leads', filter: `institucion_id=eq.${user.institucion_id}` },
-        (payload) => {
+        async (payload) => {
           console.log('📡 Cambio en leads:', payload.eventType)
-          store.reloadStore()
+          // Recargar desde Supabase, NO desde localStorage
+          await reloadFromSupabase()
           loadData()
         }
       )
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'usuarios', filter: `institucion_id=eq.${user.institucion_id}` },
-        (payload) => {
+        async (payload) => {
           console.log('📡 Cambio en usuarios:', payload.eventType)
-          store.reloadStore()
+          // Recargar desde Supabase, NO desde localStorage
+          await reloadFromSupabase()
           loadData()
         }
       )
