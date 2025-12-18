@@ -221,7 +221,7 @@ export function AuthProvider({ children }) {
 
       // Guardar en localStorage
       localStorage.setItem('admitio_data', JSON.stringify(storeData))
-      localStorage.setItem('admitio_version', '2.6')
+      localStorage.setItem('admitio_version', '2.7')  // Debe coincidir con store.js
       
       // Recargar store con los nuevos datos
       store.reloadStore()

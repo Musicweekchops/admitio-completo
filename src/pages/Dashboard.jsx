@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Icon from '../components/Icon'
@@ -2200,10 +2200,10 @@ export default function Dashboard() {
   // REPORTES VIEW - Dashboard para Rector con Gráficos
   // ============================================
   const ReportesView = () => {
-    // Estados para filtros
+    // Estados para filtros - Rango de 1 año por defecto
     const [fechaInicio, setFechaInicio] = useState(() => {
       const d = new Date()
-      d.setMonth(d.getMonth() - 1)
+      d.setFullYear(d.getFullYear() - 1) // 1 año atrás
       return d.toISOString().split('T')[0]
     })
     const [fechaFin, setFechaFin] = useState(() => new Date().toISOString().split('T')[0])
@@ -2216,20 +2216,112 @@ export default function Dashboard() {
     const [agrupacion, setAgrupacion] = useState('dia')
     const [showFilters, setShowFilters] = useState(false)
     
-    // Obtener datos filtrados
-    const leadsReporte = store.getReporteLeads({
-      fechaInicio,
-      fechaFin,
-      estados: filtroEstados,
-      carreras: filtroCarreras,
-      medios: filtroMedios,
-      encargados: filtroEncargados,
-      tipoAlumno: filtroTipoAlumno,
-      userId: user?.id,
-      rol: user?.rol_id
-    })
+    // USAR DATOS FRESCOS DEL DASHBOARD (ya sincronizados con Supabase)
+    // En lugar de store.getReporteLeads que puede estar desactualizado
+    const leadsReporte = useMemo(() => {
+      let leads = [...consultas] // ← Usar consultas del Dashboard (sincronizadas)
+      
+      // Filtrar por rol si es encargado
+      if (user?.rol_id === 'encargado' && user?.id) {
+        leads = leads.filter(c => c.asignado_a === user.id)
+      }
+      
+      // Filtrar por rango de fechas
+      if (fechaInicio) {
+        const inicio = new Date(fechaInicio)
+        inicio.setHours(0, 0, 0, 0)
+        leads = leads.filter(c => new Date(c.created_at) >= inicio)
+      }
+      if (fechaFin) {
+        const fin = new Date(fechaFin)
+        fin.setHours(23, 59, 59, 999)
+        leads = leads.filter(c => new Date(c.created_at) <= fin)
+      }
+      
+      // Filtrar por estados
+      if (filtroEstados.length > 0) {
+        leads = leads.filter(c => {
+          if (filtroEstados.includes('matriculado') && c.matriculado) return true
+          if (filtroEstados.includes('descartado') && c.descartado) return true
+          if (!c.matriculado && !c.descartado && filtroEstados.includes(c.estado)) return true
+          return false
+        })
+      }
+      
+      // Filtrar por carreras
+      if (filtroCarreras.length > 0) {
+        leads = leads.filter(c => filtroCarreras.includes(c.carrera_id))
+      }
+      
+      // Filtrar por medios
+      if (filtroMedios.length > 0) {
+        leads = leads.filter(c => filtroMedios.includes(c.medio_id))
+      }
+      
+      // Filtrar por encargados
+      if (filtroEncargados.length > 0) {
+        leads = leads.filter(c => filtroEncargados.includes(c.asignado_a))
+      }
+      
+      // Filtrar por tipo de alumno
+      if (filtroTipoAlumno !== 'todos') {
+        leads = leads.filter(c => c.tipo_alumno === filtroTipoAlumno)
+      }
+      
+      return leads
+    }, [consultas, fechaInicio, fechaFin, filtroEstados, filtroCarreras, filtroMedios, filtroEncargados, filtroTipoAlumno, user])
     
-    const estadisticas = store.getEstadisticasReporte(leadsReporte)
+    // Calcular estadísticas desde los leads filtrados
+    const estadisticas = useMemo(() => {
+      const total = leadsReporte.length
+      const matriculados = leadsReporte.filter(c => c.matriculado).length
+      const descartados = leadsReporte.filter(c => c.descartado).length
+      const activos = leadsReporte.filter(c => !c.matriculado && !c.descartado).length
+      
+      // Por estado
+      const porEstado = {
+        nueva: leadsReporte.filter(c => c.estado === 'nueva' && !c.matriculado && !c.descartado).length,
+        contactado: leadsReporte.filter(c => c.estado === 'contactado' && !c.matriculado && !c.descartado).length,
+        seguimiento: leadsReporte.filter(c => c.estado === 'seguimiento' && !c.matriculado && !c.descartado).length,
+        examen_admision: leadsReporte.filter(c => c.estado === 'examen_admision' && !c.matriculado && !c.descartado).length,
+        matriculado: matriculados,
+        descartado: descartados
+      }
+      
+      // Tiempo de respuesta promedio
+      const leadsConPrimerContacto = leadsReporte.filter(c => c.fecha_primer_contacto && c.created_at)
+      const tiemposRespuesta = leadsConPrimerContacto.map(c => {
+        const inicio = new Date(c.created_at)
+        const fin = new Date(c.fecha_primer_contacto)
+        return (fin - inicio) / (1000 * 60 * 60) // Horas
+      })
+      const tiempoRespuestaPromedio = tiemposRespuesta.length > 0
+        ? Math.round(tiemposRespuesta.reduce((a, b) => a + b, 0) / tiemposRespuesta.length * 10) / 10
+        : 0
+      
+      // Tiempo de cierre promedio
+      const leadsConCierre = leadsReporte.filter(c => c.fecha_cierre && c.created_at && c.matriculado)
+      const tiemposCierre = leadsConCierre.map(c => {
+        const inicio = new Date(c.created_at)
+        const fin = new Date(c.fecha_cierre)
+        return (fin - inicio) / (1000 * 60 * 60 * 24) // Días
+      })
+      const tiempoCierrePromedio = tiemposCierre.length > 0
+        ? Math.round(tiemposCierre.reduce((a, b) => a + b, 0) / tiemposCierre.length * 10) / 10
+        : 0
+      
+      return {
+        total,
+        matriculados,
+        descartados,
+        activos,
+        porEstado,
+        tasaConversion: total > 0 ? Math.round((matriculados / total) * 100) : 0,
+        tiempoRespuestaPromedio,
+        tiempoCierrePromedio
+      }
+    }, [leadsReporte])
+    
     const datosGrafico = store.getDatosGraficoTemporal(leadsReporte, agrupacion)
     
     const carreras = store.getCarreras()
