@@ -28,6 +28,8 @@ import {
   syncActualizarLead, 
   syncEliminarLead,
   syncCrearAccion,
+  syncCrearUsuario,
+  syncActualizarUsuario,
   getInstitucionIdFromStore 
 } from './storeSync'
 
@@ -205,6 +207,14 @@ export function createUsuario(data) {
   }
   store.usuarios.push(nuevoUsuario)
   saveStore()
+  
+  // ========== SYNC CON SUPABASE ==========
+  const institucionId = getInstitucionIdFromStore()
+  if (institucionId) {
+    syncCrearUsuario(institucionId, nuevoUsuario)
+  }
+  // ========================================
+  
   return nuevoUsuario
 }
 
@@ -213,6 +223,11 @@ export function updateUsuario(id, updates) {
   if (index === -1) return null
   store.usuarios[index] = { ...store.usuarios[index], ...updates }
   saveStore()
+  
+  // ========== SYNC CON SUPABASE ==========
+  syncActualizarUsuario(id, updates)
+  // ========================================
+  
   return store.usuarios[index]
 }
 
@@ -221,6 +236,11 @@ export function toggleUsuarioActivo(id) {
   if (!usuario) return null
   usuario.activo = !usuario.activo
   saveStore()
+  
+  // ========== SYNC CON SUPABASE ==========
+  syncActualizarUsuario(id, { activo: usuario.activo })
+  // ========================================
+  
   return usuario
 }
 

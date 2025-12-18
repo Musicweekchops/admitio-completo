@@ -214,8 +214,8 @@ export function syncCrearLead(institucionId, leadData) {
       notas: leadData.notas || null
     };
     
-    // Solo incluir carrera_id si tiene valor
-    if (leadData.carrera_id) {
+    // Solo incluir carrera_id si es UUID válido (contiene guiones y es largo)
+    if (leadData.carrera_id && leadData.carrera_id.includes('-') && leadData.carrera_id.length > 30) {
       insertData.carrera_id = leadData.carrera_id;
     }
     

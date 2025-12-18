@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Icon from '../components/Icon'
 import * as store from '../lib/store'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { ESTADOS, CARRERAS, MEDIOS, TIPOS_ALUMNO } from '../data/mockData'
 
 // Componente separado para el textarea de notas (evita re-renders)
@@ -529,7 +530,10 @@ const PieChart = ({ data, size = 200 }) => {
 }
 
 export default function Dashboard() {
-  const { user, signOut, isKeyMaster, isRector, isEncargado, isAsistente, canViewAll, canEdit, canConfig, canCreateLeads, canReasignar } = useAuth()
+  const { user, institucion, signOut, isKeyMaster, isRector, isEncargado, isAsistente, canViewAll, canEdit, canConfig, canCreateLeads, canReasignar } = useAuth()
+  
+  // Nombre dinámico de la institución
+  const nombreInstitucion = institucion?.nombre || user?.institucion_nombre || store.getConfig()?.nombre || 'Mi Institución'
   const navigate = useNavigate()
   
   const [activeTab, setActiveTab] = useState(isRector ? 'reportes' : 'dashboard')
@@ -570,6 +574,42 @@ export default function Dashboard() {
   useEffect(() => {
     loadData()
   }, [user])
+
+  // ========== SUPABASE REALTIME ==========
+  // Escuchar cambios en tiempo real
+  useEffect(() => {
+    if (!isSupabaseConfigured() || !user?.institucion_id) return
+
+    console.log('🔌 Conectando Supabase Realtime...')
+    
+    const channel = supabase
+      .channel('db-changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'leads', filter: `institucion_id=eq.${user.institucion_id}` },
+        (payload) => {
+          console.log('📡 Cambio en leads:', payload.eventType)
+          store.reloadStore()
+          loadData()
+        }
+      )
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'usuarios', filter: `institucion_id=eq.${user.institucion_id}` },
+        (payload) => {
+          console.log('📡 Cambio en usuarios:', payload.eventType)
+          store.reloadStore()
+          loadData()
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Realtime status:', status)
+      })
+
+    return () => {
+      console.log('🔌 Desconectando Realtime...')
+      supabase.removeChannel(channel)
+    }
+  }, [user?.institucion_id])
+  // ========================================
 
   function loadData() {
     const data = store.getConsultas(user?.id, user?.rol_id)
@@ -687,11 +727,11 @@ export default function Dashboard() {
             <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} mb-4`}>
               <div className={`flex items-center ${sidebarCollapsed ? '' : 'gap-3'}`}>
                 <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <span className="text-white font-bold">P</span>
+                  <span className="text-white font-bold">{nombreInstitucion.charAt(0).toUpperCase()}</span>
                 </div>
                 {!sidebarCollapsed && (
                   <div className="overflow-hidden">
-                    <p className="font-bold text-slate-800">PROJAZZ</p>
+                    <p className="font-bold text-slate-800">{nombreInstitucion}</p>
                     <p className="text-xs text-slate-400">Sistema de Admisión</p>
                   </div>
                 )}
@@ -814,16 +854,16 @@ export default function Dashboard() {
     <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-100 flex items-center justify-between px-4 z-30">
       <button 
         onClick={() => setMobileMenuOpen(true)}
-        className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+        className="p-2 text-violet-600 hover:bg-violet-50 rounded-lg"
       >
         <Icon name="Menu" size={24} />
       </button>
       
       <div className="flex items-center gap-2">
         <div className="w-8 h-8 bg-gradient-to-br from-violet-600 to-purple-600 rounded-lg flex items-center justify-center">
-          <span className="text-white font-bold text-sm">P</span>
+          <span className="text-white font-bold text-sm">{nombreInstitucion.charAt(0).toUpperCase()}</span>
         </div>
-        <span className="font-bold text-slate-800">PROJAZZ</span>
+        <span className="font-bold text-slate-800">{nombreInstitucion}</span>
       </div>
       
       <button 
@@ -992,7 +1032,7 @@ export default function Dashboard() {
                         )}
                       </div>
                       <p className="text-sm text-slate-500">
-                        {c.carrera?.nombre} · {ESTADOS[c.estado]?.label}
+                        {c.carrera?.nombre || c.carrera_nombre || 'Sin carrera'} · {ESTADOS[c.estado]?.label}
                         {c.tipo_alumno === 'antiguo' && <span className="ml-2 text-violet-600">• Alumno Antiguo</span>}
                       </p>
                     </div>
@@ -1092,7 +1132,7 @@ export default function Dashboard() {
                         <span className="px-1.5 py-0.5 bg-violet-100 text-violet-600 text-xs rounded">Antiguo</span>
                       )}
                     </div>
-                    <p className="text-sm text-slate-500">{c.carrera?.nombre}</p>
+                    <p className="text-sm text-slate-500">{c.carrera?.nombre || c.carrera_nombre || 'Sin carrera'}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -1228,8 +1268,8 @@ export default function Dashboard() {
                     </span>
                   </div>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className={`w-2 h-2 rounded-full ${consulta.carrera?.color}`} />
-                    <span className="text-xs text-slate-500">{consulta.carrera?.nombre}</span>
+                    <span className={`w-2 h-2 rounded-full ${consulta.carrera?.color || 'bg-slate-400'}`} />
+                    <span className="text-xs text-slate-500">{consulta.carrera?.nombre || consulta.carrera_nombre || 'Sin carrera'}</span>
                     {consulta.tipo_alumno === 'antiguo' && (
                       <span className="px-1.5 py-0.5 bg-violet-100 text-violet-600 text-xs rounded">Antiguo</span>
                     )}
@@ -1282,8 +1322,8 @@ export default function Dashboard() {
               </td>
               <td className="p-4">
                 <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${c.carrera?.color}`} />
-                  <span className="text-sm text-slate-600">{c.carrera?.nombre}</span>
+                  <span className={`w-2 h-2 rounded-full ${c.carrera?.color || 'bg-slate-400'}`} />
+                  <span className="text-sm text-slate-600">{c.carrera?.nombre || c.carrera_nombre || 'Sin carrera'}</span>
                 </div>
               </td>
               <td className="p-4 text-center">
@@ -1376,8 +1416,8 @@ export default function Dashboard() {
                     </td>
                     <td className="p-4">
                       <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${c.carrera?.color}`} />
-                        <span className="text-sm text-slate-600">{c.carrera?.nombre}</span>
+                        <span className={`w-2 h-2 rounded-full ${c.carrera?.color || 'bg-slate-400'}`} />
+                        <span className="text-sm text-slate-600">{c.carrera?.nombre || c.carrera_nombre || 'Sin carrera'}</span>
                       </div>
                     </td>
                     <td className="p-4 text-center">
@@ -1508,7 +1548,7 @@ export default function Dashboard() {
                       <span className="px-2 py-1 bg-violet-100 text-violet-700 text-sm rounded-full">Alumno Antiguo</span>
                     )}
                   </div>
-                  <p className="text-slate-500">{c.carrera?.nombre}</p>
+                  <p className="text-slate-500">{c.carrera?.nombre || c.carrera_nombre || 'Sin carrera'}</p>
                 </div>
                 <span className={`px-3 py-1 rounded-full text-sm ${ESTADOS[c.estado]?.bg} ${ESTADOS[c.estado]?.text}`}>
                   {ESTADOS[c.estado]?.label}
@@ -4211,7 +4251,7 @@ const handleImportCSV = async () => {
                               )}
                             </div>
                             <p className="text-sm text-slate-500">
-                              {c.carrera?.nombre} · {ESTADOS[c.estado]?.label}
+                              {c.carrera?.nombre || c.carrera_nombre || 'Sin carrera'} · {ESTADOS[c.estado]?.label}
                             </p>
                           </div>
                         </div>
