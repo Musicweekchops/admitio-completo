@@ -861,6 +861,7 @@ export default function Dashboard() {
         onClick={() => setMobileMenuOpen(true)}
 <<<<<<< HEAD
         className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+=======
         className="p-2 text-violet-700 hover:bg-violet-50 rounded-lg"
 >>>>>>> d430e39bd1f137fe271a8df4d86875a8e54430bd
       >
