@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Icon from '../components/Icon'
+import { ModalFormulario } from '../components/FormularioEditor'
 import * as store from '../lib/store'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { useLockLead } from '../hooks/useLockLead'
@@ -577,13 +578,6 @@ export default function Dashboard() {
   // Estados para sidebar responsive
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  
-  const [formFormData, setFormFormData] = useState({
-    nombre: '',
-    descripcion: '',
-    mostrar_carreras: true,
-    campos_extra: []
-  })
 
   // Cargar datos inicial
   useEffect(() => {
@@ -2854,131 +2848,43 @@ export default function Dashboard() {
   }
 
   // ============================================
-  // FORMULARIOS VIEW - Editor mejorado
+  // FORMULARIOS VIEW - Editor mejorado sin re-renders
   // ============================================
   const FormulariosView = () => {
-    const [showCode, setShowCode] = useState(null)
-    const [previewForm, setPreviewForm] = useState(null)
+    const [editingForm, setEditingForm] = useState(null)
+    const [localShowModal, setLocalShowModal] = useState(false)
     
-    function handleCreateForm(e) {
-      e.preventDefault()
-      store.createFormulario(formFormData)
-      setFormFormData({ nombre: '', descripcion: '', mostrar_carreras: true, campos_extra: [] })
-      setShowFormModal(false)
-      loadData()
-    }
-    
-    function handleShowEmbed(formId) {
-      const form = formularios.find(f => f.id === formId)
-      const code = store.generarEmbedCode(formId, form)
-      setEmbedCode(code)
-      setShowCode(formId)
-    }
-    
-    function copyToClipboard() {
-      navigator.clipboard.writeText(embedCode)
-      alert('¡Código copiado al portapapeles!')
-    }
-    
-    function handleDeleteForm(formId) {
+    const handleDeleteForm = (formId) => {
       if (confirm('¿Eliminar formulario?')) {
         store.deleteFormulario(formId)
         loadData()
       }
     }
     
-    function addCampoExtra() {
-      setFormFormData({
-        ...formFormData,
-        campos_extra: [...formFormData.campos_extra, { id: Date.now(), label: '', tipo: 'text', requerido: false }]
-      })
+    const handleEditForm = (form) => {
+      setEditingForm(form)
+      setLocalShowModal(true)
     }
     
-    function updateCampoExtra(id, field, value) {
-      setFormFormData({
-        ...formFormData,
-        campos_extra: formFormData.campos_extra.map(c => c.id === id ? { ...c, [field]: value } : c)
-      })
+    const handleNewForm = () => {
+      setEditingForm(null)
+      setLocalShowModal(true)
     }
     
-    function removeCampoExtra(id) {
-      setFormFormData({
-        ...formFormData,
-        campos_extra: formFormData.campos_extra.filter(c => c.id !== id)
-      })
+    const handleFormCreated = () => {
+      loadData()
+      setLocalShowModal(false)
+      setEditingForm(null)
     }
-    
-    // Preview del formulario
-    const FormPreview = ({ formConfig }) => (
-      <div className="bg-white p-6 rounded-xl border-2 border-dashed border-slate-300">
-        <h4 className="font-semibold text-slate-800 mb-4">{formConfig.nombre || 'Formulario de Admisión'}</h4>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Nombre completo *</label>
-            <input type="text" disabled placeholder="Tu nombre completo" className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Email *</label>
-            <input type="email" disabled placeholder="tu@email.com" className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Teléfono *</label>
-            <input type="tel" disabled placeholder="+56 9 1234 5678" className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50" />
-          </div>
-          {formConfig.mostrar_carreras && (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Carrera de interés *</label>
-              <select disabled className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50">
-                <option>Selecciona una carrera</option>
-              </select>
-            </div>
-          )}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">¿Has estudiado en ProJazz antes?</label>
-            <select disabled className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50">
-              <option>No, sería mi primera vez</option>
-            </select>
-          </div>
-          {formConfig.campos_extra?.map(campo => (
-            <div key={campo.id}>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                {campo.label || 'Campo sin nombre'} {campo.requerido && '*'}
-              </label>
-              {campo.tipo === 'textarea' ? (
-                <textarea disabled placeholder={campo.label} className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 h-20" />
-              ) : campo.tipo === 'select' ? (
-                <select disabled className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50">
-                  <option>Seleccionar...</option>
-                </select>
-              ) : (
-                <input type={campo.tipo} disabled placeholder={campo.label} className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50" />
-              )}
-            </div>
-          ))}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Mensaje (opcional)</label>
-            <textarea disabled placeholder="Cuéntanos sobre ti..." className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 h-20" />
-          </div>
-          <button disabled className="w-full py-3 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-lg font-medium">
-            Solicitar Información
-          </button>
-        </div>
-      </div>
-    )
-    
+
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
-              <Icon name="FileCode" className="text-indigo-600" size={24} />
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold text-slate-800">Formularios Embebibles</h2>
-              <p className="text-slate-500">Crea formularios para capturar leads desde tu sitio web</p>
-            </div>
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800">Formularios Embebibles</h2>
+            <p className="text-slate-500">Crea formularios para capturar leads desde tu sitio web</p>
           </div>
-          <button onClick={() => setShowFormModal(true)} className="px-4 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 flex items-center gap-2">
+          <button onClick={handleNewForm} className="px-4 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 flex items-center gap-2">
             <Icon name="Plus" size={20} /> Nuevo Formulario
           </button>
         </div>
@@ -2990,47 +2896,46 @@ export default function Dashboard() {
             </div>
             <h3 className="font-semibold text-slate-800 mb-2">Sin formularios</h3>
             <p className="text-slate-500 mb-4">Crea tu primer formulario para empezar a capturar leads</p>
-            <button onClick={() => setShowFormModal(true)} className="px-4 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700">
+            <button onClick={handleNewForm} className="px-4 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700">
               Crear Formulario
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {formularios.map(form => (
-              <div key={form.id} className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+              <div key={form.id} className="bg-white rounded-xl p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between mb-4">
-                  <div>
+                  <div className="flex-1">
                     <h3 className="font-semibold text-slate-800">{form.nombre}</h3>
-                    <p className="text-sm text-slate-500">{form.descripcion || 'Sin descripción'}</p>
+                    <p className="text-sm text-slate-500 line-clamp-2">{form.descripcion || 'Sin descripción'}</p>
                   </div>
-                  <span className={`px-2 py-1 rounded-full text-xs ${form.activo ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                  <span className={`px-2 py-1 rounded-full text-xs ml-2 ${form.activo ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
                     {form.activo ? 'Activo' : 'Inactivo'}
                   </span>
                 </div>
+                
                 <div className="flex items-center gap-4 text-sm text-slate-500 mb-4">
                   <span className="flex items-center gap-1">
                     <Icon name="Users" size={14} />
-                    {form.leads_recibidos} leads
+                    {form.leads_recibidos || 0} leads
                   </span>
                   <span className="flex items-center gap-1">
                     <Icon name="List" size={14} />
-                    {form.campos_extra?.length || 0} campos extra
+                    {form.campos_extra?.length || 0} campos
                   </span>
-                  {!form.mostrar_carreras && (
-                    <span className="text-amber-600">Sin carreras</span>
-                  )}
                 </div>
+                
                 <div className="flex gap-2">
-                  <button onClick={() => setPreviewForm(form)}
-                          className="px-3 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-200 flex items-center gap-1">
-                    <Icon name="Eye" size={14} /> Preview
+                  <button 
+                    onClick={() => handleEditForm(form)}
+                    className="flex-1 px-3 py-2 bg-violet-50 text-violet-600 rounded-lg text-sm font-medium hover:bg-violet-100 flex items-center justify-center gap-1"
+                  >
+                    <Icon name="Edit" size={14} /> Editar
                   </button>
-                  <button onClick={() => handleShowEmbed(form.id)}
-                          className="flex-1 px-3 py-2 bg-violet-50 text-violet-600 rounded-lg text-sm font-medium hover:bg-violet-100 flex items-center justify-center gap-1">
-                    <Icon name="Code" size={14} /> Código
-                  </button>
-                  <button onClick={() => handleDeleteForm(form.id)}
-                          className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-medium hover:bg-red-100">
+                  <button 
+                    onClick={() => handleDeleteForm(form.id)}
+                    className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-medium hover:bg-red-100"
+                  >
                     <Icon name="Trash2" size={14} />
                   </button>
                 </div>
@@ -3039,161 +2944,14 @@ export default function Dashboard() {
           </div>
         )}
         
-        {/* Modal Preview */}
-        {previewForm && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setPreviewForm(null)}>
-            <div className="bg-slate-100 rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-slate-800">Preview: {previewForm.nombre}</h3>
-                <button onClick={() => setPreviewForm(null)} className="p-2 text-red-500 hover:text-white hover:bg-red-500 rounded-lg transition-colors">
-                  <Icon name="X" size={24} />
-                </button>
-              </div>
-              <FormPreview formConfig={previewForm} />
-            </div>
-          </div>
-        )}
-        
-        {/* Modal Código Embed */}
-        {showCode && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowCode(null)}>
-            <div className="bg-white rounded-2xl p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-slate-800">Código para Embeber</h3>
-                <button onClick={() => setShowCode(null)} className="p-2 text-red-500 hover:text-white hover:bg-red-500 rounded-lg transition-colors">
-                  <Icon name="X" size={24} />
-                </button>
-              </div>
-              <p className="text-slate-500 mb-4">Copia este código y pégalo en cualquier página de tu sitio web.</p>
-              <div className="relative">
-                <pre className="bg-slate-900 text-slate-100 p-4 rounded-xl overflow-x-auto text-sm max-h-96">
-                  <code>{embedCode}</code>
-                </pre>
-                <button onClick={copyToClipboard}
-                        className="absolute top-3 right-3 px-3 py-1 bg-violet-600 text-white rounded-lg text-sm hover:bg-violet-700 flex items-center gap-1">
-                  <Icon name="Copy" size={14} /> Copiar
-                </button>
-              </div>
-              <div className="mt-4 p-4 bg-amber-50 rounded-lg border border-amber-200">
-                <p className="text-sm text-amber-800">
-                  <strong>Nota:</strong> En producción, conecta el formulario a tu webhook de N8N o Supabase.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-        
-        {/* Modal Crear/Editar Formulario */}
-        {showFormModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowFormModal(false)}>
-            <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex" onClick={e => e.stopPropagation()}>
-              {/* Editor */}
-              <div className="flex-1 p-6 overflow-y-auto border-r border-slate-200">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-bold text-slate-800">Nuevo Formulario</h3>
-                  <button onClick={() => setShowFormModal(false)} className="text-slate-400 hover:text-slate-600 lg:hidden">
-                    <Icon name="X" size={24} />
-                  </button>
-                </div>
-                <form onSubmit={handleCreateForm} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Nombre del formulario *</label>
-                    <input type="text" required value={formFormData.nombre}
-                           onChange={e => setFormFormData({...formFormData, nombre: e.target.value})}
-                           placeholder="Ej: Formulario Landing Page"
-                           className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Descripción</label>
-                    <textarea value={formFormData.descripcion}
-                              onChange={e => setFormFormData({...formFormData, descripcion: e.target.value})}
-                              placeholder="Descripción opcional..."
-                              className="w-full h-16 px-4 py-2 border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-violet-500" />
-                  </div>
-                  
-                  {/* Toggle Carreras */}
-                  <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
-                    <div>
-                      <p className="font-medium text-slate-700">Mostrar selector de carreras</p>
-                      <p className="text-sm text-slate-500">Permitir elegir carrera de interés</p>
-                    </div>
-                    <button type="button"
-                            onClick={() => setFormFormData({...formFormData, mostrar_carreras: !formFormData.mostrar_carreras})}
-                            className={`w-12 h-6 rounded-full transition-colors ${formFormData.mostrar_carreras ? 'bg-violet-600' : 'bg-slate-300'}`}>
-                      <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${formFormData.mostrar_carreras ? 'translate-x-6' : 'translate-x-0.5'}`} />
-                    </button>
-                  </div>
-                  
-                  {/* Campos Extra */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-sm font-medium text-slate-700">Campos Adicionales</label>
-                      <button type="button" onClick={addCampoExtra}
-                              className="text-sm text-violet-600 hover:text-violet-700 font-medium flex items-center gap-1">
-                        <Icon name="Plus" size={14} /> Agregar campo
-                      </button>
-                    </div>
-                    <div className="space-y-3">
-                      {formFormData.campos_extra.map(campo => (
-                        <div key={campo.id} className="flex items-start gap-2 p-3 bg-slate-50 rounded-lg">
-                          <div className="flex-1 grid grid-cols-2 gap-2">
-                            <input type="text" placeholder="Nombre del campo"
-                                   value={campo.label}
-                                   onChange={e => updateCampoExtra(campo.id, 'label', e.target.value)}
-                                   className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-                            <select value={campo.tipo}
-                                    onChange={e => updateCampoExtra(campo.id, 'tipo', e.target.value)}
-                                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
-                              <option value="text">Texto</option>
-                              <option value="email">Email</option>
-                              <option value="tel">Teléfono</option>
-                              <option value="number">Número</option>
-                              <option value="date">Fecha</option>
-                              <option value="textarea">Área de texto</option>
-                              <option value="select">Selector</option>
-                            </select>
-                          </div>
-                          <label className="flex items-center gap-1 text-sm text-slate-600 whitespace-nowrap">
-                            <input type="checkbox" checked={campo.requerido}
-                                   onChange={e => updateCampoExtra(campo.id, 'requerido', e.target.checked)}
-                                   className="rounded border-slate-300" />
-                            Req.
-                          </label>
-                          <button type="button" onClick={() => removeCampoExtra(campo.id)}
-                                  className="p-1 text-red-500 hover:bg-red-50 rounded">
-                            <Icon name="X" size={16} />
-                          </button>
-                        </div>
-                      ))}
-                      {formFormData.campos_extra.length === 0 && (
-                        <p className="text-sm text-slate-400 text-center py-4">Sin campos adicionales</p>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="flex gap-3 pt-4">
-                    <button type="button" onClick={() => setShowFormModal(false)}
-                            className="flex-1 px-4 py-2 border border-slate-200 text-slate-600 rounded-lg font-medium hover:bg-slate-50">
-                      Cancelar
-                    </button>
-                    <button type="submit"
-                            className="flex-1 px-4 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700">
-                      Crear Formulario
-                    </button>
-                  </div>
-                </form>
-              </div>
-              
-              {/* Preview en tiempo real */}
-              <div className="w-96 p-6 bg-slate-100 overflow-y-auto hidden lg:block">
-                <h4 className="text-sm font-medium text-slate-500 mb-4 flex items-center gap-2">
-                  <Icon name="Eye" size={16} /> Vista previa
-                </h4>
-                <FormPreview formConfig={formFormData} />
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Usar el nuevo ModalFormulario */}
+        <ModalFormulario
+          isOpen={localShowModal}
+          onClose={() => { setLocalShowModal(false); setEditingForm(null); }}
+          onCreated={handleFormCreated}
+          institucionId={user?.institucion_id}
+          editForm={editingForm}
+        />
       </div>
     )
   }
