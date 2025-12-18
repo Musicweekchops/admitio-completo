@@ -160,10 +160,18 @@ export function AuthProvider({ children }) {
           prioridad: lead.prioridad || 'media',
           notas: lead.notas,
           asignado_a: lead.asignado_a,
-          creado_por: lead.creado_por,  // Para filtrar por asistente
+          creado_por: lead.creado_por,
           created_at: lead.created_at,
           fecha_primer_contacto: lead.fecha_primer_contacto,
-          fecha_cierre: lead.fecha_cierre
+          fecha_cierre: lead.fecha_cierre,
+          // Campos adicionales importantes para reportes y métricas
+          matriculado: lead.matriculado || false,
+          descartado: lead.descartado || false,
+          tipo_alumno: lead.tipo_alumno || 'nuevo',
+          emails_enviados: lead.emails_enviados || 0,
+          fecha_proximo_contacto: lead.fecha_proximo_contacto,
+          nuevo_interes: lead.nuevo_interes || false,
+          updated_at: lead.updated_at
         })),
         usuarios: (usuarios || []).map(u => ({
           id: u.id,

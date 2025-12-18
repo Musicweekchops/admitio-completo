@@ -578,14 +578,83 @@ export default function Dashboard() {
   // Estados para sidebar responsive
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [lastUpdate, setLastUpdate] = useState(new Date())
+  const [isPolling, setIsPolling] = useState(true)
+
+  // ============================================
+  // FUNCIÓN PARA FORMATEAR TIEMPO PROGRESIVO
+  // minutos → horas → días
+  // ============================================
+  const formatearTiempoRespuesta = (horas) => {
+    if (horas === null || horas === undefined || isNaN(horas)) return { valor: '-', unidad: '', color: 'text-slate-400' }
+    
+    const minutos = horas * 60
+    
+    // Determinar color según tiempo (basado en horas)
+    let color = 'text-emerald-600' // Bueno: < 4h
+    if (horas > 4 && horas <= 8) color = 'text-amber-500' // Regular: 4-8h
+    if (horas > 8 && horas <= 24) color = 'text-orange-500' // Malo: 8-24h
+    if (horas > 24) color = 'text-red-600' // Muy malo: > 24h
+    
+    // Formato progresivo
+    if (minutos < 60) {
+      return { 
+        valor: Math.round(minutos), 
+        unidad: 'min', 
+        color,
+        texto: `${Math.round(minutos)} min`
+      }
+    } else if (horas < 24) {
+      const h = Math.floor(horas)
+      const m = Math.round((horas - h) * 60)
+      return { 
+        valor: horas.toFixed(1), 
+        unidad: 'hrs', 
+        color,
+        texto: m > 0 ? `${h}h ${m}m` : `${h} hrs`
+      }
+    } else {
+      const dias = horas / 24
+      return { 
+        valor: dias.toFixed(1), 
+        unidad: 'días', 
+        color,
+        texto: `${dias.toFixed(1)} días`
+      }
+    }
+  }
 
   // Cargar datos inicial
   useEffect(() => {
     loadData()
   }, [user])
 
-  // ========== SUPABASE REALTIME ==========
-  // Escuchar cambios en tiempo real
+  // ========== POLLING CADA 1 SEGUNDO ==========
+  // Actualización constante desde Supabase
+  useEffect(() => {
+    if (!isSupabaseConfigured() || !user?.institucion_id || !isPolling) return
+
+    console.log('⏱️ Iniciando polling cada 1 segundo...')
+    
+    const pollingInterval = setInterval(async () => {
+      try {
+        await reloadFromSupabase()
+        loadData()
+        setLastUpdate(new Date())
+      } catch (error) {
+        console.error('Error en polling:', error)
+      }
+    }, 1000) // Cada 1 segundo
+
+    return () => {
+      console.log('⏱️ Deteniendo polling...')
+      clearInterval(pollingInterval)
+    }
+  }, [user?.institucion_id, isPolling])
+  // ========================================
+
+  // ========== SUPABASE REALTIME (BACKUP) ==========
+  // Escuchar cambios en tiempo real como respaldo
   useEffect(() => {
     if (!isSupabaseConfigured() || !user?.institucion_id) return
 
@@ -929,6 +998,24 @@ export default function Dashboard() {
             <div className="text-right">
               <p className="text-3xl font-bold">{totalLeads}</p>
               <p className="text-violet-200">{isKeyMaster ? 'Consultas totales' : 'Leads asignados'}</p>
+              {/* Indicador de actualización en tiempo real */}
+              <div className="flex items-center justify-end gap-2 mt-2">
+                <button
+                  onClick={() => setIsPolling(!isPolling)}
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs transition-colors ${
+                    isPolling 
+                      ? 'bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30' 
+                      : 'bg-red-500/20 text-red-200 hover:bg-red-500/30'
+                  }`}
+                  title={isPolling ? 'Actualización automática activa' : 'Actualización pausada'}
+                >
+                  <span className={`w-2 h-2 rounded-full ${isPolling ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
+                  {isPolling ? 'En vivo' : 'Pausado'}
+                </button>
+                <span className="text-xs text-violet-300">
+                  {lastUpdate.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -979,34 +1066,43 @@ export default function Dashboard() {
         {/* KPIs de Tiempo - Solo si hay datos */}
         {(tiempoResp !== null || tiempoCierre !== null) && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {tiempoResp !== null && (
-              <div className={`p-4 rounded-xl border ${tiempoResp <= 4 ? 'bg-emerald-50 border-emerald-200' : tiempoResp <= 8 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}>
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${tiempoResp <= 4 ? 'bg-emerald-100 text-emerald-600' : tiempoResp <= 8 ? 'bg-amber-100 text-amber-600' : 'bg-red-100 text-red-600'}`}>
-                    <Icon name="Zap" size={20} />
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500">Tiempo de Respuesta</p>
-                    <p className={`text-2xl font-bold ${tiempoResp <= 4 ? 'text-emerald-600' : tiempoResp <= 8 ? 'text-amber-600' : 'text-red-600'}`}>
-                      {tiempoResp}h promedio
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-            {tiempoCierre !== null && tiempoCierre > 0 && (
-              <div className="p-4 rounded-xl border bg-blue-50 border-blue-200">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-blue-100 text-blue-600">
-                    <Icon name="Calendar" size={20} />
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500">Tiempo de Cierre</p>
-                    <p className="text-2xl font-bold text-blue-600">{tiempoCierre} días promedio</p>
+            {tiempoResp !== null && (() => {
+              const tiempo = formatearTiempoRespuesta(tiempoResp)
+              return (
+                <div className={`p-4 rounded-xl border ${tiempoResp <= 4 ? 'bg-emerald-50 border-emerald-200' : tiempoResp <= 8 ? 'bg-amber-50 border-amber-200' : tiempoResp <= 24 ? 'bg-orange-50 border-orange-200' : 'bg-red-50 border-red-200'}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${tiempo.color.replace('text-', 'bg-').replace('600', '100')} ${tiempo.color}`}>
+                      <Icon name="Zap" size={20} />
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-500">Tiempo de Respuesta</p>
+                      <p className={`text-2xl font-bold ${tiempo.color}`}>
+                        {tiempo.texto} <span className="text-base font-normal">promedio</span>
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )
+            })()}
+            {tiempoCierre !== null && tiempoCierre > 0 && (() => {
+              const color = tiempoCierre <= 7 ? 'text-emerald-600' : tiempoCierre <= 14 ? 'text-blue-600' : tiempoCierre <= 30 ? 'text-amber-600' : 'text-red-600'
+              const bgClass = tiempoCierre <= 7 ? 'bg-emerald-50 border-emerald-200' : tiempoCierre <= 14 ? 'bg-blue-50 border-blue-200' : tiempoCierre <= 30 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'
+              return (
+                <div className={`p-4 rounded-xl border ${bgClass}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${color.replace('text-', 'bg-').replace('600', '100')} ${color}`}>
+                      <Icon name="Calendar" size={20} />
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-500">Tiempo de Cierre</p>
+                      <p className={`text-2xl font-bold ${color}`}>
+                        {tiempoCierre} días <span className="text-base font-normal">promedio</span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
           </div>
         )}
         
@@ -2434,13 +2530,32 @@ export default function Dashboard() {
                 </p>
               </div>
             </div>
-            <button
-              onClick={descargarCSV}
-              className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-medium flex items-center gap-2 transition-colors"
-            >
-              <Icon name="Download" size={20} />
-              Descargar CSV
-            </button>
+            <div className="flex items-center gap-4">
+              {/* Indicador de actualización en tiempo real */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsPolling(!isPolling)}
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs transition-colors ${
+                    isPolling 
+                      ? 'bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30' 
+                      : 'bg-red-500/20 text-red-200 hover:bg-red-500/30'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${isPolling ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
+                  {isPolling ? 'En vivo' : 'Pausado'}
+                </button>
+                <span className="text-xs text-violet-200">
+                  {lastUpdate.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </span>
+              </div>
+              <button
+                onClick={descargarCSV}
+                className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-medium flex items-center gap-2 transition-colors"
+              >
+                <Icon name="Download" size={20} />
+                Descargar CSV
+              </button>
+            </div>
           </div>
         </div>
         
@@ -2648,9 +2763,14 @@ export default function Dashboard() {
           </div>
           <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
             <p className="text-slate-500 text-sm">T. Respuesta</p>
-            <p className={`text-2xl font-bold ${estadisticas.tiempoRespuestaPromedio <= 4 ? 'text-emerald-600' : estadisticas.tiempoRespuestaPromedio <= 8 ? 'text-amber-600' : 'text-red-600'}`}>
-              {estadisticas.tiempoRespuestaPromedio}h
-            </p>
+            {(() => {
+              const tiempo = formatearTiempoRespuesta(estadisticas.tiempoRespuestaPromedio)
+              return (
+                <p className={`text-2xl font-bold ${tiempo.color}`}>
+                  {tiempo.texto || '-'}
+                </p>
+              )
+            })()}
           </div>
         </div>
         
@@ -2791,13 +2911,26 @@ export default function Dashboard() {
             <div className="space-y-4">
               <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
                 <span className="text-slate-600">Tiempo de Respuesta</span>
-                <span className={`text-xl font-bold ${estadisticas.tiempoRespuestaPromedio <= 4 ? 'text-emerald-600' : estadisticas.tiempoRespuestaPromedio <= 8 ? 'text-amber-600' : 'text-red-600'}`}>
-                  {estadisticas.tiempoRespuestaPromedio} hrs
-                </span>
+                {(() => {
+                  const tiempo = formatearTiempoRespuesta(estadisticas.tiempoRespuestaPromedio)
+                  return (
+                    <span className={`text-xl font-bold ${tiempo.color}`}>
+                      {tiempo.texto || '-'}
+                    </span>
+                  )
+                })()}
               </div>
               <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
                 <span className="text-slate-600">Tiempo de Cierre</span>
-                <span className="text-xl font-bold text-purple-600">{estadisticas.tiempoCierrePromedio} días</span>
+                {(() => {
+                  const dias = estadisticas.tiempoCierrePromedio
+                  const color = dias <= 7 ? 'text-emerald-600' : dias <= 14 ? 'text-amber-500' : dias <= 30 ? 'text-orange-500' : 'text-red-600'
+                  return (
+                    <span className={`text-xl font-bold ${color}`}>
+                      {dias ? `${dias} días` : '-'}
+                    </span>
+                  )
+                })()}
               </div>
             </div>
           </div>
