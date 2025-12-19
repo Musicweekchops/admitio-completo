@@ -2305,11 +2305,22 @@ export default function Dashboard() {
       leadsReporte.forEach(c => {
         const encargadoId = c.asignado_a || 'sin_asignar'
         if (!porEncargado[encargadoId]) {
-          porEncargado[encargadoId] = { total: 0, matriculados: 0, nombre: c.encargado?.nombre || 'Sin asignar' }
+          porEncargado[encargadoId] = { total: 0, matriculados: 0, nombre: c.encargado?.nombre || 'Sin asignar', tasa: 0 }
         }
         porEncargado[encargadoId].total++
         if (c.matriculado) porEncargado[encargadoId].matriculados++
       })
+      // Calcular tasa de conversión por encargado
+      Object.keys(porEncargado).forEach(id => {
+        const e = porEncargado[id]
+        e.tasa = e.total > 0 ? Math.round((e.matriculados / e.total) * 100) : 0
+      })
+      
+      // Por tipo de alumno
+      const porTipoAlumno = {
+        nuevo: leadsReporte.filter(c => c.tipo_alumno === 'nuevo' || !c.tipo_alumno).length,
+        antiguo: leadsReporte.filter(c => c.tipo_alumno === 'antiguo').length
+      }
       
       // Tiempo de respuesta promedio
       const leadsConPrimerContacto = leadsReporte.filter(c => c.fecha_primer_contacto && c.created_at)
@@ -2342,6 +2353,7 @@ export default function Dashboard() {
         porCarrera,
         porMedio,
         porEncargado,
+        porTipoAlumno,
         tasaConversion: total > 0 ? Math.round((matriculados / total) * 100) : 0,
         tiempoRespuestaPromedio,
         tiempoCierrePromedio
@@ -2900,28 +2912,28 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
           <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
             <p className="text-slate-500 text-sm">Total Leads</p>
-            <p className="text-2xl font-bold text-slate-800">{estadisticas.total}</p>
+            <p className="text-2xl font-bold text-slate-800">{estadisticas?.total || 0}</p>
           </div>
           <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
             <p className="text-slate-500 text-sm">Activos</p>
-            <p className="text-2xl font-bold text-blue-600">{estadisticas.activos}</p>
+            <p className="text-2xl font-bold text-blue-600">{estadisticas?.activos || 0}</p>
           </div>
           <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
             <p className="text-slate-500 text-sm">Matriculados</p>
-            <p className="text-2xl font-bold text-emerald-600">{estadisticas.matriculados}</p>
+            <p className="text-2xl font-bold text-emerald-600">{estadisticas?.matriculados || 0}</p>
           </div>
           <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
             <p className="text-slate-500 text-sm">Descartados</p>
-            <p className="text-2xl font-bold text-slate-500">{estadisticas.descartados}</p>
+            <p className="text-2xl font-bold text-slate-500">{estadisticas?.descartados || 0}</p>
           </div>
           <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
             <p className="text-slate-500 text-sm">Conversión</p>
-            <p className="text-2xl font-bold text-violet-600">{estadisticas.tasaConversion}%</p>
+            <p className="text-2xl font-bold text-violet-600">{estadisticas?.tasaConversion || 0}%</p>
           </div>
           <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
             <p className="text-slate-500 text-sm">T. Respuesta</p>
             {(() => {
-              const tiempo = formatearTiempoRespuesta(estadisticas.tiempoRespuestaPromedio)
+              const tiempo = formatearTiempoRespuesta(estadisticas?.tiempoRespuestaPromedio)
               return (
                 <p className={`text-2xl font-bold ${tiempo.color}`}>
                   {tiempo.texto || '-'}
@@ -3056,13 +3068,13 @@ export default function Dashboard() {
             <div className="flex items-center justify-around py-4">
               <div className="text-center">
                 <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                  <span className="text-2xl font-bold text-blue-600">{estadisticas.porTipoAlumno.nuevo}</span>
+                  <span className="text-2xl font-bold text-blue-600">{estadisticas?.porTipoAlumno?.nuevo || 0}</span>
                 </div>
                 <p className="text-sm text-slate-600">Nuevos</p>
               </div>
               <div className="text-center">
                 <div className="w-20 h-20 bg-violet-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                  <span className="text-2xl font-bold text-violet-600">{estadisticas.porTipoAlumno.antiguo}</span>
+                  <span className="text-2xl font-bold text-violet-600">{estadisticas?.porTipoAlumno?.antiguo || 0}</span>
                 </div>
                 <p className="text-sm text-slate-600">Antiguos</p>
               </div>
@@ -3075,7 +3087,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
                 <span className="text-slate-600">Tiempo de Respuesta</span>
                 {(() => {
-                  const tiempo = formatearTiempoRespuesta(estadisticas.tiempoRespuestaPromedio)
+                  const tiempo = formatearTiempoRespuesta(estadisticas?.tiempoRespuestaPromedio)
                   return (
                     <span className={`text-xl font-bold ${tiempo.color}`}>
                       {tiempo.texto || '-'}
@@ -3086,7 +3098,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
                 <span className="text-slate-600">Tiempo de Cierre</span>
                 {(() => {
-                  const dias = estadisticas.tiempoCierrePromedio
+                  const dias = estadisticas?.tiempoCierrePromedio || 0
                   const color = dias <= 7 ? 'text-emerald-600' : dias <= 14 ? 'text-amber-500' : dias <= 30 ? 'text-orange-500' : 'text-red-600'
                   return (
                     <span className={`text-xl font-bold ${color}`}>
