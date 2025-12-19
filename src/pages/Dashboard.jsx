@@ -579,7 +579,6 @@ export default function Dashboard() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [lastUpdate, setLastUpdate] = useState(new Date())
-  const [isPolling, setIsPolling] = useState(true)
 
   // ============================================
   // FUNCIÓN PARA FORMATEAR TIEMPO PROGRESIVO
@@ -629,38 +628,25 @@ export default function Dashboard() {
     loadData()
   }, [user])
 
-  // ========== POLLING CADA 5 SEGUNDOS ==========
-  // Actualización desde Supabase (no afecta ficha abierta)
-  useEffect(() => {
-    if (!isSupabaseConfigured() || !user?.institucion_id || !isPolling) return
-
-    console.log('⏱️ Iniciando polling cada 5 segundos...')
-    
-    const pollingInterval = setInterval(async () => {
-      try {
-        // Solo actualizar si NO hay una ficha de lead abierta
-        if (!selectedConsulta) {
-          await reloadFromSupabase()
-          loadData()
-          setLastUpdate(new Date())
-        }
-      } catch (error) {
-        console.error('Error en polling:', error)
-      }
-    }, 5000) // Cada 5 segundos
-
-    return () => {
-      console.log('⏱️ Deteniendo polling...')
-      clearInterval(pollingInterval)
+  // ========== ACTUALIZACIÓN MANUAL + REALTIME ==========
+  // Estilo Trello: Realtime para cambios, botón para forzar actualización
+  
+  // Función para actualizar manualmente
+  const handleRefreshData = async () => {
+    if (!isSupabaseConfigured() || !user?.institucion_id) return
+    console.log('🔄 Actualizando datos manualmente...')
+    try {
+      await reloadFromSupabase()
+      loadData()
+      setLastUpdate(new Date())
+    } catch (error) {
+      console.error('Error actualizando:', error)
     }
-  }, [user?.institucion_id, isPolling, selectedConsulta])
-  // ========================================
+  }
 
-  // ========== SUPABASE REALTIME (solo cuando NO hay lead abierto) ==========
-  // Escuchar cambios en tiempo real como respaldo
+  // Supabase Realtime - Solo escucha cambios, no hace polling
   useEffect(() => {
-    // NO activar realtime si hay un lead seleccionado (evita parpadeo)
-    if (!isSupabaseConfigured() || !user?.institucion_id || selectedConsulta) return
+    if (!isSupabaseConfigured() || !user?.institucion_id) return
 
     console.log('🔌 Conectando Supabase Realtime...')
     
@@ -670,10 +656,11 @@ export default function Dashboard() {
         { event: '*', schema: 'public', table: 'leads', filter: `institucion_id=eq.${user.institucion_id}` },
         async (payload) => {
           console.log('📡 Cambio en leads:', payload.eventType)
-          // Solo recargar si NO hay lead abierto
+          // Solo actualizar si NO hay ficha abierta (evita parpadeo del botón editar)
           if (!selectedConsulta) {
             await reloadFromSupabase()
             loadData()
+            setLastUpdate(new Date())
           }
         }
       )
@@ -689,6 +676,9 @@ export default function Dashboard() {
       )
       .subscribe((status) => {
         console.log('📡 Realtime status:', status)
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Realtime conectado - recibirás cambios automáticamente')
+        }
       })
 
     return () => {
@@ -1018,13 +1008,13 @@ export default function Dashboard() {
             <div className="text-right">
               <p className="text-3xl font-bold">{totalLeads}</p>
               <p className="text-violet-200">{isKeyMaster ? 'Consultas totales' : 'Leads asignados'}</p>
-              {/* Indicador discreto de sincronización */}
+              {/* Botón de actualizar manual */}
               <button
-                onClick={() => setIsPolling(!isPolling)}
-                className="mt-2 p-1 rounded-full hover:bg-white/10 transition-colors"
-                title={isPolling ? 'Sincronización activa (click para pausar)' : 'Sincronización pausada (click para activar)'}
+                onClick={handleRefreshData}
+                className="mt-2 p-1.5 rounded-full hover:bg-white/20 transition-colors group"
+                title="Actualizar datos"
               >
-                <span className={`block w-2.5 h-2.5 rounded-full ${isPolling ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
+                <Icon name="RefreshCw" size={14} className="text-violet-200 group-hover:text-white" />
               </button>
             </div>
           </div>
@@ -2288,6 +2278,39 @@ export default function Dashboard() {
         descartado: descartados
       }
       
+      // Por carrera
+      const porCarrera = {}
+      leadsReporte.forEach(c => {
+        const carreraId = c.carrera_id || 'sin_carrera'
+        if (!porCarrera[carreraId]) {
+          porCarrera[carreraId] = { total: 0, matriculados: 0, nombre: c.carrera?.nombre || c.carrera_nombre || 'Sin carrera' }
+        }
+        porCarrera[carreraId].total++
+        if (c.matriculado) porCarrera[carreraId].matriculados++
+      })
+      
+      // Por medio
+      const porMedio = {}
+      leadsReporte.forEach(c => {
+        const medioId = c.medio_id || 'sin_medio'
+        if (!porMedio[medioId]) {
+          porMedio[medioId] = { total: 0, matriculados: 0, nombre: c.medio?.nombre || medioId }
+        }
+        porMedio[medioId].total++
+        if (c.matriculado) porMedio[medioId].matriculados++
+      })
+      
+      // Por encargado
+      const porEncargado = {}
+      leadsReporte.forEach(c => {
+        const encargadoId = c.asignado_a || 'sin_asignar'
+        if (!porEncargado[encargadoId]) {
+          porEncargado[encargadoId] = { total: 0, matriculados: 0, nombre: c.encargado?.nombre || 'Sin asignar' }
+        }
+        porEncargado[encargadoId].total++
+        if (c.matriculado) porEncargado[encargadoId].matriculados++
+      })
+      
       // Tiempo de respuesta promedio
       const leadsConPrimerContacto = leadsReporte.filter(c => c.fecha_primer_contacto && c.created_at)
       const tiemposRespuesta = leadsConPrimerContacto.map(c => {
@@ -2316,6 +2339,9 @@ export default function Dashboard() {
         descartados,
         activos,
         porEstado,
+        porCarrera,
+        porMedio,
+        porEncargado,
         tasaConversion: total > 0 ? Math.round((matriculados / total) * 100) : 0,
         tiempoRespuestaPromedio,
         tiempoCierrePromedio
@@ -2671,14 +2697,13 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              {/* Indicador de actualización en tiempo real */}
-              {/* Indicador discreto de sincronización */}
+              {/* Botón de actualizar */}
               <button
-                onClick={() => setIsPolling(!isPolling)}
-                className="p-1.5 rounded-full hover:bg-white/10 transition-colors"
-                title={isPolling ? 'Sincronización activa' : 'Sincronización pausada'}
+                onClick={handleRefreshData}
+                className="p-2 rounded-full hover:bg-white/20 transition-colors group"
+                title="Actualizar datos"
               >
-                <span className={`block w-2.5 h-2.5 rounded-full ${isPolling ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
+                <Icon name="RefreshCw" size={18} className="text-violet-200 group-hover:text-white" />
               </button>
               <button
                 onClick={descargarCSV}
@@ -2952,9 +2977,9 @@ export default function Dashboard() {
           <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
             <h3 className="font-semibold text-slate-800 mb-4">Por Carrera</h3>
             <div className="space-y-3">
-              {Object.entries(estadisticas.porCarrera).filter(([_, v]) => v.total > 0).map(([id, data]) => (
+              {Object.entries(estadisticas?.porCarrera || {}).filter(([_, v]) => v.total > 0).map(([id, data]) => (
                 <div key={id} className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${data.color}`} />
+                  <div className={`w-3 h-3 rounded-full ${data.color || 'bg-slate-400'}`} />
                   <span className="flex-1 text-sm text-slate-600 truncate">{data.nombre}</span>
                   <span className="text-sm font-medium text-slate-800">{data.total}</span>
                   <span className="text-xs text-emerald-600 w-12 text-right">{data.matriculados} m.</span>
@@ -2963,6 +2988,9 @@ export default function Dashboard() {
                   </span>
                 </div>
               ))}
+              {Object.keys(estadisticas?.porCarrera || {}).length === 0 && (
+                <p className="text-sm text-slate-400 text-center py-4">Sin datos</p>
+              )}
             </div>
           </div>
           
@@ -2970,7 +2998,7 @@ export default function Dashboard() {
           <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
             <h3 className="font-semibold text-slate-800 mb-4">Por Medio de Contacto</h3>
             <div className="space-y-3">
-              {Object.entries(estadisticas.porMedio).filter(([_, v]) => v.total > 0).map(([id, data]) => (
+              {Object.entries(estadisticas?.porMedio || {}).filter(([_, v]) => v.total > 0).map(([id, data]) => (
                 <div key={id} className="flex items-center gap-3">
                   <Icon name="MessageCircle" size={16} className="text-slate-400" />
                   <span className="flex-1 text-sm text-slate-600 truncate">{data.nombre}</span>
@@ -2981,6 +3009,9 @@ export default function Dashboard() {
                   </span>
                 </div>
               ))}
+              {Object.keys(estadisticas?.porMedio || {}).length === 0 && (
+                <p className="text-sm text-slate-400 text-center py-4">Sin datos</p>
+              )}
             </div>
           </div>
         </div>
@@ -3000,14 +3031,14 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(estadisticas.porEncargado).filter(([_, v]) => v.total > 0).map(([id, data]) => (
+                  {Object.entries(estadisticas?.porEncargado || {}).filter(([_, v]) => v.total > 0).map(([id, data]) => (
                     <tr key={id} className="border-b border-slate-50">
                       <td className="py-3 font-medium text-slate-800">{data.nombre}</td>
                       <td className="py-3 text-center">{data.total}</td>
                       <td className="py-3 text-center text-emerald-600">{data.matriculados}</td>
                       <td className="py-3 text-center">
-                        <span className={`font-medium ${data.tasa >= 20 ? 'text-emerald-600' : data.tasa >= 10 ? 'text-amber-600' : 'text-slate-600'}`}>
-                          {data.tasa}%
+                        <span className={`font-medium ${(data.tasa || 0) >= 20 ? 'text-emerald-600' : (data.tasa || 0) >= 10 ? 'text-amber-600' : 'text-slate-600'}`}>
+                          {data.tasa || 0}%
                         </span>
                       </td>
                     </tr>
