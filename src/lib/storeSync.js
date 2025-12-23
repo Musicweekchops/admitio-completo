@@ -254,6 +254,7 @@ export function syncActualizarLead(leadId, updates) {
   addToSyncQueue('actualizar_lead', async () => {
     const supabaseUpdates = {};
     
+    // Campos básicos
     if (updates.nombre !== undefined) supabaseUpdates.nombre = updates.nombre;
     if (updates.email !== undefined) supabaseUpdates.email = updates.email;
     if (updates.telefono !== undefined) supabaseUpdates.telefono = updates.telefono;
@@ -265,6 +266,27 @@ export function syncActualizarLead(leadId, updates) {
     if (updates.carreras_interes !== undefined) supabaseUpdates.carreras_interes = updates.carreras_interes;
     if (updates.fecha_primer_contacto !== undefined) supabaseUpdates.fecha_primer_contacto = updates.fecha_primer_contacto;
     if (updates.fecha_cierre !== undefined) supabaseUpdates.fecha_cierre = updates.fecha_cierre;
+    
+    // CAMPOS CRÍTICOS - Estados finales (matriculado/descartado)
+    if (updates.matriculado !== undefined) supabaseUpdates.matriculado = updates.matriculado;
+    if (updates.descartado !== undefined) supabaseUpdates.descartado = updates.descartado;
+    if (updates.motivo_descarte !== undefined) supabaseUpdates.motivo_descarte = updates.motivo_descarte;
+    
+    // Tipo de alumno
+    if (updates.tipo_alumno !== undefined) supabaseUpdates.tipo_alumno = updates.tipo_alumno;
+    
+    // Nuevo interés (cambio de carrera)
+    if (updates.nuevo_interes !== undefined) supabaseUpdates.nuevo_interes = updates.nuevo_interes;
+    if (updates.fecha_nuevo_interes !== undefined) supabaseUpdates.fecha_nuevo_interes = updates.fecha_nuevo_interes;
+    
+    // Medio de contacto
+    if (updates.medio_id !== undefined) supabaseUpdates.medio = updates.medio_id;
+    
+    // Emails enviados
+    if (updates.emails_enviados !== undefined) supabaseUpdates.emails_enviados = updates.emails_enviados;
+    
+    // Fecha próximo contacto
+    if (updates.fecha_proximo_contacto !== undefined) supabaseUpdates.fecha_proximo_contacto = updates.fecha_proximo_contacto;
     
     // Solo sincronizar asignado_a si parece UUID
     if (updates.asignado_a !== undefined) {
@@ -282,6 +304,12 @@ export function syncActualizarLead(leadId, updates) {
     
     supabaseUpdates.updated_at = new Date().toISOString();
 
+    // Solo hacer update si hay algo que actualizar
+    if (Object.keys(supabaseUpdates).length <= 1) {
+      console.log('⚠️ No hay campos para sincronizar');
+      return;
+    }
+
     const { error } = await supabase
       .from('leads')
       .update(supabaseUpdates)
@@ -291,7 +319,7 @@ export function syncActualizarLead(leadId, updates) {
       console.error('❌ Error sincronizando actualización:', error);
       throw error;
     }
-    console.log('✅ Lead actualizado en Supabase:', leadId);
+    console.log('✅ Lead actualizado en Supabase:', leadId, Object.keys(supabaseUpdates));
   });
 }
 

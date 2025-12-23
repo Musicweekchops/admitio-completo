@@ -1680,17 +1680,9 @@ export default function Dashboard() {
       }
     }
     
-    // Terminar edición (liberar lock)
-    const handleStopEditing = async () => {
-      await releaseLock()
-      setIsEditing(false)
-      setNotification({ type: 'success', message: 'Edición finalizada' })
-      setTimeout(() => setNotification(null), 2000)
-    }
-    
-    // Guardar cambios
-    const handleSaveChanges = async () => {
-      if (!canEdit) {
+    // Guardar y cerrar edición
+    const handleGuardarYCerrar = async () => {
+      if (!canEdit || !isMyLock) {
         setNotification({ type: 'error', message: 'No tienes permiso para editar' })
         setTimeout(() => setNotification(null), 3000)
         return
@@ -1699,20 +1691,21 @@ export default function Dashboard() {
       setSaveStatus('saving')
       
       try {
-        // Los cambios ya se guardan en localStorage, forzar sync a Supabase
-        await reloadFromSupabase()
-        loadData()
-        
-        // Refrescar el lead seleccionado
-        const updated = store.getConsultaById(c.id)
-        if (updated) setSelectedConsulta(updated)
+        // Los cambios ya están en localStorage y en cola de sync a Supabase
+        // Solo necesitamos liberar el lock y cerrar
+        await releaseLock()
         
         setSaveStatus('saved')
-        setNotification({ type: 'success', message: '✓ Cambios guardados en Supabase' })
+        setNotification({ type: 'success', message: '✓ Cambios guardados' })
+        
+        // Refrescar datos locales (no desde Supabase, para no sobrescribir)
+        loadData()
+        
         setTimeout(() => {
           setNotification(null)
           setSaveStatus(null)
-        }, 2000)
+          setIsEditing(false)
+        }, 1000)
       } catch (error) {
         setSaveStatus('error')
         setNotification({ type: 'error', message: 'Error al guardar. Intenta de nuevo.' })
@@ -1721,6 +1714,22 @@ export default function Dashboard() {
           setSaveStatus(null)
         }, 3000)
       }
+    }
+    
+    // Cancelar edición (descartar cambios)
+    const handleCancelarEdicion = async () => {
+      // Recargar desde Supabase para descartar cambios locales
+      await reloadFromSupabase()
+      loadData()
+      await releaseLock()
+      setIsEditing(false)
+      
+      // Refrescar el lead seleccionado con datos originales
+      const updated = store.getConsultaById(c.id)
+      if (updated) setSelectedConsulta(updated)
+      
+      setNotification({ type: 'info', message: 'Cambios descartados' })
+      setTimeout(() => setNotification(null), 2000)
     }
     
     // KeyMaster toma control
@@ -1819,7 +1828,7 @@ export default function Dashboard() {
                 {isMyLock ? (
                   <>
                     <button
-                      onClick={handleSaveChanges}
+                      onClick={handleGuardarYCerrar}
                       disabled={saveStatus === 'saving'}
                       className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors ${
                         saveStatus === 'saving'
@@ -1830,14 +1839,15 @@ export default function Dashboard() {
                       }`}
                     >
                       <Icon name={saveStatus === 'saving' ? 'Loader' : saveStatus === 'saved' ? 'Check' : 'Save'} size={16} />
-                      {saveStatus === 'saving' ? 'Guardando...' : saveStatus === 'saved' ? 'Guardado' : 'Guardar'}
+                      {saveStatus === 'saving' ? 'Guardando...' : saveStatus === 'saved' ? '¡Guardado!' : 'Guardar y Cerrar'}
                     </button>
                     <button
-                      onClick={handleStopEditing}
+                      onClick={handleCancelarEdicion}
+                      disabled={saveStatus === 'saving'}
                       className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-300 transition-colors flex items-center gap-2"
                     >
                       <Icon name="X" size={16} />
-                      Terminar
+                      Cancelar
                     </button>
                   </>
                 ) : isLocked ? (

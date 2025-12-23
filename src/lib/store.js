@@ -743,7 +743,33 @@ export function updateConsulta(id, updates, userId) {
   saveStore()
   
   // ========== SYNC CON SUPABASE ==========
-  syncActualizarLead(id, updates)
+  // Calcular TODOS los campos que cambiaron (incluyendo derivados)
+  const syncUpdates = { ...updates }
+  
+  // Agregar campos derivados que se calcularon internamente
+  if (newConsulta.matriculado !== oldConsulta.matriculado) {
+    syncUpdates.matriculado = newConsulta.matriculado
+  }
+  if (newConsulta.descartado !== oldConsulta.descartado) {
+    syncUpdates.descartado = newConsulta.descartado
+  }
+  if (newConsulta.fecha_cierre !== oldConsulta.fecha_cierre) {
+    syncUpdates.fecha_cierre = newConsulta.fecha_cierre
+  }
+  if (newConsulta.fecha_primer_contacto !== oldConsulta.fecha_primer_contacto) {
+    syncUpdates.fecha_primer_contacto = newConsulta.fecha_primer_contacto
+  }
+  if (newConsulta.nuevo_interes !== oldConsulta.nuevo_interes) {
+    syncUpdates.nuevo_interes = newConsulta.nuevo_interes
+  }
+  if (newConsulta.fecha_nuevo_interes !== oldConsulta.fecha_nuevo_interes) {
+    syncUpdates.fecha_nuevo_interes = newConsulta.fecha_nuevo_interes
+  }
+  if (newConsulta.carreras_interes !== oldConsulta.carreras_interes) {
+    syncUpdates.carreras_interes = newConsulta.carreras_interes
+  }
+  
+  syncActualizarLead(id, syncUpdates)
   // ========================================
   
   return newConsulta
@@ -1565,18 +1591,23 @@ export function getLeadsContactarHoy(userId = null, rol = null) {
     // Flag de nuevo interés (cambio de instrumento)
     enriched.nuevoInteres = c.nuevo_interes || false
     
-    // Calcular si está atrasado (más de 48 horas sin actividad)
-    const actividadLead = store.actividad.filter(a => a.lead_id === c.id)
-    if (actividadLead.length > 0) {
-      const ultimaActividad = actividadLead
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]
-      const hace48Horas = new Date(ahora.getTime() - 48 * 60 * 60 * 1000)
-      enriched.atrasado = new Date(ultimaActividad.created_at) < hace48Horas
+    // Leads matriculados o descartados NUNCA están atrasados (ya salieron del flujo)
+    if (c.matriculado || c.descartado) {
+      enriched.atrasado = false
     } else {
-      // Sin actividad registrada, verificar fecha de creación
-      const fechaCreacion = new Date(c.created_at)
-      const hace48Horas = new Date(ahora.getTime() - 48 * 60 * 60 * 1000)
-      enriched.atrasado = fechaCreacion < hace48Horas
+      // Calcular si está atrasado (más de 48 horas sin actividad)
+      const actividadLead = store.actividad.filter(a => a.lead_id === c.id)
+      if (actividadLead.length > 0) {
+        const ultimaActividad = actividadLead
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]
+        const hace48Horas = new Date(ahora.getTime() - 48 * 60 * 60 * 1000)
+        enriched.atrasado = new Date(ultimaActividad.created_at) < hace48Horas
+      } else {
+        // Sin actividad registrada, verificar fecha de creación
+        const fechaCreacion = new Date(c.created_at)
+        const hace48Horas = new Date(ahora.getTime() - 48 * 60 * 60 * 1000)
+        enriched.atrasado = fechaCreacion < hace48Horas
+      }
     }
     
     return enriched
