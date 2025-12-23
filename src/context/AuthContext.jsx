@@ -5,10 +5,25 @@ import * as store from '../lib/store'
 
 const AuthContext = createContext(null)
 
+// Configuración de planes por defecto (si no hay en BD)
+const PLANES_DEFAULT = {
+  free: { nombre: 'Gratis', max_leads: 10, max_usuarios: 1, max_formularios: 1 },
+  prueba: { nombre: 'Prueba', max_leads: 15, max_usuarios: 1, max_formularios: 1 }, // Plan legacy, similar a free
+  inicial: { nombre: 'Inicial', max_leads: 300, max_usuarios: 5, max_formularios: 1 },
+  profesional: { nombre: 'Profesional', max_leads: 1500, max_usuarios: 15, max_formularios: 3 },
+  premium: { nombre: 'Premium', max_leads: 5000, max_usuarios: 50, max_formularios: 10 },
+  enterprise: { nombre: 'Enterprise', max_leads: 999999, max_usuarios: 999, max_formularios: 999 },
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [institucion, setInstitucion] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [planInfo, setPlanInfo] = useState({
+    plan: 'free',
+    limites: PLANES_DEFAULT.free,
+    uso: { leads: 0, usuarios: 0, formularios: 0 }
+  })
 
   useEffect(() => {
     checkSession()
@@ -228,10 +243,89 @@ export function AuthProvider({ children }) {
       
       console.log(`✅ Datos cargados: ${leads?.length || 0} leads, ${usuarios?.length || 0} usuarios, ${carreras?.length || 0} carreras`)
 
+      // Cargar info del plan
+      await loadPlanInfo(institucionId, leads?.length || 0, usuarios?.length || 0)
+
     } catch (error) {
       console.error('Error cargando datos de institución:', error)
     }
   }
+
+  // Cargar información del plan y uso
+  async function loadPlanInfo(institucionId, leadsCount, usuariosCount) {
+    try {
+      // Obtener info de la institución con su plan
+      const { data: inst } = await supabase
+        .from('instituciones')
+        .select('plan, leads_count, usuarios_count')
+        .eq('id', institucionId)
+        .single()
+
+      const planId = inst?.plan || 'free'
+      
+      // Intentar cargar config del plan desde la BD
+      const { data: planConfig } = await supabase
+        .from('planes_config')
+        .select('*')
+        .eq('id', planId)
+        .single()
+
+      // Usar config de BD o default
+      const limites = planConfig || PLANES_DEFAULT[planId] || PLANES_DEFAULT.free
+
+      // Contar formularios
+      const { count: formCount } = await supabase
+        .from('formularios')
+        .select('*', { count: 'exact', head: true })
+        .eq('institucion_id', institucionId)
+
+      setPlanInfo({
+        plan: planId,
+        limites: {
+          nombre: limites.nombre,
+          max_leads: limites.max_leads,
+          max_usuarios: limites.max_usuarios,
+          max_formularios: limites.max_formularios || 1
+        },
+        uso: {
+          leads: leadsCount,
+          usuarios: usuariosCount,
+          formularios: formCount || 0
+        }
+      })
+
+      console.log(`📊 Plan: ${planId} | Leads: ${leadsCount}/${limites.max_leads} | Usuarios: ${usuariosCount}/${limites.max_usuarios}`)
+
+    } catch (error) {
+      console.error('Error cargando info del plan:', error)
+      // Usar defaults si hay error
+      setPlanInfo({
+        plan: 'free',
+        limites: PLANES_DEFAULT.free,
+        uso: { leads: leadsCount || 0, usuarios: usuariosCount || 0, formularios: 0 }
+      })
+    }
+  }
+
+  // Actualizar uso después de crear/eliminar
+  function actualizarUso(tipo, delta) {
+    setPlanInfo(prev => ({
+      ...prev,
+      uso: {
+        ...prev.uso,
+        [tipo]: Math.max(0, (prev.uso[tipo] || 0) + delta)
+      }
+    }))
+  }
+
+  // Helpers para verificar límites
+  const puedeCrearLead = () => planInfo.uso.leads < planInfo.limites.max_leads
+  const puedeCrearUsuario = () => planInfo.uso.usuarios < planInfo.limites.max_usuarios
+  const puedeCrearFormulario = () => planInfo.uso.formularios < planInfo.limites.max_formularios
+  
+  const porcentajeUsoLeads = () => Math.round((planInfo.uso.leads / planInfo.limites.max_leads) * 100)
+  const porcentajeUsoUsuarios = () => Math.round((planInfo.uso.usuarios / planInfo.limites.max_usuarios) * 100)
+  const porcentajeUsoFormularios = () => Math.round((planInfo.uso.formularios / planInfo.limites.max_formularios) * 100)
 
   // Login local (mockData)
   function signInLocal(email, password) {
@@ -377,6 +471,15 @@ export function AuthProvider({ children }) {
       canManageForms,
       canCreateLeads,
       canDeleteKeyMaster,
+      // Plan y límites
+      planInfo,
+      actualizarUso,
+      puedeCrearLead,
+      puedeCrearUsuario,
+      puedeCrearFormulario,
+      porcentajeUsoLeads,
+      porcentajeUsoUsuarios,
+      porcentajeUsoFormularios,
     }}>
       {children}
     </AuthContext.Provider>
