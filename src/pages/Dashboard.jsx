@@ -2239,23 +2239,67 @@ export default function Dashboard() {
   }
 
   // ============================================
-  // REPORTES VIEW - Dashboard para Rector con Gráficos
+  // REPORTES VIEW - Funnel-Centric Dashboard (Rediseño v2)
   // ============================================
   const ReportesView = () => {
-    // Estados para filtros - Rango de 1 año por defecto
-    const [fechaInicio, setFechaInicio] = useState(() => {
-      const d = new Date()
-      d.setFullYear(d.getFullYear() - 1) // 1 año atrás
-      return d.toISOString().split('T')[0]
-    })
-    const [fechaFin, setFechaFin] = useState(() => new Date().toISOString().split('T')[0])
+    // Estados principales
+    const [periodo, setPeriodo] = useState('mes') // 'semana', 'mes', 'trimestre', 'año'
+    const [activeTab, setActiveTab] = useState('embudo') // 'embudo', 'tendencia', 'carreras', 'medios', 'encargados'
+    const [tipoGrafico, setTipoGrafico] = useState('linea')
+    const [agrupacion, setAgrupacion] = useState('dia')
+    
+    // Calcular fechas según período seleccionado
+    const { fechaInicio, fechaFin, fechaInicioAnterior, fechaFinAnterior } = useMemo(() => {
+      const hoy = new Date()
+      const fin = new Date(hoy)
+      fin.setHours(23, 59, 59, 999)
+      
+      let inicio = new Date(hoy)
+      let diasPeriodo = 30
+      
+      switch(periodo) {
+        case 'semana':
+          inicio.setDate(hoy.getDate() - 7)
+          diasPeriodo = 7
+          break
+        case 'mes':
+          inicio.setMonth(hoy.getMonth() - 1)
+          diasPeriodo = 30
+          break
+        case 'trimestre':
+          inicio.setMonth(hoy.getMonth() - 3)
+          diasPeriodo = 90
+          break
+        case 'año':
+          inicio.setFullYear(hoy.getFullYear() - 1)
+          diasPeriodo = 365
+          break
+      }
+      inicio.setHours(0, 0, 0, 0)
+      
+      // Período anterior para comparación
+      const finAnterior = new Date(inicio)
+      finAnterior.setDate(finAnterior.getDate() - 1)
+      finAnterior.setHours(23, 59, 59, 999)
+      
+      const inicioAnterior = new Date(finAnterior)
+      inicioAnterior.setDate(inicioAnterior.getDate() - diasPeriodo + 1)
+      inicioAnterior.setHours(0, 0, 0, 0)
+      
+      return {
+        fechaInicio: inicio.toISOString().split('T')[0],
+        fechaFin: fin.toISOString().split('T')[0],
+        fechaInicioAnterior: inicioAnterior.toISOString().split('T')[0],
+        fechaFinAnterior: finAnterior.toISOString().split('T')[0]
+      }
+    }, [periodo])
+    
+    // Estados de filtro (simplificados, ya no se muestran todos a la vez)
     const [filtroEstados, setFiltroEstados] = useState([])
     const [filtroCarreras, setFiltroCarreras] = useState([])
     const [filtroMedios, setFiltroMedios] = useState([])
     const [filtroEncargados, setFiltroEncargados] = useState([])
     const [filtroTipoAlumno, setFiltroTipoAlumno] = useState('todos')
-    const [tipoGrafico, setTipoGrafico] = useState('linea')
-    const [agrupacion, setAgrupacion] = useState('dia')
     const [showFilters, setShowFilters] = useState(false)
     
     // USAR DATOS FRESCOS DEL DASHBOARD (ya sincronizados con Supabase)
@@ -2411,6 +2455,63 @@ export default function Dashboard() {
         tiempoCierrePromedio
       }
     }, [leadsReporte])
+    
+    // Calcular estadísticas del período anterior para comparación
+    const estadisticasAnteriores = useMemo(() => {
+      let leads = [...consultas]
+      
+      // Filtrar por rol si es encargado
+      if (user?.rol_id === 'encargado' && user?.id) {
+        leads = leads.filter(c => c.asignado_a === user.id)
+      }
+      
+      // Filtrar por período anterior
+      if (fechaInicioAnterior && fechaFinAnterior) {
+        const inicio = new Date(fechaInicioAnterior)
+        inicio.setHours(0, 0, 0, 0)
+        const fin = new Date(fechaFinAnterior)
+        fin.setHours(23, 59, 59, 999)
+        leads = leads.filter(c => {
+          const fecha = new Date(c.created_at)
+          return fecha >= inicio && fecha <= fin
+        })
+      }
+      
+      const total = leads.length
+      const matriculados = leads.filter(c => c.matriculado).length
+      
+      return {
+        total,
+        matriculados,
+        tasaConversion: total > 0 ? Math.round((matriculados / total) * 100) : 0
+      }
+    }, [consultas, fechaInicioAnterior, fechaFinAnterior, user])
+    
+    // Calcular cambios vs período anterior
+    const cambios = useMemo(() => {
+      const cambioLeads = estadisticas.total - estadisticasAnteriores.total
+      const cambioMatriculas = estadisticas.matriculados - estadisticasAnteriores.matriculados
+      const cambioConversion = estadisticas.tasaConversion - estadisticasAnteriores.tasaConversion
+      
+      return {
+        leads: cambioLeads,
+        leadsPercent: estadisticasAnteriores.total > 0 ? Math.round((cambioLeads / estadisticasAnteriores.total) * 100) : 0,
+        matriculas: cambioMatriculas,
+        conversion: cambioConversion // Puntos porcentuales
+      }
+    }, [estadisticas, estadisticasAnteriores])
+    
+    // Datos del embudo
+    const datosEmbudo = useMemo(() => {
+      const total = estadisticas.total || 0
+      return [
+        { etapa: 'Nuevos', cantidad: estadisticas.porEstado?.nueva || 0, color: 'bg-amber-500', percent: total > 0 ? Math.round(((estadisticas.porEstado?.nueva || 0) / total) * 100) : 0 },
+        { etapa: 'Contactados', cantidad: estadisticas.porEstado?.contactado || 0, color: 'bg-blue-500', percent: total > 0 ? Math.round(((estadisticas.porEstado?.contactado || 0) / total) * 100) : 0 },
+        { etapa: 'Seguimiento', cantidad: estadisticas.porEstado?.seguimiento || 0, color: 'bg-purple-500', percent: total > 0 ? Math.round(((estadisticas.porEstado?.seguimiento || 0) / total) * 100) : 0 },
+        { etapa: 'Examen', cantidad: estadisticas.porEstado?.examen_admision || 0, color: 'bg-cyan-500', percent: total > 0 ? Math.round(((estadisticas.porEstado?.examen_admision || 0) / total) * 100) : 0 },
+        { etapa: 'Matriculados', cantidad: estadisticas.matriculados || 0, color: 'bg-emerald-500', percent: total > 0 ? Math.round(((estadisticas.matriculados || 0) / total) * 100) : 0 },
+      ]
+    }, [estadisticas])
     
     const datosGrafico = store.getDatosGraficoTemporal(leadsReporte, agrupacion)
     
@@ -2746,387 +2847,403 @@ export default function Dashboard() {
     
     return (
       <div className="space-y-6">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-violet-600 to-purple-600 rounded-2xl p-6 text-white">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
-                <Icon name="BarChart3" className="text-white" size={28} />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold">Centro de Reportes</h1>
-                <p className="text-violet-200">
-                  {isEncargado ? 'Análisis de tus leads' : 'Análisis completo de admisiones'}
-                </p>
-              </div>
+        {/* Header con selectores de período */}
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Icon name="Calendar" size={20} className="text-slate-400" />
+              <select
+                value={periodo}
+                onChange={e => setPeriodo(e.target.value)}
+                className="px-4 py-2 border border-slate-200 rounded-lg font-medium text-slate-700 bg-white focus:ring-2 focus:ring-violet-500"
+              >
+                <option value="semana">Esta semana</option>
+                <option value="mes">Este mes</option>
+                <option value="trimestre">Este trimestre</option>
+                <option value="año">Este año</option>
+              </select>
+              <span className="text-slate-400 text-sm">vs período anterior</span>
             </div>
-            <div className="flex items-center gap-4">
-              {/* Botón de actualizar */}
+            
+            <div className="flex items-center gap-2">
               <button
                 onClick={handleRefreshData}
-                className="p-2 rounded-full hover:bg-white/20 transition-colors group"
+                className="p-2 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors"
                 title="Actualizar datos"
               >
-                <Icon name="RefreshCw" size={18} className="text-violet-200 group-hover:text-white" />
+                <Icon name="RefreshCw" size={18} />
               </button>
               <button
                 onClick={descargarCSV}
-                className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-medium flex items-center gap-2 transition-colors"
+                className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
               >
-                <Icon name="Download" size={20} />
-                Descargar CSV
+                <Icon name="Download" size={18} />
+                Exportar
               </button>
             </div>
           </div>
         </div>
         
-        {/* Filtros de fecha */}
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Icon name="Calendar" size={20} className="text-slate-400" />
-              <input
-                type="date"
-                value={fechaInicio}
-                onChange={e => setFechaInicio(e.target.value)}
-                className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-violet-500"
-              />
-              <span className="text-slate-400">a</span>
-              <input
-                type="date"
-                value={fechaFin}
-                onChange={e => setFechaFin(e.target.value)}
-                className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-violet-500"
-              />
+        {/* KPI Hero - Conversión */}
+        <div className="bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700 rounded-2xl p-8 text-white">
+          <div className="flex flex-col lg:flex-row items-center gap-8">
+            {/* Conversión principal */}
+            <div className="flex-1 text-center lg:text-left">
+              <p className="text-violet-200 text-sm font-medium mb-1 flex items-center justify-center lg:justify-start gap-2">
+                <Icon name="Target" size={16} />
+                TASA DE CONVERSIÓN
+              </p>
+              <div className="flex items-baseline justify-center lg:justify-start gap-3">
+                <span className="text-6xl lg:text-7xl font-bold">{estadisticas?.tasaConversion || 0}%</span>
+                {cambios.conversion !== 0 && (
+                  <span className={`flex items-center gap-1 text-lg font-medium ${cambios.conversion > 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                    <Icon name={cambios.conversion > 0 ? 'TrendingUp' : 'TrendingDown'} size={20} />
+                    {cambios.conversion > 0 ? '+' : ''}{cambios.conversion}pp
+                  </span>
+                )}
+              </div>
+              <p className="text-violet-200 mt-2">
+                <span className="text-white font-bold">{estadisticas?.matriculados || 0}</span> matrículas de{' '}
+                <span className="text-white font-bold">{estadisticas?.total || 0}</span> leads
+              </p>
             </div>
             
-            <div className="flex gap-1">
-              {[
-                { id: 'semana', label: '7D' },
-                { id: 'mes', label: '1M' },
-                { id: 'trimestre', label: '3M' },
-                { id: 'semestre', label: '6M' },
-                { id: 'año', label: '1A' },
-              ].map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => setPresetFecha(p.id)}
-                  className="px-3 py-1 text-sm border border-slate-200 rounded-lg hover:bg-violet-50 hover:border-violet-300 transition-colors"
-                >
-                  {p.label}
-                </button>
-              ))}
+            {/* Barra de progreso visual */}
+            <div className="w-full lg:w-64">
+              <div className="h-4 bg-white/20 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-emerald-400 to-emerald-300 rounded-full transition-all duration-1000"
+                  style={{ width: `${Math.min(100, estadisticas?.tasaConversion || 0)}%` }}
+                />
+              </div>
+              <div className="flex justify-between mt-2 text-xs text-violet-200">
+                <span>0%</span>
+                <span>Meta: 25%</span>
+                <span>100%</span>
+              </div>
             </div>
-            
-            <div className="flex-1" />
-            
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors ${
-                showFilters || hayFiltrosActivos 
-                  ? 'bg-violet-100 text-violet-700' 
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <Icon name="Filter" size={18} />
-              Filtros
-              {hayFiltrosActivos && (
-                <span className="w-5 h-5 bg-violet-600 text-white rounded-full text-xs flex items-center justify-center">
-                  {filtroEstados.length + filtroCarreras.length + filtroMedios.length + filtroEncargados.length + (filtroTipoAlumno !== 'todos' ? 1 : 0)}
-                </span>
-              )}
-            </button>
+          </div>
+        </div>
+        
+        {/* KPIs Secundarios */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-slate-500 text-sm">Total Leads</p>
+                <p className="text-2xl font-bold text-slate-800">{estadisticas?.total || 0}</p>
+              </div>
+              <div className="w-12 h-12 bg-violet-100 rounded-xl flex items-center justify-center">
+                <Icon name="Users" size={24} className="text-violet-600" />
+              </div>
+            </div>
+            {cambios.leads !== 0 && (
+              <p className={`text-sm mt-2 flex items-center gap-1 ${cambios.leads > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                <Icon name={cambios.leads > 0 ? 'TrendingUp' : 'TrendingDown'} size={14} />
+                {cambios.leads > 0 ? '+' : ''}{cambios.leads} vs anterior
+              </p>
+            )}
           </div>
           
-          {/* Panel de filtros expandible */}
-          {showFilters && (
-            <div className="mt-4 pt-4 border-t border-slate-100 space-y-4">
-              {/* Estados */}
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+            <div className="flex items-center justify-between">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Estados</label>
-                <div className="flex flex-wrap gap-2">
-                  {estadosDisponibles.map(est => (
-                    <button
-                      key={est.id}
-                      onClick={() => toggleFiltro(filtroEstados, setFiltroEstados, est.id)}
-                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                        filtroEstados.includes(est.id)
-                          ? `${est.color} text-white`
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      {est.label}
-                    </button>
+                <p className="text-slate-500 text-sm">En Proceso</p>
+                <p className="text-2xl font-bold text-blue-600">{estadisticas?.activos || 0}</p>
+              </div>
+              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                <Icon name="Clock" size={24} className="text-blue-600" />
+              </div>
+            </div>
+            <p className="text-sm mt-2 text-slate-500">
+              {estadisticas?.activos && estadisticas?.total ? Math.round((estadisticas.activos / estadisticas.total) * 100) : 0}% del total
+            </p>
+          </div>
+          
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-slate-500 text-sm">T. Respuesta</p>
+                {(() => {
+                  const tiempo = formatearTiempoRespuesta(estadisticas?.tiempoRespuestaPromedio)
+                  return <p className={`text-2xl font-bold ${tiempo.color}`}>{tiempo.texto || '-'}</p>
+                })()}
+              </div>
+              <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
+                <Icon name="Zap" size={24} className="text-amber-600" />
+              </div>
+            </div>
+            <p className="text-sm mt-2 text-slate-500">Primer contacto</p>
+          </div>
+          
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-slate-500 text-sm">Ciclo Cierre</p>
+                <p className="text-2xl font-bold text-purple-600">
+                  {estadisticas?.tiempoCierrePromedio ? `${estadisticas.tiempoCierrePromedio}d` : '-'}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                <Icon name="Calendar" size={24} className="text-purple-600" />
+              </div>
+            </div>
+            <p className="text-sm mt-2 text-slate-500">Días promedio</p>
+          </div>
+        </div>
+        
+        {/* Tabs de navegación */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="flex border-b border-slate-100 overflow-x-auto">
+            {[
+              { id: 'embudo', icon: 'Filter', label: 'Embudo' },
+              { id: 'tendencia', icon: 'TrendingUp', label: 'Tendencia' },
+              { id: 'carreras', icon: 'GraduationCap', label: 'Carreras' },
+              { id: 'medios', icon: 'Share2', label: 'Medios' },
+              ...(isKeyMaster || user?.rol_id === 'superadmin' || isRector ? [{ id: 'encargados', icon: 'Users', label: 'Encargados' }] : [])
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-6 py-4 font-medium text-sm whitespace-nowrap transition-colors ${
+                  activeTab === tab.id 
+                    ? 'text-violet-600 border-b-2 border-violet-600 bg-violet-50/50' 
+                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <Icon name={tab.icon} size={18} />
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          
+          <div className="p-6">
+            {/* Tab: Embudo */}
+            {activeTab === 'embudo' && (
+              <div className="space-y-6">
+                <h3 className="font-semibold text-slate-800">Embudo de Conversión</h3>
+                <div className="space-y-3">
+                  {datosEmbudo.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-4">
+                      <div className="w-28 text-sm text-slate-600 font-medium">{item.etapa}</div>
+                      <div className="flex-1 h-10 bg-slate-100 rounded-lg overflow-hidden relative">
+                        <div 
+                          className={`h-full ${item.color} transition-all duration-700 flex items-center justify-end pr-3`}
+                          style={{ width: `${Math.max(5, (item.cantidad / (estadisticas?.total || 1)) * 100)}%` }}
+                        >
+                          <span className="text-white font-bold text-sm">{item.cantidad}</span>
+                        </div>
+                      </div>
+                      <div className="w-16 text-right text-sm text-slate-500">{item.percent}%</div>
+                    </div>
                   ))}
                 </div>
-              </div>
-              
-              {/* Carreras */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Carreras</label>
-                <div className="flex flex-wrap gap-2">
-                  {carreras.map(car => (
-                    <button
-                      key={car.id}
-                      onClick={() => toggleFiltro(filtroCarreras, setFiltroCarreras, car.id)}
-                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                        filtroCarreras.includes(car.id)
-                          ? `${car.color} text-white`
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      {car.nombre}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              
-              {/* Medios */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Medio de contacto</label>
-                <div className="flex flex-wrap gap-2">
-                  {medios.map(med => (
-                    <button
-                      key={med.id}
-                      onClick={() => toggleFiltro(filtroMedios, setFiltroMedios, med.id)}
-                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                        filtroMedios.includes(med.id)
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      {med.nombre}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              
-              {/* Encargados (solo para admin) */}
-              {(isKeyMaster || user?.rol_id === 'superadmin' || isRector) && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Encargados</label>
-                  <div className="flex flex-wrap gap-2">
-                    {encargados.map(enc => (
-                      <button
-                        key={enc.id}
-                        onClick={() => toggleFiltro(filtroEncargados, setFiltroEncargados, enc.id)}
-                        className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                          filtroEncargados.includes(enc.id)
-                            ? 'bg-purple-500 text-white'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
+                
+                {/* Descartados separado */}
+                <div className="pt-4 border-t border-slate-100">
+                  <div className="flex items-center gap-4">
+                    <div className="w-28 text-sm text-slate-400 font-medium">Descartados</div>
+                    <div className="flex-1 h-8 bg-slate-100 rounded-lg overflow-hidden">
+                      <div 
+                        className="h-full bg-slate-400 transition-all duration-700 flex items-center justify-end pr-3"
+                        style={{ width: `${Math.max(5, ((estadisticas?.descartados || 0) / (estadisticas?.total || 1)) * 100)}%` }}
                       >
-                        {enc.nombre}
-                      </button>
-                    ))}
+                        <span className="text-white font-bold text-sm">{estadisticas?.descartados || 0}</span>
+                      </div>
+                    </div>
+                    <div className="w-16 text-right text-sm text-slate-400">
+                      {estadisticas?.total > 0 ? Math.round((estadisticas.descartados / estadisticas.total) * 100) : 0}%
+                    </div>
                   </div>
                 </div>
-              )}
-              
-              {/* Tipo de alumno */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Tipo de alumno</label>
-                <div className="flex gap-2">
-                  {[
-                    { id: 'todos', label: 'Todos' },
-                    { id: 'nuevo', label: 'Nuevos' },
-                    { id: 'antiguo', label: 'Antiguos' },
-                  ].map(tipo => (
-                    <button
-                      key={tipo.id}
-                      onClick={() => setFiltroTipoAlumno(tipo.id)}
-                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                        filtroTipoAlumno === tipo.id
-                          ? 'bg-violet-500 text-white'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
+              </div>
+            )}
+            
+            {/* Tab: Tendencia */}
+            {activeTab === 'tendencia' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-slate-800">Evolución Temporal</h3>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={agrupacion}
+                      onChange={e => setAgrupacion(e.target.value)}
+                      className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm"
                     >
-                      {tipo.label}
-                    </button>
-                  ))}
+                      <option value="dia">Por día</option>
+                      <option value="semana">Por semana</option>
+                      <option value="mes">Por mes</option>
+                    </select>
+                    <div className="flex border border-slate-200 rounded-lg overflow-hidden">
+                      <button
+                        onClick={() => setTipoGrafico('linea')}
+                        className={`px-3 py-1.5 ${tipoGrafico === 'linea' ? 'bg-violet-100 text-violet-700' : 'bg-white text-slate-600'}`}
+                      >
+                        <Icon name="TrendingUp" size={16} />
+                      </button>
+                      <button
+                        onClick={() => setTipoGrafico('barra')}
+                        className={`px-3 py-1.5 ${tipoGrafico === 'barra' ? 'bg-violet-100 text-violet-700' : 'bg-white text-slate-600'}`}
+                      >
+                        <Icon name="BarChart2" size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                
+                {datosGrafico.length > 0 ? (
+                  tipoGrafico === 'linea' ? <LineChart data={datosGrafico} /> : <BarChart data={datosGrafico} />
+                ) : (
+                  <div className="h-64 flex items-center justify-center text-slate-400">
+                    No hay datos para el período seleccionado
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Tab: Carreras */}
+            {activeTab === 'carreras' && (
+              <div className="space-y-4">
+                <h3 className="font-semibold text-slate-800">Rendimiento por Carrera</h3>
+                <div className="space-y-3">
+                  {Object.entries(estadisticas?.porCarrera || {})
+                    .filter(([_, v]) => v.total > 0)
+                    .sort((a, b) => b[1].total - a[1].total)
+                    .map(([id, data]) => {
+                      const tasa = data.total > 0 ? Math.round((data.matriculados / data.total) * 100) : 0
+                      return (
+                        <div key={id} className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
+                          <div className={`w-3 h-3 rounded-full ${data.color || 'bg-slate-400'}`} />
+                          <span className="flex-1 font-medium text-slate-700">{data.nombre}</span>
+                          <div className="flex items-center gap-6 text-sm">
+                            <span className="text-slate-500 w-20">{data.total} leads</span>
+                            <span className="text-emerald-600 w-16">{data.matriculados} mat.</span>
+                            <span className={`font-bold w-12 text-right ${tasa >= 20 ? 'text-emerald-600' : tasa >= 10 ? 'text-amber-600' : 'text-slate-500'}`}>
+                              {tasa}%
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  {Object.keys(estadisticas?.porCarrera || {}).length === 0 && (
+                    <p className="text-center text-slate-400 py-8">Sin datos de carreras</p>
+                  )}
                 </div>
               </div>
-              
-              {hayFiltrosActivos && (
-                <button
-                  onClick={limpiarFiltros}
-                  className="text-sm text-red-600 hover:text-red-700 flex items-center gap-1"
-                >
-                  <Icon name="X" size={16} />
-                  Limpiar filtros
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-        
-        {/* KPIs */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
-            <p className="text-slate-500 text-sm">Total Leads</p>
-            <p className="text-2xl font-bold text-slate-800">{estadisticas?.total || 0}</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
-            <p className="text-slate-500 text-sm">Activos</p>
-            <p className="text-2xl font-bold text-blue-600">{estadisticas?.activos || 0}</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
-            <p className="text-slate-500 text-sm">Matriculados</p>
-            <p className="text-2xl font-bold text-emerald-600">{estadisticas?.matriculados || 0}</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
-            <p className="text-slate-500 text-sm">Descartados</p>
-            <p className="text-2xl font-bold text-slate-500">{estadisticas?.descartados || 0}</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
-            <p className="text-slate-500 text-sm">Conversión</p>
-            <p className="text-2xl font-bold text-violet-600">{estadisticas?.tasaConversion || 0}%</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
-            <p className="text-slate-500 text-sm">T. Respuesta</p>
-            {(() => {
-              const tiempo = formatearTiempoRespuesta(estadisticas?.tiempoRespuestaPromedio)
-              return (
-                <p className={`text-2xl font-bold ${tiempo.color}`}>
-                  {tiempo.texto || '-'}
-                </p>
-              )
-            })()}
-          </div>
-        </div>
-        
-        {/* Gráfico temporal */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-slate-800">Evolución Temporal</h3>
-            <div className="flex items-center gap-2">
-              <select
-                value={agrupacion}
-                onChange={e => setAgrupacion(e.target.value)}
-                className="px-3 py-1 border border-slate-200 rounded-lg text-sm"
-              >
-                <option value="dia">Por día</option>
-                <option value="semana">Por semana</option>
-                <option value="mes">Por mes</option>
-              </select>
-              <div className="flex border border-slate-200 rounded-lg overflow-hidden">
-                <button
-                  onClick={() => setTipoGrafico('linea')}
-                  className={`px-3 py-1 ${tipoGrafico === 'linea' ? 'bg-violet-100 text-violet-700' : 'bg-white text-slate-600'}`}
-                >
-                  <Icon name="TrendingUp" size={18} />
-                </button>
-                <button
-                  onClick={() => setTipoGrafico('barra')}
-                  className={`px-3 py-1 ${tipoGrafico === 'barra' ? 'bg-violet-100 text-violet-700' : 'bg-white text-slate-600'}`}
-                >
-                  <Icon name="BarChart2" size={18} />
-                </button>
+            )}
+            
+            {/* Tab: Medios */}
+            {activeTab === 'medios' && (
+              <div className="space-y-4">
+                <h3 className="font-semibold text-slate-800">Rendimiento por Medio</h3>
+                <div className="space-y-3">
+                  {Object.entries(estadisticas?.porMedio || {})
+                    .filter(([_, v]) => v.total > 0)
+                    .sort((a, b) => b[1].total - a[1].total)
+                    .map(([id, data]) => {
+                      const tasa = data.total > 0 ? Math.round((data.matriculados / data.total) * 100) : 0
+                      return (
+                        <div key={id} className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
+                          <Icon name="Share2" size={16} className="text-slate-400" />
+                          <span className="flex-1 font-medium text-slate-700 capitalize">{data.nombre}</span>
+                          <div className="flex items-center gap-6 text-sm">
+                            <span className="text-slate-500 w-20">{data.total} leads</span>
+                            <span className="text-emerald-600 w-16">{data.matriculados} mat.</span>
+                            <span className={`font-bold w-12 text-right ${tasa >= 20 ? 'text-emerald-600' : tasa >= 10 ? 'text-amber-600' : 'text-slate-500'}`}>
+                              {tasa}%
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  {Object.keys(estadisticas?.porMedio || {}).length === 0 && (
+                    <p className="text-center text-slate-400 py-8">Sin datos de medios</p>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
+            
+            {/* Tab: Encargados */}
+            {activeTab === 'encargados' && (isKeyMaster || user?.rol_id === 'superadmin' || isRector) && (
+              <div className="space-y-4">
+                <h3 className="font-semibold text-slate-800">Rendimiento por Encargado</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="text-left text-sm text-slate-500 border-b border-slate-100">
+                        <th className="pb-3 font-medium">Encargado</th>
+                        <th className="pb-3 text-center font-medium">Total</th>
+                        <th className="pb-3 text-center font-medium">Matriculados</th>
+                        <th className="pb-3 text-center font-medium">Conversión</th>
+                        <th className="pb-3 text-right font-medium">Tendencia</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(estadisticas?.porEncargado || {})
+                        .filter(([_, v]) => v.total > 0)
+                        .sort((a, b) => (b[1].tasa || 0) - (a[1].tasa || 0))
+                        .map(([id, data]) => (
+                          <tr key={id} className="border-b border-slate-50 hover:bg-slate-50">
+                            <td className="py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 bg-violet-100 rounded-full flex items-center justify-center">
+                                  <span className="text-violet-600 font-medium text-sm">
+                                    {data.nombre?.charAt(0) || '?'}
+                                  </span>
+                                </div>
+                                <span className="font-medium text-slate-800">{data.nombre}</span>
+                              </div>
+                            </td>
+                            <td className="py-4 text-center text-slate-600">{data.total}</td>
+                            <td className="py-4 text-center text-emerald-600 font-medium">{data.matriculados}</td>
+                            <td className="py-4 text-center">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium ${
+                                (data.tasa || 0) >= 25 ? 'bg-emerald-100 text-emerald-700' :
+                                (data.tasa || 0) >= 15 ? 'bg-amber-100 text-amber-700' :
+                                'bg-slate-100 text-slate-600'
+                              }`}>
+                                {data.tasa || 0}%
+                              </span>
+                            </td>
+                            <td className="py-4 text-right">
+                              <div className="w-16 h-2 bg-slate-100 rounded-full overflow-hidden ml-auto">
+                                <div 
+                                  className={`h-full rounded-full ${
+                                    (data.tasa || 0) >= 25 ? 'bg-emerald-500' :
+                                    (data.tasa || 0) >= 15 ? 'bg-amber-500' :
+                                    'bg-slate-400'
+                                  }`}
+                                  style={{ width: `${Math.min(100, (data.tasa || 0) * 2)}%` }}
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                  {Object.keys(estadisticas?.porEncargado || {}).length === 0 && (
+                    <p className="text-center text-slate-400 py-8">Sin datos de encargados</p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
-          
-          {datosGrafico.length > 0 ? (
-            tipoGrafico === 'linea' ? <LineChart data={datosGrafico} /> : <BarChart data={datosGrafico} />
-          ) : (
-            <div className="h-64 flex items-center justify-center text-slate-400">
-              No hay datos para el período seleccionado
-            </div>
-          )}
         </div>
         
-        {/* Estadísticas por dimensión */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Por carrera */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-            <h3 className="font-semibold text-slate-800 mb-4">Por Carrera</h3>
-            <div className="space-y-3">
-              {Object.entries(estadisticas?.porCarrera || {}).filter(([_, v]) => v.total > 0).map(([id, data]) => (
-                <div key={id} className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${data.color || 'bg-slate-400'}`} />
-                  <span className="flex-1 text-sm text-slate-600 truncate">{data.nombre}</span>
-                  <span className="text-sm font-medium text-slate-800">{data.total}</span>
-                  <span className="text-xs text-emerald-600 w-12 text-right">{data.matriculados} m.</span>
-                  <span className="text-xs text-slate-400 w-10 text-right">
-                    {data.total > 0 ? Math.round((data.matriculados / data.total) * 100) : 0}%
-                  </span>
-                </div>
-              ))}
-              {Object.keys(estadisticas?.porCarrera || {}).length === 0 && (
-                <p className="text-sm text-slate-400 text-center py-4">Sin datos</p>
-              )}
-            </div>
-          </div>
-          
-          {/* Por medio */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-            <h3 className="font-semibold text-slate-800 mb-4">Por Medio de Contacto</h3>
-            <div className="space-y-3">
-              {Object.entries(estadisticas?.porMedio || {}).filter(([_, v]) => v.total > 0).map(([id, data]) => (
-                <div key={id} className="flex items-center gap-3">
-                  <Icon name="MessageCircle" size={16} className="text-slate-400" />
-                  <span className="flex-1 text-sm text-slate-600 truncate">{data.nombre}</span>
-                  <span className="text-sm font-medium text-slate-800">{data.total}</span>
-                  <span className="text-xs text-emerald-600 w-12 text-right">{data.matriculados} m.</span>
-                  <span className="text-xs text-slate-400 w-10 text-right">
-                    {data.total > 0 ? Math.round((data.matriculados / data.total) * 100) : 0}%
-                  </span>
-                </div>
-              ))}
-              {Object.keys(estadisticas?.porMedio || {}).length === 0 && (
-                <p className="text-sm text-slate-400 text-center py-4">Sin datos</p>
-              )}
-            </div>
-          </div>
-        </div>
-        
-        {/* Por encargado (solo admin) */}
-        {(isKeyMaster || user?.rol_id === 'superadmin' || isRector) && (
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-            <h3 className="font-semibold text-slate-800 mb-4">Rendimiento por Encargado</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-left text-sm text-slate-500 border-b border-slate-100">
-                    <th className="pb-3">Encargado</th>
-                    <th className="pb-3 text-center">Total</th>
-                    <th className="pb-3 text-center">Matriculados</th>
-                    <th className="pb-3 text-center">Conversión</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(estadisticas?.porEncargado || {}).filter(([_, v]) => v.total > 0).map(([id, data]) => (
-                    <tr key={id} className="border-b border-slate-50">
-                      <td className="py-3 font-medium text-slate-800">{data.nombre}</td>
-                      <td className="py-3 text-center">{data.total}</td>
-                      <td className="py-3 text-center text-emerald-600">{data.matriculados}</td>
-                      <td className="py-3 text-center">
-                        <span className={`font-medium ${(data.tasa || 0) >= 20 ? 'text-emerald-600' : (data.tasa || 0) >= 10 ? 'text-amber-600' : 'text-slate-600'}`}>
-                          {data.tasa || 0}%
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-        
-        {/* Resumen de tipo de alumno */}
+        {/* Resumen rápido al final */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-            <h3 className="font-semibold text-slate-800 mb-4">Distribución por Tipo de Alumno</h3>
+            <h3 className="font-semibold text-slate-800 mb-4">Distribución por Tipo</h3>
             <div className="flex items-center justify-around py-4">
               <div className="text-center">
-                <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                  <span className="text-2xl font-bold text-blue-600">{estadisticas?.porTipoAlumno?.nuevo || 0}</span>
+                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <span className="text-xl font-bold text-blue-600">{estadisticas?.porTipoAlumno?.nuevo || 0}</span>
                 </div>
                 <p className="text-sm text-slate-600">Nuevos</p>
               </div>
               <div className="text-center">
-                <div className="w-20 h-20 bg-violet-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                  <span className="text-2xl font-bold text-violet-600">{estadisticas?.porTipoAlumno?.antiguo || 0}</span>
+                <div className="w-16 h-16 bg-violet-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <span className="text-xl font-bold text-violet-600">{estadisticas?.porTipoAlumno?.antiguo || 0}</span>
                 </div>
                 <p className="text-sm text-slate-600">Antiguos</p>
               </div>
@@ -3134,75 +3251,23 @@ export default function Dashboard() {
           </div>
           
           <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-            <h3 className="font-semibold text-slate-800 mb-4">Tiempos Promedio</h3>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                <span className="text-slate-600">Tiempo de Respuesta</span>
-                {(() => {
-                  const tiempo = formatearTiempoRespuesta(estadisticas?.tiempoRespuestaPromedio)
-                  return (
-                    <span className={`text-xl font-bold ${tiempo.color}`}>
-                      {tiempo.texto || '-'}
-                    </span>
-                  )
-                })()}
+            <h3 className="font-semibold text-slate-800 mb-4">Período Anterior</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                <span className="text-slate-600">Leads</span>
+                <span className="font-medium text-slate-800">{estadisticasAnteriores?.total || 0}</span>
               </div>
-              <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
-                <span className="text-slate-600">Tiempo de Cierre</span>
-                {(() => {
-                  const dias = estadisticas?.tiempoCierrePromedio || 0
-                  const color = dias <= 7 ? 'text-emerald-600' : dias <= 14 ? 'text-amber-500' : dias <= 30 ? 'text-orange-500' : 'text-red-600'
-                  return (
-                    <span className={`text-xl font-bold ${color}`}>
-                      {dias ? `${dias} días` : '-'}
-                    </span>
-                  )
-                })()}
+              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                <span className="text-slate-600">Matrículas</span>
+                <span className="font-medium text-emerald-600">{estadisticasAnteriores?.matriculados || 0}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                <span className="text-slate-600">Conversión</span>
+                <span className="font-medium text-violet-600">{estadisticasAnteriores?.tasaConversion || 0}%</span>
               </div>
             </div>
           </div>
         </div>
-        
-        {/* Lista de leads filtrados */}
-        {leadsReporte.length > 0 && leadsReporte.length <= 50 && (
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-slate-800">Leads del Período ({leadsReporte.length})</h3>
-            </div>
-            <div className="overflow-x-auto max-h-96">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-white">
-                  <tr className="text-left text-slate-500 border-b border-slate-100">
-                    <th className="pb-2">Nombre</th>
-                    <th className="pb-2">Carrera</th>
-                    <th className="pb-2">Estado</th>
-                    <th className="pb-2">Medio</th>
-                    <th className="pb-2">Fecha</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {leadsReporte.slice(0, 50).map(lead => (
-                    <tr key={lead.id} className="border-b border-slate-50 hover:bg-slate-50">
-                      <td className="py-2 font-medium text-slate-800">{lead.nombre}</td>
-                      <td className="py-2 text-slate-600">{lead.carrera?.nombre}</td>
-                      <td className="py-2">
-                        <span className={`px-2 py-0.5 rounded-full text-xs ${
-                          lead.matriculado ? 'bg-emerald-100 text-emerald-700' :
-                          lead.descartado ? 'bg-slate-100 text-slate-600' :
-                          'bg-blue-100 text-blue-700'
-                        }`}>
-                          {lead.matriculado ? 'Matriculado' : lead.descartado ? 'Descartado' : lead.estado}
-                        </span>
-                      </td>
-                      <td className="py-2 text-slate-600">{lead.medio?.nombre}</td>
-                      <td className="py-2 text-slate-400">{new Date(lead.created_at).toLocaleDateString('es-CL')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
       </div>
     )
   }
