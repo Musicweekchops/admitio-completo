@@ -587,7 +587,7 @@ const PieChart = ({ data, size = 200 }) => {
 }
 
 export default function Dashboard() {
-  const { user, institucion, signOut, isKeyMaster, isRector, isEncargado, isAsistente, canViewAll, canEdit, canConfig, canCreateLeads, canReasignar, reloadFromSupabase, planInfo, actualizarUso, puedeCrearLead } = useAuth()
+  const { user, institucion, signOut, isKeyMaster, isRector, isEncargado, isAsistente, canViewAll, canEdit, canConfig, canCreateLeads, canReasignar, reloadFromSupabase, planInfo, actualizarUso, puedeCrearLead, puedeCrearUsuario, puedeCrearFormulario } = useAuth()
   
   // Nombre dinámico de la institución
   const nombreInstitucion = institucion?.nombre || user?.institucion_nombre || store.getConfig()?.nombre || 'Mi Institución'
@@ -615,6 +615,7 @@ export default function Dashboard() {
   const [formularios, setFormularios] = useState([])
   const [embedCode, setEmbedCode] = useState('')
   const [notification, setNotification] = useState(null)
+  const [limiteAlerta, setLimiteAlerta] = useState(null) // { tipo: 'leads'|'usuarios'|'formularios', mensaje: '...' }
   
   // Estados para sidebar responsive
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -741,6 +742,18 @@ export default function Dashboard() {
     }
     setMetricasGlobales(store.getMetricasGlobales())
     setFormularios(store.getFormularios())
+  }
+
+  // Helper para abrir modal de nuevo lead con validación de límite
+  const handleNuevoLead = () => {
+    if (!puedeCrearLead || !puedeCrearLead()) {
+      setLimiteAlerta({
+        tipo: 'leads',
+        mensaje: `Has alcanzado el límite de ${planInfo?.limites?.max_leads || 10} leads de tu plan ${planInfo?.nombre || 'actual'}. Actualiza tu plan para agregar más leads.`
+      })
+      return
+    }
+    setShowModal(true)
   }
 
   const filteredConsultas = consultas.filter(c => {
@@ -1000,7 +1013,7 @@ export default function Dashboard() {
       </div>
       
       <button 
-        onClick={() => setShowModal(true)}
+        onClick={handleNuevoLead}
         className="p-2 text-violet-600 hover:bg-violet-50 rounded-lg"
       >
         <Icon name="Plus" size={24} />
@@ -1304,7 +1317,7 @@ export default function Dashboard() {
         {/* Acciones rápidas */}
         {canEdit && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <button onClick={() => setShowModal(true)} className="bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl p-5 text-left hover:from-violet-700 hover:to-purple-700 transition-all">
+            <button onClick={handleNuevoLead} className="bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl p-5 text-left hover:from-violet-700 hover:to-purple-700 transition-all">
               <Icon name="Plus" className="mb-3" size={32} />
               <p className="font-semibold">Nueva Consulta</p>
               <p className="text-violet-200 text-sm">Registrar prospecto manualmente</p>
@@ -1338,7 +1351,7 @@ export default function Dashboard() {
           </div>
         </div>
         {canEdit && (
-          <button onClick={() => setShowModal(true)} className="px-4 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 transition-colors flex items-center gap-2">
+          <button onClick={handleNuevoLead} className="px-4 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 transition-colors flex items-center gap-2">
             <Icon name="Plus" size={20} /> Nueva Consulta
           </button>
         )}
@@ -3293,6 +3306,13 @@ export default function Dashboard() {
     }
     
     const handleNewForm = () => {
+      if (!puedeCrearFormulario()) {
+        setLimiteAlerta({
+          tipo: 'formularios',
+          mensaje: `Has alcanzado el límite de ${planInfo?.limites?.max_formularios || 1} formulario(s) de tu plan ${planInfo?.nombre || 'actual'}. Actualiza tu plan para crear más formularios.`
+        })
+        return
+      }
       setEditingForm(null)
       setLocalShowModal(true)
     }
@@ -3403,6 +3423,13 @@ export default function Dashboard() {
     const refreshUsuarios = () => setUsuarios(store.getUsuarios(user?.id, isSuperAdmin))
     
     const openNewUser = () => {
+      if (!puedeCrearUsuario()) {
+        setLimiteAlerta({
+          tipo: 'usuarios',
+          mensaje: `Has alcanzado el límite de ${planInfo?.limites?.max_usuarios || 1} usuario(s) de tu plan ${planInfo?.nombre || 'actual'}. Actualiza tu plan para agregar más usuarios.`
+        })
+        return
+      }
       setLocalEditingUser(null)
       setUserFormData({
         nombre: '',
@@ -4257,7 +4284,7 @@ Gracias.`)
                 Exportar
               </button>
               <button
-                onClick={() => setShowModal(true)}
+                onClick={handleNuevoLead}
                 className="px-4 py-2 bg-white hover:bg-white/90 text-violet-600 rounded-lg font-medium flex items-center gap-2"
               >
                 <Icon name="Plus" size={18} />
@@ -4307,7 +4334,7 @@ Gracias.`)
               </p>
               {!searchTerm && (
                 <button
-                  onClick={() => setShowModal(true)}
+                  onClick={handleNuevoLead}
                   className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium"
                 >
                   Crear primer programa
@@ -5257,7 +5284,7 @@ const handleImportCSV = async () => {
             </div>
             
             <button
-              onClick={() => setShowModal(true)}
+              onClick={handleNuevoLead}
               className="w-full py-4 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl font-semibold hover:from-violet-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 transition-all flex items-center justify-center gap-3"
             >
               <Icon name="Plus" size={24} />
@@ -5433,6 +5460,42 @@ const handleImportCSV = async () => {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal de límite de plan alcanzado */}
+      {limiteAlerta && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden">
+            <div className="bg-gradient-to-r from-red-500 to-orange-500 p-6 text-white text-center">
+              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Icon name="AlertTriangle" size={32} />
+              </div>
+              <h2 className="text-xl font-bold">Límite alcanzado</h2>
+            </div>
+            <div className="p-6">
+              <p className="text-slate-600 text-center mb-6">
+                {limiteAlerta.mensaje}
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setLimiteAlerta(null)}
+                  className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 rounded-xl font-medium hover:bg-slate-50"
+                >
+                  Entendido
+                </button>
+                <button
+                  onClick={() => {
+                    setLimiteAlerta(null)
+                    setActiveTab('configuracion')
+                  }}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl font-medium hover:from-violet-700 hover:to-purple-700"
+                >
+                  Ver planes
+                </button>
+              </div>
             </div>
           </div>
         </div>
