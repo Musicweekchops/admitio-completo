@@ -30,6 +30,13 @@ import {
   syncCrearAccion,
   syncCrearUsuario,
   syncActualizarUsuario,
+  syncCrearCarrera,
+  syncActualizarCarrera,
+  syncEliminarCarrera,
+  syncImportarCarreras,
+  syncCrearFormulario,
+  syncActualizarFormulario,
+  syncEliminarFormulario,
   getInstitucionIdFromStore 
 } from './storeSync'
 
@@ -1250,27 +1257,47 @@ export function getFormularioBySlug(slug) {
 
 export function createFormulario(data) {
   const nuevo = {
-    id: `form-${Date.now()}`,
+    id: `form-${Date.now()}`, // ID temporal, Supabase generará UUID
     ...data,
     activo: true,
+    submissions: 0,
     created_at: new Date().toISOString()
   }
   store.formularios.push(nuevo)
   saveStore()
+  
+  // Sincronizar con Supabase
+  const institucionId = getInstitucionIdFromStore()
+  if (institucionId) {
+    syncCrearFormulario(institucionId, nuevo)
+  }
+  
   return nuevo
 }
 
 export function updateFormulario(id, updates) {
   const index = store.formularios.findIndex(f => f.id === id)
   if (index === -1) return null
-  store.formularios[index] = { ...store.formularios[index], ...updates }
+  
+  store.formularios[index] = { 
+    ...store.formularios[index], 
+    ...updates,
+    updated_at: new Date().toISOString()
+  }
   saveStore()
+  
+  // Sincronizar con Supabase
+  syncActualizarFormulario(id, updates)
+  
   return store.formularios[index]
 }
 
 export function deleteFormulario(id) {
   store.formularios = store.formularios.filter(f => f.id !== id)
   saveStore()
+  
+  // Sincronizar con Supabase
+  syncEliminarFormulario(id)
 }
 
 export function generarEmbedCode(formId) {
@@ -1700,6 +1727,81 @@ export function updateConfig(updates) {
 
 export function getCarreras() {
   return store.carreras
+}
+
+export function getCarreraById(id) {
+  return store.carreras.find(c => c.id === id)
+}
+
+export function createCarrera(data) {
+  const nueva = {
+    id: `carrera-${Date.now()}`, // ID temporal, Supabase generará UUID
+    nombre: data.nombre,
+    color: data.color || 'bg-violet-500',
+    activa: true,
+    created_at: new Date().toISOString()
+  }
+  store.carreras.push(nueva)
+  saveStore()
+  
+  // Sincronizar con Supabase
+  const institucionId = getInstitucionIdFromStore()
+  if (institucionId) {
+    syncCrearCarrera(institucionId, nueva)
+  }
+  
+  return nueva
+}
+
+export function updateCarrera(id, updates) {
+  const index = store.carreras.findIndex(c => c.id === id)
+  if (index === -1) return null
+  
+  store.carreras[index] = { ...store.carreras[index], ...updates }
+  saveStore()
+  
+  // Sincronizar con Supabase
+  syncActualizarCarrera(id, updates)
+  
+  return store.carreras[index]
+}
+
+export function deleteCarrera(id) {
+  // Verificar si hay leads usando esta carrera
+  const leadsConCarrera = store.consultas.filter(c => c.carrera_id === id)
+  if (leadsConCarrera.length > 0) {
+    console.warn(`⚠️ No se puede eliminar carrera ${id}: tiene ${leadsConCarrera.length} leads asociados`)
+    return { error: 'TIENE_LEADS', count: leadsConCarrera.length }
+  }
+  
+  store.carreras = store.carreras.filter(c => c.id !== id)
+  saveStore()
+  
+  // Sincronizar con Supabase
+  syncEliminarCarrera(id)
+  
+  return { success: true }
+}
+
+export function importarCarreras(carrerasData) {
+  const nuevas = carrerasData.map((c, idx) => ({
+    id: `carrera-imp-${Date.now()}-${idx}`,
+    nombre: c.nombre,
+    color: c.color || 'bg-violet-500',
+    activa: true,
+    created_at: new Date().toISOString()
+  }))
+  
+  store.carreras.push(...nuevas)
+  saveStore()
+  
+  // Sincronizar con Supabase
+  const institucionId = getInstitucionIdFromStore()
+  if (institucionId) {
+    syncImportarCarreras(institucionId, nuevas)
+  }
+  
+  return nuevas
 }
 
 export function getMedios() {

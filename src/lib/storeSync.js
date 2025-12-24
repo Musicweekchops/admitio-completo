@@ -38,9 +38,22 @@ export async function cargarDatosInstitucion(institucionId) {
     const { data: carreras, error: carrerasError } = await supabase
       .from('carreras')
       .select('*')
-      .eq('institucion_id', institucionId);
+      .eq('institucion_id', institucionId)
+      .order('nombre', { ascending: true });
 
     if (carrerasError) throw carrerasError;
+
+    // Cargar formularios
+    const { data: formularios, error: formulariosError } = await supabase
+      .from('formularios')
+      .select('*')
+      .eq('institucion_id', institucionId)
+      .order('created_at', { ascending: false });
+
+    if (formulariosError) {
+      console.warn('⚠️ Error cargando formularios:', formulariosError);
+      // No lanzar error, continuar con array vacío
+    }
 
     // Cargar acciones de leads
     const leadIds = leads.map(l => l.id);
@@ -98,6 +111,17 @@ export async function cargarDatosInstitucion(institucionId) {
         color: c.color,
         activa: c.activa
       })),
+      formularios: (formularios || []).map(f => ({
+        id: f.id,
+        nombre: f.nombre,
+        slug: f.slug,
+        campos: f.campos || [],
+        carrera_default: f.carrera_default,
+        activo: f.activo,
+        submissions: f.submissions || 0,
+        created_at: f.created_at,
+        updated_at: f.updated_at
+      })),
       actividad: acciones.slice(0, 50).map(a => ({
         id: a.id,
         tipo: a.tipo,
@@ -119,7 +143,6 @@ export async function cargarDatosInstitucion(institucionId) {
         { id: 'otro', nombre: 'Otro', icono: 'MoreHorizontal', color: 'text-slate-500' }
       ],
       plantillas: [],
-      formularios: [],
       config: {
         nombre: 'Mi Institución',
         logo: null,
@@ -145,7 +168,7 @@ export async function cargarDatosInstitucion(institucionId) {
       detail: { institucionId, leadsCount: leads.length, usuariosCount: usuarios.length }
     }));
     
-    console.log(`✅ Datos cargados: ${leads.length} leads, ${usuarios.length} usuarios, ${carreras.length} carreras`);
+    console.log(`✅ Datos cargados: ${leads.length} leads, ${usuarios.length} usuarios, ${carreras.length} carreras, ${(formularios || []).length} formularios`);
     return storeData;
 
   } catch (error) {
@@ -491,7 +514,7 @@ export function syncCrearCarrera(institucionId, carreraData) {
       .insert({
         institucion_id: institucionId,
         nombre: carreraData.nombre,
-        color: carreraData.color || '#7c3aed',
+        color: carreraData.color || 'bg-violet-500',
         activa: true
       })
       .select();
@@ -501,6 +524,160 @@ export function syncCrearCarrera(institucionId, carreraData) {
       throw error;
     }
     console.log('✅ Carrera sincronizada a Supabase:', data);
+    return data[0];
+  });
+}
+
+export function syncActualizarCarrera(carreraId, updates) {
+  if (!carreraId || !carreraId.includes('-')) {
+    console.log('⚠️ Carrera con ID local, no se sincroniza:', carreraId);
+    return;
+  }
+  
+  addToSyncQueue('actualizar_carrera', async () => {
+    const supabaseUpdates = {};
+    if (updates.nombre !== undefined) supabaseUpdates.nombre = updates.nombre;
+    if (updates.color !== undefined) supabaseUpdates.color = updates.color;
+    if (updates.activa !== undefined) supabaseUpdates.activa = updates.activa;
+    
+    const { error } = await supabase
+      .from('carreras')
+      .update(supabaseUpdates)
+      .eq('id', carreraId);
+    
+    if (error) {
+      console.error('❌ Error actualizando carrera:', error);
+      throw error;
+    }
+    console.log('✅ Carrera actualizada en Supabase:', carreraId);
+  });
+}
+
+export function syncEliminarCarrera(carreraId) {
+  if (!carreraId || !carreraId.includes('-')) {
+    console.log('⚠️ Carrera con ID local, no se sincroniza eliminación:', carreraId);
+    return;
+  }
+  
+  addToSyncQueue('eliminar_carrera', async () => {
+    const { error } = await supabase
+      .from('carreras')
+      .delete()
+      .eq('id', carreraId);
+    
+    if (error) {
+      console.error('❌ Error eliminando carrera:', error);
+      throw error;
+    }
+    console.log('✅ Carrera eliminada de Supabase:', carreraId);
+  });
+}
+
+export function syncImportarCarreras(institucionId, carreras) {
+  if (!institucionId) {
+    console.error('❌ No se puede importar carreras: institucionId es null');
+    return;
+  }
+  
+  addToSyncQueue('importar_carreras', async () => {
+    const carrerasParaSupabase = carreras.map(c => ({
+      institucion_id: institucionId,
+      nombre: c.nombre,
+      color: c.color || 'bg-violet-500',
+      activa: true
+    }));
+
+    const { data, error } = await supabase
+      .from('carreras')
+      .insert(carrerasParaSupabase)
+      .select();
+    
+    if (error) {
+      console.error('❌ Error importando carreras:', error);
+      throw error;
+    }
+    console.log(`✅ ${data.length} carreras importadas a Supabase`);
+    return data;
+  });
+}
+
+// ============================================
+// FORMULARIOS
+// ============================================
+
+export function syncCrearFormulario(institucionId, formularioData) {
+  if (!institucionId) {
+    console.error('❌ No se puede sincronizar formulario: institucionId es null');
+    return;
+  }
+  
+  addToSyncQueue('crear_formulario', async () => {
+    const { data, error } = await supabase
+      .from('formularios')
+      .insert({
+        institucion_id: institucionId,
+        nombre: formularioData.nombre,
+        slug: formularioData.slug,
+        campos: formularioData.campos || [],
+        carrera_default: formularioData.carrera_default || null,
+        activo: true
+      })
+      .select();
+    
+    if (error) {
+      console.error('❌ Error sincronizando formulario:', error);
+      throw error;
+    }
+    console.log('✅ Formulario sincronizado a Supabase:', data);
+    return data[0];
+  });
+}
+
+export function syncActualizarFormulario(formularioId, updates) {
+  if (!formularioId || !formularioId.includes('-')) {
+    console.log('⚠️ Formulario con ID local, no se sincroniza:', formularioId);
+    return;
+  }
+  
+  addToSyncQueue('actualizar_formulario', async () => {
+    const supabaseUpdates = { updated_at: new Date().toISOString() };
+    
+    if (updates.nombre !== undefined) supabaseUpdates.nombre = updates.nombre;
+    if (updates.slug !== undefined) supabaseUpdates.slug = updates.slug;
+    if (updates.campos !== undefined) supabaseUpdates.campos = updates.campos;
+    if (updates.carrera_default !== undefined) supabaseUpdates.carrera_default = updates.carrera_default;
+    if (updates.activo !== undefined) supabaseUpdates.activo = updates.activo;
+    
+    const { error } = await supabase
+      .from('formularios')
+      .update(supabaseUpdates)
+      .eq('id', formularioId);
+    
+    if (error) {
+      console.error('❌ Error actualizando formulario:', error);
+      throw error;
+    }
+    console.log('✅ Formulario actualizado en Supabase:', formularioId);
+  });
+}
+
+export function syncEliminarFormulario(formularioId) {
+  if (!formularioId || !formularioId.includes('-')) {
+    console.log('⚠️ Formulario con ID local, no se sincroniza eliminación:', formularioId);
+    return;
+  }
+  
+  addToSyncQueue('eliminar_formulario', async () => {
+    const { error } = await supabase
+      .from('formularios')
+      .delete()
+      .eq('id', formularioId);
+    
+    if (error) {
+      console.error('❌ Error eliminando formulario:', error);
+      throw error;
+    }
+    console.log('✅ Formulario eliminado de Supabase:', formularioId);
   });
 }
 
@@ -543,6 +720,12 @@ export default {
   syncActualizarUsuario,
   syncImportarLeads,
   syncCrearCarrera,
+  syncActualizarCarrera,
+  syncEliminarCarrera,
+  syncImportarCarreras,
+  syncCrearFormulario,
+  syncActualizarFormulario,
+  syncEliminarFormulario,
   getSyncStatus,
   forcSync,
   getInstitucionIdFromStore
