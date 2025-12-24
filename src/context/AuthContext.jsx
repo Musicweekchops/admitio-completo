@@ -154,6 +154,13 @@ export function AuthProvider({ children }) {
         .select('*')
         .eq('institucion_id', institucionId)
 
+      // Cargar formularios
+      const { data: formularios } = await supabase
+        .from('formularios')
+        .select('*')
+        .eq('institucion_id', institucionId)
+        .order('created_at', { ascending: false })
+
       // Cargar acciones
       const { data: acciones } = await supabase
         .from('acciones_lead')
@@ -202,6 +209,17 @@ export function AuthProvider({ children }) {
           color: c.color || 'bg-violet-500',
           activa: c.activa
         })),
+        formularios: (formularios || []).map(f => ({
+          id: f.id,
+          nombre: f.nombre,
+          slug: f.slug,
+          campos: f.campos || [],
+          carrera_default: f.carrera_default,
+          activo: f.activo !== false,
+          submissions: f.submissions || 0,
+          created_at: f.created_at,
+          updated_at: f.updated_at
+        })),
         actividad: (acciones || []).map(a => ({
           id: a.id,
           tipo: a.tipo,
@@ -222,7 +240,6 @@ export function AuthProvider({ children }) {
           { id: 'email', nombre: 'Email directo', icono: 'Mail', color: 'text-amber-500' },
         ],
         plantillas: [],
-        formularios: [],
         config: { nombre: 'Mi Institución', logo: null },
         metricas_encargados: {},
         recordatorios: [],
@@ -241,7 +258,7 @@ export function AuthProvider({ children }) {
       // Recargar store con los nuevos datos
       store.reloadStore()
       
-      console.log(`✅ Datos cargados: ${leads?.length || 0} leads, ${usuarios?.length || 0} usuarios, ${carreras?.length || 0} carreras`)
+      console.log(`✅ Datos cargados: ${leads?.length || 0} leads, ${usuarios?.length || 0} usuarios, ${carreras?.length || 0} carreras, ${formularios?.length || 0} formularios`)
 
       // Cargar info del plan
       await loadPlanInfo(institucionId, leads?.length || 0, usuarios?.length || 0)
