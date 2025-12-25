@@ -616,6 +616,7 @@ export default function Dashboard() {
   const [embedCode, setEmbedCode] = useState('')
   const [notification, setNotification] = useState(null)
   const [limiteAlerta, setLimiteAlerta] = useState(null) // { tipo: 'leads'|'usuarios'|'formularios', mensaje: '...' }
+  const [importacionesPendientes, setImportacionesPendientes] = useState(0) // Para badge del menú
   
   // Estados para sidebar responsive
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -730,6 +731,52 @@ export default function Dashboard() {
   }, [user?.institucion_id, selectedConsulta])
   // ========================================
 
+  // Cargar importaciones pendientes (solo Enterprise)
+  const cargarImportacionesPendientes = async () => {
+    if (planInfo?.plan !== 'enterprise') return
+    
+    try {
+      const { count } = await supabase
+        .from('leads_importados')
+        .select('*', { count: 'exact', head: true })
+        .eq('institucion_id', user?.institucion_id)
+        .eq('estado', 'pendiente')
+      
+      setImportacionesPendientes(count || 0)
+    } catch (e) {
+      console.error('Error cargando importaciones pendientes:', e)
+    }
+  }
+  
+  useEffect(() => {
+    if (planInfo?.plan === 'enterprise' && user?.institucion_id) {
+      cargarImportacionesPendientes()
+      
+      // Suscribirse a cambios en leads_importados
+      const channel = supabase
+        .channel('importaciones-changes')
+        .on('postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'leads_importados', filter: `institucion_id=eq.${user.institucion_id}` },
+          (payload) => {
+            console.log('📥 Nueva importación desde Sheets')
+            cargarImportacionesPendientes()
+            
+            // Notificar solo si no hay throttling (la función SQL ya controla esto)
+            if (payload.new && payload.new.conflicto_detalles?.notificar !== false) {
+              setNotification({ 
+                type: 'info', 
+                message: `Nuevo lead desde Sheets: ${payload.new.datos_raw?.nombre || 'Sin nombre'}` 
+              })
+              setTimeout(() => setNotification(null), 4000)
+            }
+          }
+        )
+        .subscribe()
+      
+      return () => supabase.removeChannel(channel)
+    }
+  }, [planInfo?.plan, user?.institucion_id])
+
   function loadData() {
     const data = store.getConsultas(user?.id, user?.rol_id)
     setConsultas(data)
@@ -841,6 +888,7 @@ export default function Dashboard() {
       { id: 'usuarios', icon: 'User', label: 'Usuarios', show: isKeyMaster || user?.rol_id === 'superadmin' },
       { id: 'programas', icon: 'GraduationCap', label: 'Carreras/Cursos', show: isKeyMaster || user?.rol_id === 'superadmin' },
       { id: 'importar', icon: 'Upload', label: 'Importar', show: isKeyMaster || user?.rol_id === 'superadmin' },
+      { id: 'importaciones_sheets', icon: 'Table', label: 'Google Sheets', show: (isKeyMaster || user?.rol_id === 'superadmin') && planInfo?.plan === 'enterprise', badge: importacionesPendientes },
       { id: 'configuracion', icon: 'Settings', label: 'Configuración', show: isKeyMaster || user?.rol_id === 'superadmin' },
     ]
     
@@ -4060,6 +4108,632 @@ Gracias.`)
             </table>
           </div>
         </div>
+
+        {/* Integración Google Sheets - Solo Enterprise */}
+        {planInfo?.plan === 'enterprise' && (
+          <IntegracionGoogleSheets />
+        )}
+      </div>
+    )
+  }
+
+  // ============================================
+  // INTEGRACIÓN GOOGLE SHEETS - Componente Enterprise
+  // ============================================
+  const IntegracionGoogleSheets = () => {
+    const [apiKey, setApiKey] = useState(null)
+    const [loading, setLoading] = useState(true)
+    const [generando, setGenerando] = useState(false)
+    const [copiado, setCopiado] = useState(false)
+    const [showScript, setShowScript] = useState(false)
+    
+    // Cargar API Key existente
+    useEffect(() => {
+      cargarApiKey()
+    }, [])
+    
+    const cargarApiKey = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('api_keys')
+          .select('*')
+          .eq('institucion_id', user?.institucion_id)
+          .eq('activa', true)
+          .single()
+        
+        if (data) setApiKey(data)
+      } catch (e) {
+        // No hay API key aún
+      }
+      setLoading(false)
+    }
+    
+    const generarNuevaKey = async () => {
+      setGenerando(true)
+      try {
+        const { data, error } = await supabase.rpc('generar_api_key', {
+          p_institucion_id: user?.institucion_id,
+          p_usuario_id: user?.id
+        })
+        
+        if (error) throw error
+        
+        if (data.success) {
+          setApiKey({ api_key: data.api_key, created_at: new Date().toISOString() })
+          setNotification({ type: 'success', message: 'API Key generada correctamente' })
+        } else {
+          throw new Error(data.error)
+        }
+      } catch (e) {
+        setNotification({ type: 'error', message: 'Error al generar API Key: ' + e.message })
+      }
+      setGenerando(false)
+    }
+    
+    const copiarAlPortapapeles = (texto) => {
+      navigator.clipboard.writeText(texto)
+      setCopiado(true)
+      setTimeout(() => setCopiado(false), 2000)
+    }
+    
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://tu-proyecto.supabase.co'
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'tu-anon-key'
+    
+    const scriptConfig = `// ============================================
+// CONFIGURACIÓN - EDITAR ESTOS VALORES
+// ============================================
+const CONFIG = {
+  API_KEY: '${apiKey?.api_key || 'TU_API_KEY_AQUI'}',
+  SUPABASE_URL: '${supabaseUrl}',
+  // ... resto del script en documentación
+};
+
+function getSupabaseAnonKey() {
+  return '${supabaseAnonKey}';
+}`
+    
+    if (loading) {
+      return (
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+          <div className="animate-pulse flex items-center gap-4">
+            <div className="w-12 h-12 bg-slate-200 rounded-xl" />
+            <div className="flex-1">
+              <div className="h-4 bg-slate-200 rounded w-1/3 mb-2" />
+              <div className="h-3 bg-slate-200 rounded w-1/2" />
+            </div>
+          </div>
+        </div>
+      )
+    }
+    
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="p-6 bg-gradient-to-r from-emerald-500 to-teal-500 text-white">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+              <Icon name="Table" size={24} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold">Integración Google Sheets</h3>
+              <p className="text-emerald-100 text-sm">Sincroniza leads automáticamente desde tu hoja de cálculo</p>
+            </div>
+          </div>
+        </div>
+        
+        <div className="p-6 space-y-6">
+          {/* Estado de la API Key */}
+          {!apiKey ? (
+            <div className="text-center py-6">
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Icon name="Key" size={32} className="text-slate-400" />
+              </div>
+              <h4 className="font-semibold text-slate-800 mb-2">Genera tu API Key</h4>
+              <p className="text-slate-500 text-sm mb-4">
+                Necesitas una API Key para conectar tu Google Sheets con Admitio
+              </p>
+              <button
+                onClick={generarNuevaKey}
+                disabled={generando}
+                className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium disabled:opacity-50"
+              >
+                {generando ? 'Generando...' : 'Generar API Key'}
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* API Key existente */}
+              <div className="bg-slate-50 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-slate-500">Tu API Key</span>
+                  <span className="text-xs text-slate-400">
+                    Creada: {new Date(apiKey.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 bg-white px-4 py-2 rounded-lg text-sm font-mono border border-slate-200 truncate">
+                    {apiKey.api_key}
+                  </code>
+                  <button
+                    onClick={() => copiarAlPortapapeles(apiKey.api_key)}
+                    className="px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-lg text-sm font-medium"
+                  >
+                    {copiado ? '✓ Copiado' : 'Copiar'}
+                  </button>
+                </div>
+              </div>
+              
+              {/* Instrucciones */}
+              <div className="space-y-4">
+                <h4 className="font-semibold text-slate-800 flex items-center gap-2">
+                  <Icon name="BookOpen" size={18} className="text-slate-400" />
+                  Instrucciones de configuración
+                </h4>
+                
+                <ol className="space-y-3 text-sm text-slate-600">
+                  <li className="flex gap-3">
+                    <span className="w-6 h-6 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center flex-shrink-0 font-medium">1</span>
+                    <span>Abre tu Google Sheets con los datos de leads</span>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="w-6 h-6 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center flex-shrink-0 font-medium">2</span>
+                    <span>Ve a <strong>Extensiones → Apps Script</strong></span>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="w-6 h-6 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center flex-shrink-0 font-medium">3</span>
+                    <span>Copia y pega el script de abajo</span>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="w-6 h-6 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center flex-shrink-0 font-medium">4</span>
+                    <span>Ejecuta la función <code className="bg-slate-100 px-1 rounded">crearTrigger</code></span>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="w-6 h-6 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center flex-shrink-0 font-medium">5</span>
+                    <span>¡Listo! Las nuevas filas se enviarán automáticamente</span>
+                  </li>
+                </ol>
+              </div>
+              
+              {/* Formato de columnas */}
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <h5 className="font-medium text-amber-800 mb-2 flex items-center gap-2">
+                  <Icon name="AlertCircle" size={16} />
+                  Formato de columnas requerido
+                </h5>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-sm">
+                  {['nombre*', 'email', 'telefono', 'carrera', 'medio', 'notas'].map(col => (
+                    <span key={col} className="bg-white px-2 py-1 rounded text-amber-700 font-mono text-center">
+                      {col}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-xs text-amber-600 mt-2">* Campo obligatorio. La primera fila debe ser el encabezado.</p>
+              </div>
+              
+              {/* Botón para ver/descargar script */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowScript(!showScript)}
+                  className="flex-1 px-4 py-3 border border-slate-200 rounded-xl font-medium text-slate-700 hover:bg-slate-50 flex items-center justify-center gap-2"
+                >
+                  <Icon name={showScript ? 'ChevronUp' : 'Code'} size={18} />
+                  {showScript ? 'Ocultar script' : 'Ver script de configuración'}
+                </button>
+                <a
+                  href="/google-apps-script-admitio.js"
+                  download="admitio-google-sheets.js"
+                  className="px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium flex items-center gap-2"
+                >
+                  <Icon name="Download" size={18} />
+                  Descargar
+                </a>
+              </div>
+              
+              {/* Script expandible */}
+              {showScript && (
+                <div className="relative">
+                  <pre className="bg-slate-900 text-slate-100 rounded-xl p-4 text-xs overflow-x-auto max-h-64">
+                    {scriptConfig}
+                  </pre>
+                  <button
+                    onClick={() => copiarAlPortapapeles(scriptConfig)}
+                    className="absolute top-2 right-2 px-3 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded"
+                  >
+                    Copiar
+                  </button>
+                </div>
+              )}
+              
+              {/* Regenerar key */}
+              <div className="pt-4 border-t border-slate-100">
+                <button
+                  onClick={() => {
+                    if (confirm('¿Regenerar API Key? La anterior dejará de funcionar.')) {
+                      generarNuevaKey()
+                    }
+                  }}
+                  className="text-sm text-slate-500 hover:text-red-600 flex items-center gap-1"
+                >
+                  <Icon name="RefreshCw" size={14} />
+                  Regenerar API Key
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // ============================================
+  // IMPORTACIONES SHEETS VIEW - Cola de revisión
+  // ============================================
+  const ImportacionesSheetsView = () => {
+    const [importaciones, setImportaciones] = useState([])
+    const [loading, setLoading] = useState(true)
+    const [procesando, setProcesando] = useState(null)
+    const [filtro, setFiltro] = useState('pendientes') // pendientes, todos
+    const [stats, setStats] = useState({ pendientes: 0, sinConflicto: 0, conConflicto: 0 })
+    
+    const carreras = store.getCarreras() || []
+    
+    useEffect(() => {
+      cargarImportaciones()
+    }, [filtro])
+    
+    const cargarImportaciones = async () => {
+      setLoading(true)
+      try {
+        let query = supabase
+          .from('leads_importados')
+          .select('*')
+          .eq('institucion_id', user?.institucion_id)
+          .order('created_at', { ascending: false })
+        
+        if (filtro === 'pendientes') {
+          query = query.eq('estado', 'pendiente')
+        }
+        
+        const { data, error } = await query.limit(100)
+        
+        if (error) throw error
+        setImportaciones(data || [])
+        
+        // Cargar stats
+        const { data: statsData } = await supabase
+          .from('v_stats_importacion')
+          .select('*')
+          .eq('institucion_id', user?.institucion_id)
+          .single()
+        
+        if (statsData) {
+          setStats({
+            pendientes: statsData.pendientes || 0,
+            sinConflicto: statsData.sin_conflicto || 0,
+            conConflicto: statsData.con_conflicto || 0
+          })
+        }
+      } catch (e) {
+        console.error('Error cargando importaciones:', e)
+      }
+      setLoading(false)
+    }
+    
+    const aprobarLead = async (importacion, carreraId = null, guardarMapeo = false) => {
+      setProcesando(importacion.id)
+      try {
+        const { data, error } = await supabase.rpc('aprobar_lead_importado', {
+          p_lead_importado_id: importacion.id,
+          p_usuario_id: user?.id,
+          p_carrera_id: carreraId,
+          p_guardar_mapeo: guardarMapeo
+        })
+        
+        if (error) throw error
+        
+        if (data.success) {
+          setNotification({ type: 'success', message: 'Lead aprobado correctamente' })
+          cargarImportaciones()
+          loadData() // Recargar datos del dashboard
+        }
+      } catch (e) {
+        setNotification({ type: 'error', message: 'Error al aprobar: ' + e.message })
+      }
+      setProcesando(null)
+    }
+    
+    const rechazarLead = async (importacionId) => {
+      if (!confirm('¿Rechazar este lead? No se creará en el sistema.')) return
+      
+      setProcesando(importacionId)
+      try {
+        const { data, error } = await supabase.rpc('rechazar_lead_importado', {
+          p_lead_importado_id: importacionId,
+          p_usuario_id: user?.id
+        })
+        
+        if (error) throw error
+        
+        setNotification({ type: 'info', message: 'Lead rechazado' })
+        cargarImportaciones()
+      } catch (e) {
+        setNotification({ type: 'error', message: 'Error: ' + e.message })
+      }
+      setProcesando(null)
+    }
+    
+    const resolverDuplicado = async (importacionId, accion) => {
+      setProcesando(importacionId)
+      try {
+        if (accion === 'actualizar') {
+          const { data, error } = await supabase.rpc('resolver_duplicado_actualizar', {
+            p_lead_importado_id: importacionId,
+            p_usuario_id: user?.id
+          })
+          if (error) throw error
+          setNotification({ type: 'success', message: 'Lead existente actualizado' })
+        } else if (accion === 'crear') {
+          // Forzar creación ignorando duplicado
+          const importacion = importaciones.find(i => i.id === importacionId)
+          await aprobarLead(importacion, importacion.carrera_mapeada_id)
+          return
+        } else {
+          await rechazarLead(importacionId)
+          return
+        }
+        cargarImportaciones()
+        loadData()
+      } catch (e) {
+        setNotification({ type: 'error', message: 'Error: ' + e.message })
+      }
+      setProcesando(null)
+    }
+    
+    const aprobarTodosSinConflicto = async () => {
+      if (!confirm(`¿Aprobar ${stats.sinConflicto} leads sin conflictos?`)) return
+      
+      setProcesando('todos')
+      try {
+        const { data, error } = await supabase.rpc('aprobar_leads_sin_conflicto', {
+          p_institucion_id: user?.institucion_id,
+          p_usuario_id: user?.id
+        })
+        
+        if (error) throw error
+        
+        setNotification({ type: 'success', message: `${data.aprobados} leads aprobados` })
+        cargarImportaciones()
+        loadData()
+      } catch (e) {
+        setNotification({ type: 'error', message: 'Error: ' + e.message })
+      }
+      setProcesando(null)
+    }
+    
+    // Componente para card de lead importado
+    const LeadImportadoCard = ({ item }) => {
+      const datos = item.datos_raw || {}
+      const [carreraSeleccionada, setCarreraSeleccionada] = useState(item.carrera_mapeada_id || '')
+      const [guardarMapeo, setGuardarMapeo] = useState(false)
+      
+      const tieneConflictoCarrera = item.tipo_conflicto === 'carrera_no_existe' || item.tipo_conflicto === 'multiple'
+      const tieneConflictoDuplicado = item.tipo_conflicto === 'duplicado_email' || item.tipo_conflicto === 'duplicado_telefono'
+      
+      return (
+        <div className={`bg-white rounded-xl border ${item.tiene_conflicto ? 'border-amber-200' : 'border-slate-200'} overflow-hidden`}>
+          {/* Header con estado */}
+          <div className={`px-4 py-2 ${item.tiene_conflicto ? 'bg-amber-50' : 'bg-emerald-50'} flex items-center justify-between`}>
+            <span className={`text-sm font-medium ${item.tiene_conflicto ? 'text-amber-700' : 'text-emerald-700'}`}>
+              {item.tiene_conflicto ? (
+                <>
+                  <Icon name="AlertTriangle" size={14} className="inline mr-1" />
+                  {item.tipo_conflicto === 'duplicado_email' && 'Posible duplicado (email)'}
+                  {item.tipo_conflicto === 'duplicado_telefono' && 'Posible duplicado (teléfono)'}
+                  {item.tipo_conflicto === 'carrera_no_existe' && 'Carrera no encontrada'}
+                  {item.tipo_conflicto === 'multiple' && 'Múltiples conflictos'}
+                </>
+              ) : (
+                <>
+                  <Icon name="CheckCircle" size={14} className="inline mr-1" />
+                  Listo para aprobar
+                </>
+              )}
+            </span>
+            <span className="text-xs text-slate-500">
+              {new Date(item.created_at).toLocaleString()}
+            </span>
+          </div>
+          
+          {/* Datos del lead */}
+          <div className="p-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <span className="text-slate-500">Nombre:</span>
+                <span className="ml-2 font-medium">{datos.nombre}</span>
+              </div>
+              <div>
+                <span className="text-slate-500">Email:</span>
+                <span className="ml-2">{datos.email || '-'}</span>
+              </div>
+              <div>
+                <span className="text-slate-500">Teléfono:</span>
+                <span className="ml-2">{datos.telefono || '-'}</span>
+              </div>
+              <div>
+                <span className="text-slate-500">Carrera:</span>
+                <span className={`ml-2 ${tieneConflictoCarrera ? 'text-amber-600 font-medium' : ''}`}>
+                  {datos.carrera || '-'}
+                </span>
+              </div>
+            </div>
+            
+            {/* Conflicto duplicado */}
+            {tieneConflictoDuplicado && item.conflicto_detalles && (
+              <div className="bg-amber-50 rounded-lg p-3">
+                <p className="text-sm text-amber-800">
+                  <strong>Lead existente:</strong> {item.conflicto_detalles.lead_existente_nombre}
+                </p>
+                <p className="text-xs text-amber-600">
+                  Creado: {new Date(item.conflicto_detalles.lead_existente_fecha).toLocaleDateString()}
+                </p>
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={() => resolverDuplicado(item.id, 'actualizar')}
+                    disabled={procesando === item.id}
+                    className="flex-1 px-3 py-2 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-lg text-sm font-medium"
+                  >
+                    Actualizar existente
+                  </button>
+                  <button
+                    onClick={() => resolverDuplicado(item.id, 'crear')}
+                    disabled={procesando === item.id}
+                    className="flex-1 px-3 py-2 bg-violet-100 hover:bg-violet-200 text-violet-800 rounded-lg text-sm font-medium"
+                  >
+                    Crear nuevo
+                  </button>
+                  <button
+                    onClick={() => resolverDuplicado(item.id, 'ignorar')}
+                    disabled={procesando === item.id}
+                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-sm"
+                  >
+                    Ignorar
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {/* Conflicto carrera */}
+            {tieneConflictoCarrera && (
+              <div className="bg-amber-50 rounded-lg p-3">
+                <p className="text-sm text-amber-800 mb-2">
+                  La carrera "<strong>{item.carrera_original}</strong>" no existe. Selecciona una:
+                </p>
+                <select
+                  value={carreraSeleccionada}
+                  onChange={e => setCarreraSeleccionada(e.target.value)}
+                  className="w-full px-3 py-2 border border-amber-200 rounded-lg text-sm mb-2"
+                >
+                  <option value="">-- Seleccionar carrera --</option>
+                  {carreras.map(c => (
+                    <option key={c.id} value={c.id}>{c.nombre}</option>
+                  ))}
+                </select>
+                <label className="flex items-center gap-2 text-xs text-amber-700">
+                  <input
+                    type="checkbox"
+                    checked={guardarMapeo}
+                    onChange={e => setGuardarMapeo(e.target.checked)}
+                    className="rounded"
+                  />
+                  Recordar este mapeo para futuras importaciones
+                </label>
+              </div>
+            )}
+            
+            {/* Acciones */}
+            {!tieneConflictoDuplicado && (
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => aprobarLead(item, carreraSeleccionada || null, guardarMapeo)}
+                  disabled={procesando === item.id || (tieneConflictoCarrera && !carreraSeleccionada)}
+                  className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {procesando === item.id ? (
+                    <Icon name="Loader2" size={16} className="animate-spin" />
+                  ) : (
+                    <Icon name="Check" size={16} />
+                  )}
+                  Aprobar
+                </button>
+                <button
+                  onClick={() => rechazarLead(item.id)}
+                  disabled={procesando === item.id}
+                  className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg font-medium"
+                >
+                  <Icon name="X" size={16} />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )
+    }
+    
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-2xl p-6 text-white">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
+                <Icon name="Download" className="text-white" size={28} />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold">Importaciones desde Sheets</h1>
+                <p className="text-emerald-200">
+                  {stats.pendientes} pendientes • {stats.sinConflicto} sin conflictos
+                </p>
+              </div>
+            </div>
+            {stats.sinConflicto > 0 && (
+              <button
+                onClick={aprobarTodosSinConflicto}
+                disabled={procesando === 'todos'}
+                className="px-4 py-2 bg-white hover:bg-white/90 text-emerald-700 rounded-lg font-medium flex items-center gap-2"
+              >
+                <Icon name="CheckCircle" size={18} />
+                Aprobar todos sin conflictos ({stats.sinConflicto})
+              </button>
+            )}
+          </div>
+        </div>
+        
+        {/* Filtros */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setFiltro('pendientes')}
+            className={`px-4 py-2 rounded-lg font-medium ${filtro === 'pendientes' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}
+          >
+            Pendientes ({stats.pendientes})
+          </button>
+          <button
+            onClick={() => setFiltro('todos')}
+            className={`px-4 py-2 rounded-lg font-medium ${filtro === 'todos' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}
+          >
+            Todos
+          </button>
+          <button
+            onClick={cargarImportaciones}
+            className="px-3 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50"
+          >
+            <Icon name="RefreshCw" size={18} />
+          </button>
+        </div>
+        
+        {/* Lista */}
+        {loading ? (
+          <div className="text-center py-12">
+            <Icon name="Loader2" size={32} className="animate-spin text-slate-400 mx-auto mb-2" />
+            <p className="text-slate-500">Cargando importaciones...</p>
+          </div>
+        ) : importaciones.length === 0 ? (
+          <div className="bg-white rounded-xl p-12 text-center border border-slate-100">
+            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Icon name="Inbox" size={32} className="text-slate-400" />
+            </div>
+            <h3 className="font-semibold text-slate-800 mb-2">
+              {filtro === 'pendientes' ? 'Sin importaciones pendientes' : 'Sin importaciones'}
+            </h3>
+            <p className="text-slate-500">
+              Los leads que lleguen desde Google Sheets aparecerán aquí
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-4">
+            {importaciones.map(item => (
+              <LeadImportadoCard key={item.id} item={item} />
+            ))}
+          </div>
+        )}
       </div>
     )
   }
@@ -5358,6 +6032,7 @@ const handleImportCSV = async () => {
         {activeTab === 'formularios' && <FormulariosView />}
         {activeTab === 'usuarios' && <UsuariosView />}
         {activeTab === 'programas' && <ProgramasView />}
+        {activeTab === 'importaciones_sheets' && <ImportacionesSheetsView />}
         {activeTab === 'importar' && <ImportarView />}
         {activeTab === 'configuracion' && <ConfiguracionView />}
       </div>
