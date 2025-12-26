@@ -2642,25 +2642,37 @@ export default function Dashboard() {
     // Estado para modal de generación PDF
     const [generandoPDF, setGenerandoPDF] = useState(false)
     
-    // Función para generar PDF (sin dependencias externas - usa jsPDF)
+    // Función para cargar jsPDF desde CDN
+    const cargarJsPDF = () => {
+      return new Promise((resolve, reject) => {
+        // Si ya está cargado, usar el existente
+        if (window.jspdf) {
+          resolve(window.jspdf.jsPDF)
+          return
+        }
+        
+        // Cargar desde CDN
+        const script = document.createElement('script')
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
+        script.onload = () => {
+          if (window.jspdf) {
+            resolve(window.jspdf.jsPDF)
+          } else {
+            reject(new Error('jsPDF no se cargó correctamente'))
+          }
+        }
+        script.onerror = () => reject(new Error('Error cargando jsPDF desde CDN'))
+        document.head.appendChild(script)
+      })
+    }
+    
+    // Función para generar PDF (carga jsPDF desde CDN)
     const descargarPDF = async () => {
       setGenerandoPDF(true)
       
       try {
-        // Importar jsPDF dinámicamente
-        let jsPDF
-        try {
-          const module = await import('jspdf')
-          jsPDF = module.jsPDF
-        } catch (importError) {
-          // Si no está instalado, mostrar mensaje
-          setNotification({ 
-            type: 'error', 
-            message: 'Para exportar PDF, ejecuta: npm install jspdf' 
-          })
-          setGenerandoPDF(false)
-          return
-        }
+        // Cargar jsPDF desde CDN
+        const jsPDF = await cargarJsPDF()
         
         const pdf = new jsPDF('p', 'mm', 'a4')
         const pageWidth = pdf.internal.pageSize.getWidth()
@@ -3000,7 +3012,7 @@ export default function Dashboard() {
         console.error('Error generando PDF:', error)
         setNotification({ 
           type: 'error', 
-          message: 'Error al generar PDF. Instala jspdf: npm install jspdf' 
+          message: 'Error al generar PDF. Verifica tu conexión a internet.' 
         })
       }
       
