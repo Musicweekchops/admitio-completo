@@ -148,11 +148,13 @@ export function AuthProvider({ children }) {
         .eq('institucion_id', institucionId)
         .eq('activo', true)
 
-      // Cargar carreras
+      // Cargar carreras (solo activas)
       const { data: carreras } = await supabase
         .from('carreras')
         .select('*')
         .eq('institucion_id', institucionId)
+        .eq('activa', true)
+        .order('nombre', { ascending: true })
 
       // Cargar formularios
       const { data: formularios } = await supabase

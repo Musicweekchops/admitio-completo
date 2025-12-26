@@ -2211,6 +2211,10 @@ export function importarLeadsCSV(csvData, userId, mapeoColumnas = {}, opciones =
   
   console.log('🗺️ Mapeo de columnas:', mapeo)
   
+  // DEBUG: Mostrar carreras disponibles
+  const carrerasActivas = store.carreras.filter(c => c.activa !== false)
+  console.log('🎸 Carreras disponibles para matching:', carrerasActivas.map(c => ({ id: c.id, nombre: c.nombre, activa: c.activa })))
+  
   // Validar que al menos tengamos nombre
   if (mapeo.nombre === -1) {
     return { 
@@ -2289,8 +2293,14 @@ export function importarLeadsCSV(csvData, userId, mapeoColumnas = {}, opciones =
         // Extraer palabra base (primer palabra): "guitarra electrica" -> "guitarra"
         const palabraBase = carreraTextoNorm.split(/\s+/)[0]
         
+        // Filtrar solo carreras activas
+        const carrerasActivas = store.carreras.filter(c => c.activa !== false)
+        
+        // Ordenar por longitud de nombre (más cortos primero = más genéricos)
+        const carrerasOrdenadas = [...carrerasActivas].sort((a, b) => a.nombre.length - b.nombre.length)
+        
         // 1. Primero: coincidencia EXACTA (ignorando case y acentos)
-        let carreraEncontrada = store.carreras.find(c => {
+        let carreraEncontrada = carrerasOrdenadas.find(c => {
           const nombreNorm = c.nombre.toLowerCase()
             .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
             .trim()
@@ -2300,7 +2310,7 @@ export function importarLeadsCSV(csvData, userId, mapeoColumnas = {}, opciones =
         // 2. Si no hay exacta, buscar por palabra base al INICIO del nombre
         // "guitarra" matchea con "Guitarra" pero NO con "Bajo Guitarra"
         if (!carreraEncontrada) {
-          carreraEncontrada = store.carreras.find(c => {
+          carreraEncontrada = carrerasOrdenadas.find(c => {
             const nombreNorm = c.nombre.toLowerCase()
               .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
             const primeraPalabra = nombreNorm.split(/\s+/)[0]
@@ -2310,7 +2320,7 @@ export function importarLeadsCSV(csvData, userId, mapeoColumnas = {}, opciones =
         
         // 3. Si aún no hay, buscar que el nombre EMPIECE con el texto buscado
         if (!carreraEncontrada) {
-          carreraEncontrada = store.carreras.find(c => {
+          carreraEncontrada = carrerasOrdenadas.find(c => {
             const nombreNorm = c.nombre.toLowerCase()
               .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
             return nombreNorm.startsWith(palabraBase)

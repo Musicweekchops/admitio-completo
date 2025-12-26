@@ -5908,6 +5908,10 @@ const ImportarView = () => {
   const [historialImportaciones, setHistorialImportaciones] = useState([])
   const [estadisticasImport, setEstadisticasImport] = useState(null)
   const [selectedImportacion, setSelectedImportacion] = useState(null)
+  const [encargadoSeleccionado, setEncargadoSeleccionado] = useState('auto') // 'auto' = asignación automática
+  
+  // Obtener lista de encargados activos
+  const encargadosActivos = store.getEncargadosActivos() || []
   
   // Cargar historial al montar
   useEffect(() => {
@@ -5927,22 +5931,43 @@ const handleImportCSV = async () => {
     
     const reader = new FileReader()
     
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const csvData = e.target.result
-      const result = store.importarLeadsCSV(csvData, user?.id)
+      
+      // Pasar opciones con el encargado seleccionado
+      const opciones = {
+        asignarA: encargadoSeleccionado !== 'auto' ? encargadoSeleccionado : null
+      }
+      
+      const result = store.importarLeadsCSV(csvData, user?.id, {}, opciones)
       
       setImportResult(result)
       setImporting(false)
       
       if (result.success && result.importados > 0) {
+        // Obtener nombre del encargado si se seleccionó uno específico
+        const encargadoNombre = encargadoSeleccionado !== 'auto' 
+          ? encargadosActivos.find(e => e.id === encargadoSeleccionado)?.nombre 
+          : null
+        
         // Notificación de éxito
         setNotification({ 
           type: 'success', 
-          message: `✅ ${result.importados} leads importados correctamente${result.duplicados > 0 ? ` (${result.duplicados} duplicados omitidos)` : ''}` 
+          message: `✅ ${result.importados} leads importados${encargadoNombre ? ` y asignados a ${encargadoNombre}` : ''}${result.duplicados > 0 ? ` (${result.duplicados} duplicados omitidos)` : ''}` 
         })
         setTimeout(() => setNotification(null), 5000)
         cargarHistorial()
+        
+        // IMPORTANTE: Recargar desde Supabase para ver los nuevos leads
+        try {
+          await reloadFromSupabase()
+        } catch (err) {
+          console.error('Error recargando:', err)
+        }
         loadData()
+        
+        // Cerrar modal de importación
+        if (typeof setShowImportModal === 'function') setShowImportModal(false)
       }
     }
     
@@ -6045,6 +6070,37 @@ const handleImportCSV = async () => {
             <Icon name="Download" size={14} />
             Descargar plantilla de ejemplo
           </button>
+        </div>
+        
+        {/* Selector de encargado para asignación */}
+        <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 mb-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-violet-100 rounded-lg">
+              <Icon name="UserPlus" size={20} className="text-violet-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm text-violet-800 font-medium mb-2">Asignar leads a:</p>
+              <select
+                value={encargadoSeleccionado}
+                onChange={(e) => setEncargadoSeleccionado(e.target.value)}
+                className="w-full px-4 py-2.5 border border-violet-300 rounded-lg text-slate-700 bg-white focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
+              >
+                <option value="auto">🔄 Asignación automática (round-robin)</option>
+                <option value="" disabled>──────────────────</option>
+                {encargadosActivos.map(enc => (
+                  <option key={enc.id} value={enc.id}>
+                    👤 {enc.nombre}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-violet-600 mt-2">
+                {encargadoSeleccionado === 'auto' 
+                  ? 'Los leads se distribuirán automáticamente entre los encargados activos'
+                  : `Todos los leads se asignarán a ${encargadosActivos.find(e => e.id === encargadoSeleccionado)?.nombre || 'el encargado seleccionado'}`
+                }
+              </p>
+            </div>
+          </div>
         </div>
         
         <div className="flex items-center gap-4">
