@@ -2641,16 +2641,26 @@ export default function Dashboard() {
     
     // Estado para modal de generación PDF
     const [generandoPDF, setGenerandoPDF] = useState(false)
-    const [showPDFPreview, setShowPDFPreview] = useState(false)
     
-    // Función para generar PDF con gráficos
+    // Función para generar PDF (sin dependencias externas - usa jsPDF)
     const descargarPDF = async () => {
       setGenerandoPDF(true)
       
       try {
-        // Importar dinámicamente las librerías
-        const html2canvas = (await import('html2canvas')).default
-        const { jsPDF } = await import('jspdf')
+        // Importar jsPDF dinámicamente
+        let jsPDF
+        try {
+          const module = await import('jspdf')
+          jsPDF = module.jsPDF
+        } catch (importError) {
+          // Si no está instalado, mostrar mensaje
+          setNotification({ 
+            type: 'error', 
+            message: 'Para exportar PDF, ejecuta: npm install jspdf' 
+          })
+          setGenerandoPDF(false)
+          return
+        }
         
         const pdf = new jsPDF('p', 'mm', 'a4')
         const pageWidth = pdf.internal.pageSize.getWidth()
@@ -2662,6 +2672,10 @@ export default function Dashboard() {
         const violetRGB = [139, 92, 246]
         const slateRGB = [100, 116, 139]
         const emeraldRGB = [16, 185, 129]
+        const amberRGB = [245, 158, 11]
+        const blueRGB = [59, 130, 246]
+        const purpleRGB = [168, 85, 247]
+        const cyanRGB = [6, 182, 212]
         
         // ============ PÁGINA 1: RESUMEN EJECUTIVO ============
         
@@ -2692,7 +2706,7 @@ export default function Dashboard() {
         yPosition = 55
         
         // ============ KPI PRINCIPAL: CONVERSIÓN ============
-        pdf.setFillColor(245, 243, 255) // violet-50
+        pdf.setFillColor(245, 243, 255)
         pdf.roundedRect(margin, yPosition, pageWidth - margin * 2, 35, 3, 3, 'F')
         
         pdf.setTextColor(...violetRGB)
@@ -2722,16 +2736,16 @@ export default function Dashboard() {
         
         const kpis = [
           { label: 'Total Leads', value: estadisticas?.total || 0, subtext: cambios.leads !== 0 ? `${cambios.leads > 0 ? '+' : ''}${cambios.leads} vs anterior` : '', color: violetRGB },
-          { label: 'Matrículas', value: estadisticas?.matriculados || 0, subtext: `Meta: ${Math.round((estadisticas?.matriculados || 0) * 1.2)} (+20%)`, color: emeraldRGB },
-          { label: 'Tiempo Respuesta', value: estadisticas?.tiempoRespuestaPromedio ? `${estadisticas.tiempoRespuestaPromedio}h` : '-', subtext: 'Primer contacto', color: [245, 158, 11] },
-          { label: 'Ciclo de Cierre', value: estadisticas?.tiempoCierrePromedio ? `${estadisticas.tiempoCierrePromedio}d` : '-', subtext: 'Días promedio', color: [168, 85, 247] }
+          { label: 'Matrículas', value: estadisticas?.matriculados || 0, subtext: `${estadisticas?.activos || 0} en proceso`, color: emeraldRGB },
+          { label: 'Tiempo Respuesta', value: estadisticas?.tiempoRespuestaPromedio ? `${estadisticas.tiempoRespuestaPromedio}h` : '-', subtext: 'Primer contacto', color: amberRGB },
+          { label: 'Ciclo de Cierre', value: estadisticas?.tiempoCierrePromedio ? `${estadisticas.tiempoCierrePromedio}d` : '-', subtext: 'Días promedio', color: purpleRGB }
         ]
         
         kpis.forEach((kpi, idx) => {
           const x = margin + (idx % 2) * (kpiWidth + 10)
           const y = yPosition + Math.floor(idx / 2) * (kpiHeight + 5)
           
-          pdf.setFillColor(248, 250, 252) // slate-50
+          pdf.setFillColor(248, 250, 252)
           pdf.roundedRect(x, y, kpiWidth, kpiHeight, 2, 2, 'F')
           
           pdf.setTextColor(...slateRGB)
@@ -2752,87 +2766,119 @@ export default function Dashboard() {
         yPosition += kpiHeight * 2 + 20
         
         // ============ EMBUDO DE CONVERSIÓN ============
-        pdf.setTextColor(30, 41, 59) // slate-800
+        pdf.setTextColor(30, 41, 59)
         pdf.setFontSize(14)
         pdf.setFont('helvetica', 'bold')
         pdf.text('Embudo de Conversión', margin, yPosition)
         yPosition += 8
         
         const embudoColores = {
-          'Nuevos': [245, 158, 11],
-          'Contactados': [59, 130, 246],
-          'Seguimiento': [168, 85, 247],
-          'Examen': [6, 182, 212],
-          'Matriculados': [16, 185, 129]
+          'Nuevos': amberRGB,
+          'Contactados': blueRGB,
+          'Seguimiento': purpleRGB,
+          'Examen': cyanRGB,
+          'Matriculados': emeraldRGB
         }
         
         const barHeight = 12
-        const maxBarWidth = pageWidth - margin * 2 - 40
+        const maxBarWidth = pageWidth - margin * 2 - 50
         
         datosEmbudo.forEach((item, idx) => {
           const y = yPosition + idx * (barHeight + 4)
-          const barWidth = Math.max(5, (item.cantidad / (estadisticas?.total || 1)) * maxBarWidth)
+          const barWidth = Math.max(8, (item.cantidad / Math.max(1, estadisticas?.total || 1)) * maxBarWidth)
           
           // Etiqueta
           pdf.setTextColor(...slateRGB)
           pdf.setFontSize(9)
+          pdf.setFont('helvetica', 'normal')
           pdf.text(item.etapa, margin, y + 8)
           
           // Barra
-          pdf.setFillColor(...(embudoColores[item.etapa] || [139, 92, 246]))
-          pdf.roundedRect(margin + 30, y, barWidth, barHeight, 2, 2, 'F')
+          pdf.setFillColor(...(embudoColores[item.etapa] || violetRGB))
+          pdf.roundedRect(margin + 35, y, barWidth, barHeight, 2, 2, 'F')
           
-          // Valor
+          // Valor dentro de la barra
           pdf.setTextColor(255, 255, 255)
           pdf.setFontSize(9)
           pdf.setFont('helvetica', 'bold')
           if (barWidth > 20) {
-            pdf.text(String(item.cantidad), margin + 32, y + 8)
+            pdf.text(String(item.cantidad), margin + 38, y + 8)
           }
           
-          // Porcentaje
+          // Porcentaje al final
           pdf.setTextColor(...slateRGB)
           pdf.setFont('helvetica', 'normal')
-          pdf.text(`${item.percent}%`, margin + 35 + barWidth, y + 8)
+          pdf.text(`${item.percent}%`, margin + 40 + barWidth, y + 8)
         })
         
         yPosition += datosEmbudo.length * (barHeight + 4) + 15
         
-        // ============ PÁGINA 2: GRÁFICO TENDENCIA ============
+        // ============ PÁGINA 2: GRÁFICO + TABLAS ============
         pdf.addPage()
         yPosition = margin
         
-        // Título
+        // Título gráfico
         pdf.setTextColor(30, 41, 59)
         pdf.setFontSize(14)
         pdf.setFont('helvetica', 'bold')
         pdf.text('Tendencia de Leads', margin, yPosition + 5)
         yPosition += 15
         
-        // Capturar gráfico del DOM
-        const chartElement = document.querySelector('[data-chart-tendencia]')
-        if (chartElement) {
-          const canvas = await html2canvas(chartElement, { 
-            scale: 2, 
-            backgroundColor: '#ffffff',
-            logging: false 
+        // Dibujar gráfico de barras manualmente
+        const chartData = datosGrafico.slice(-12) // Últimos 12 períodos
+        if (chartData.length > 0) {
+          const chartHeight = 50
+          const chartWidth = pageWidth - margin * 2
+          const barWidthChart = (chartWidth - 20) / chartData.length
+          const maxVal = Math.max(...chartData.map(d => d.total), 1)
+          
+          // Fondo del gráfico
+          pdf.setFillColor(250, 250, 252)
+          pdf.rect(margin, yPosition, chartWidth, chartHeight, 'F')
+          
+          // Líneas de guía horizontales
+          pdf.setDrawColor(230, 230, 235)
+          for (let i = 0; i <= 4; i++) {
+            const lineY = yPosition + (chartHeight / 4) * i
+            pdf.line(margin, lineY, margin + chartWidth, lineY)
+          }
+          
+          // Barras
+          chartData.forEach((d, i) => {
+            const barX = margin + 10 + i * barWidthChart
+            const barH = (d.total / maxVal) * (chartHeight - 10)
+            const barY = yPosition + chartHeight - barH - 5
+            
+            // Barra total (violeta)
+            pdf.setFillColor(...violetRGB)
+            pdf.rect(barX, barY, barWidthChart - 4, barH, 'F')
+            
+            // Barra matriculados (verde) superpuesta
+            if (d.matriculados > 0) {
+              const matrH = (d.matriculados / maxVal) * (chartHeight - 10)
+              pdf.setFillColor(...emeraldRGB)
+              pdf.rect(barX, yPosition + chartHeight - matrH - 5, barWidthChart - 4, matrH, 'F')
+            }
           })
-          const imgData = canvas.toDataURL('image/png')
-          const imgWidth = pageWidth - margin * 2
-          const imgHeight = (canvas.height / canvas.width) * imgWidth
-          pdf.addImage(imgData, 'PNG', margin, yPosition, imgWidth, Math.min(imgHeight, 80))
-          yPosition += Math.min(imgHeight, 80) + 10
+          
+          // Leyenda
+          yPosition += chartHeight + 5
+          pdf.setFontSize(8)
+          pdf.setFillColor(...violetRGB)
+          pdf.rect(margin, yPosition, 8, 4, 'F')
+          pdf.setTextColor(...slateRGB)
+          pdf.text('Total leads', margin + 10, yPosition + 3)
+          
+          pdf.setFillColor(...emeraldRGB)
+          pdf.rect(margin + 45, yPosition, 8, 4, 'F')
+          pdf.text('Matriculados', margin + 55, yPosition + 3)
+          
+          yPosition += 15
         } else {
-          // Si no hay gráfico, dibujar uno simple con los datos
           pdf.setTextColor(...slateRGB)
           pdf.setFontSize(10)
-          pdf.text('Datos de tendencia:', margin, yPosition + 5)
-          yPosition += 10
-          
-          datosGrafico.slice(-10).forEach((d, i) => {
-            pdf.text(`${d.fecha}: ${d.total} leads, ${d.matriculados} matrículas`, margin + 5, yPosition + i * 6)
-          })
-          yPosition += datosGrafico.slice(-10).length * 6 + 10
+          pdf.text('Sin datos de tendencia para el período seleccionado', margin, yPosition + 5)
+          yPosition += 15
         }
         
         // ============ RENDIMIENTO POR CARRERA ============
@@ -2856,28 +2902,30 @@ export default function Dashboard() {
         
         // Filas
         pdf.setFont('helvetica', 'normal')
-        Object.entries(estadisticas?.porCarrera || {})
+        const carrerasData = Object.entries(estadisticas?.porCarrera || {})
+          .filter(([_, v]) => v.total > 0)
           .sort((a, b) => b[1].total - a[1].total)
           .slice(0, 10)
-          .forEach(([id, data], idx) => {
-            const tasa = data.total > 0 ? Math.round((data.matriculados / data.total) * 100) : 0
-            const y = yPosition + idx * 7
-            
-            if (idx % 2 === 0) {
-              pdf.setFillColor(252, 252, 253)
-              pdf.rect(margin, y - 1, pageWidth - margin * 2, 7, 'F')
-            }
-            
-            pdf.setTextColor(30, 41, 59)
-            pdf.text(data.nombre?.substring(0, 35) || 'Sin carrera', margin + 3, y + 4)
-            pdf.text(String(data.total), margin + 90, y + 4)
-            pdf.setTextColor(...emeraldRGB)
-            pdf.text(String(data.matriculados), margin + 115, y + 4)
-            pdf.setTextColor(tasa >= 20 ? 16 : tasa >= 10 ? 245 : 100, tasa >= 20 ? 185 : tasa >= 10 ? 158 : 116, tasa >= 20 ? 129 : tasa >= 10 ? 11 : 139)
-            pdf.text(`${tasa}%`, margin + 145, y + 4)
-          })
+          
+        carrerasData.forEach(([id, data], idx) => {
+          const tasa = data.total > 0 ? Math.round((data.matriculados / data.total) * 100) : 0
+          const y = yPosition + idx * 7
+          
+          if (idx % 2 === 0) {
+            pdf.setFillColor(252, 252, 253)
+            pdf.rect(margin, y - 1, pageWidth - margin * 2, 7, 'F')
+          }
+          
+          pdf.setTextColor(30, 41, 59)
+          pdf.text((data.nombre || 'Sin carrera').substring(0, 35), margin + 3, y + 4)
+          pdf.text(String(data.total), margin + 90, y + 4)
+          pdf.setTextColor(...emeraldRGB)
+          pdf.text(String(data.matriculados), margin + 115, y + 4)
+          pdf.setTextColor(tasa >= 20 ? 16 : tasa >= 10 ? 245 : 100, tasa >= 20 ? 185 : tasa >= 10 ? 158 : 116, tasa >= 20 ? 129 : tasa >= 10 ? 11 : 139)
+          pdf.text(`${tasa}%`, margin + 145, y + 4)
+        })
         
-        yPosition += Object.keys(estadisticas?.porCarrera || {}).slice(0, 10).length * 7 + 15
+        yPosition += carrerasData.length * 7 + 15
         
         // ============ RENDIMIENTO POR ENCARGADO ============
         if (yPosition > pageHeight - 60) {
@@ -2904,30 +2952,31 @@ export default function Dashboard() {
         yPosition += 10
         
         pdf.setFont('helvetica', 'normal')
-        Object.entries(estadisticas?.porEncargado || {})
+        const encargadosData = Object.entries(estadisticas?.porEncargado || {})
           .filter(([_, v]) => v.total > 0)
           .sort((a, b) => (b[1].tasa || 0) - (a[1].tasa || 0))
           .slice(0, 8)
-          .forEach(([id, data], idx) => {
-            const y = yPosition + idx * 7
-            
-            if (idx % 2 === 0) {
-              pdf.setFillColor(252, 252, 253)
-              pdf.rect(margin, y - 1, pageWidth - margin * 2, 7, 'F')
-            }
-            
-            pdf.setTextColor(30, 41, 59)
-            pdf.text(data.nombre?.substring(0, 30) || 'Sin asignar', margin + 3, y + 4)
-            pdf.text(String(data.total), margin + 80, y + 4)
-            pdf.setTextColor(...emeraldRGB)
-            pdf.text(String(data.matriculados), margin + 105, y + 4)
-            
-            const tasa = data.tasa || 0
-            pdf.setTextColor(tasa >= 25 ? 16 : tasa >= 15 ? 245 : 100, tasa >= 25 ? 185 : tasa >= 15 ? 158 : 116, tasa >= 25 ? 129 : tasa >= 15 ? 11 : 139)
-            pdf.text(`${tasa}%`, margin + 140, y + 4)
-          })
+          
+        encargadosData.forEach(([id, data], idx) => {
+          const y = yPosition + idx * 7
+          
+          if (idx % 2 === 0) {
+            pdf.setFillColor(252, 252, 253)
+            pdf.rect(margin, y - 1, pageWidth - margin * 2, 7, 'F')
+          }
+          
+          pdf.setTextColor(30, 41, 59)
+          pdf.text((data.nombre || 'Sin asignar').substring(0, 30), margin + 3, y + 4)
+          pdf.text(String(data.total), margin + 80, y + 4)
+          pdf.setTextColor(...emeraldRGB)
+          pdf.text(String(data.matriculados), margin + 105, y + 4)
+          
+          const tasa = data.tasa || 0
+          pdf.setTextColor(tasa >= 25 ? 16 : tasa >= 15 ? 245 : 100, tasa >= 25 ? 185 : tasa >= 15 ? 158 : 116, tasa >= 25 ? 129 : tasa >= 15 ? 11 : 139)
+          pdf.text(`${tasa}%`, margin + 140, y + 4)
+        })
         
-        // ============ FOOTER ============
+        // ============ FOOTER EN TODAS LAS PÁGINAS ============
         const totalPages = pdf.internal.getNumberOfPages()
         for (let i = 1; i <= totalPages; i++) {
           pdf.setPage(i)
@@ -2942,15 +2991,17 @@ export default function Dashboard() {
         }
         
         // Descargar
-        pdf.save(`Reporte_Admisiones_${nombreInstitucion.replace(/\s+/g, '_')}_${fechaInicio}.pdf`)
+        const fileName = `Reporte_Admisiones_${nombreInstitucion.replace(/[^a-zA-Z0-9]/g, '_')}_${fechaInicio}.pdf`
+        pdf.save(fileName)
         
         setNotification({ type: 'success', message: 'PDF generado correctamente' })
-        setTimeout(() => setNotification(null), 3000)
         
       } catch (error) {
         console.error('Error generando PDF:', error)
-        setNotification({ type: 'error', message: 'Error al generar PDF. Verifica que las librerías estén instaladas.' })
-        setTimeout(() => setNotification(null), 5000)
+        setNotification({ 
+          type: 'error', 
+          message: 'Error al generar PDF. Instala jspdf: npm install jspdf' 
+        })
       }
       
       setGenerandoPDF(false)
