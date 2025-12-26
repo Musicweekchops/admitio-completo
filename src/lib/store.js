@@ -1768,6 +1768,16 @@ export function getCarreraById(id) {
 }
 
 export function createCarrera(data) {
+  console.log('🎓 Creando carrera:', data)
+  
+  const institucionId = getInstitucionIdFromStore()
+  console.log('📍 Institución ID:', institucionId)
+  
+  if (!institucionId) {
+    console.error('❌ No se puede crear carrera: institucionId es null')
+    return null
+  }
+  
   const nueva = {
     id: `carrera-${Date.now()}`, // ID temporal, Supabase generará UUID
     nombre: data.nombre,
@@ -1779,11 +1789,9 @@ export function createCarrera(data) {
   saveStore()
   
   // Sincronizar con Supabase
-  const institucionId = getInstitucionIdFromStore()
-  if (institucionId) {
-    syncCrearCarrera(institucionId, nueva)
-  }
+  syncCrearCarrera(institucionId, nueva)
   
+  console.log('✅ Carrera creada localmente:', nueva)
   return nueva
 }
 

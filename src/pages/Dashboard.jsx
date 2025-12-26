@@ -5644,7 +5644,7 @@ function getSupabaseAnonKey() {
                 Exportar
               </button>
               <button
-                onClick={handleNuevoLead}
+                onClick={() => setShowModal(true)}
                 className="px-4 py-2 bg-white hover:bg-white/90 text-violet-600 rounded-lg font-medium flex items-center gap-2"
               >
                 <Icon name="Plus" size={18} />
@@ -5694,7 +5694,7 @@ function getSupabaseAnonKey() {
               </p>
               {!searchTerm && (
                 <button
-                  onClick={handleNuevoLead}
+                  onClick={() => setShowModal(true)}
                   className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium"
                 >
                   Crear primer programa
