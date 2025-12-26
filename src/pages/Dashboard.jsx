@@ -3943,10 +3943,18 @@ export default function Dashboard() {
     const [editingForm, setEditingForm] = useState(null)
     const [localShowModal, setLocalShowModal] = useState(false)
     
-    const handleDeleteForm = (formId) => {
+    const handleDeleteForm = async (formId) => {
       if (confirm('¿Eliminar formulario?')) {
-        store.deleteFormulario(formId)
-        loadData()
+        const result = await store.deleteFormulario(formId)
+        if (result?.error) {
+          setNotification({ type: 'error', message: result.error })
+          setTimeout(() => setNotification(null), 3000)
+        } else {
+          setNotification({ type: 'success', message: 'Formulario eliminado' })
+          setTimeout(() => setNotification(null), 3000)
+          await reloadFromSupabase()
+          loadData()
+        }
       }
     }
     
@@ -4150,8 +4158,8 @@ export default function Dashboard() {
       setMigrateToUser('')
     }
     
-    const handleDeleteUser = () => {
-      const { user, leadsCount } = localShowDeleteModal
+    const handleDeleteUser = async () => {
+      const { user: targetUser, leadsCount } = localShowDeleteModal
       
       // Si tiene leads y no seleccionó migración
       if (leadsCount > 0 && !migrateToUser) {
@@ -4171,9 +4179,11 @@ export default function Dashboard() {
       }
       
       // Eliminar usuario
-      const result = store.deleteUsuario(user.id)
+      const result = await store.deleteUsuario(targetUser.id)
       if (result.success) {
-        setNotification({ type: 'success', message: 'Usuario eliminado' })
+        setNotification({ type: 'success', message: 'Usuario eliminado correctamente' })
+        // Recargar desde Supabase
+        await reloadFromSupabase()
       } else {
         setNotification({ type: 'error', message: result.error })
       }
@@ -5461,24 +5471,41 @@ function getSupabaseAnonKey() {
       { id: 'bg-teal-500', nombre: 'Teal', hex: '#14b8a6' },
     ]
     
-    const handleCreate = (data) => {
-      store.createCarrera(data)
-      setShowModal(false)
-      loadData()
+    const handleCreate = async (data) => {
+      const result = await store.createCarrera(data)
+      if (result?.error) {
+        setDeleteError(result.error)
+        setTimeout(() => setDeleteError(null), 5000)
+      } else {
+        setShowModal(false)
+        // Recargar desde Supabase
+        await reloadFromSupabase()
+        loadData()
+      }
     }
     
-    const handleUpdate = (id, data) => {
-      store.updateCarrera(id, data)
-      setEditingPrograma(null)
-      loadData()
+    const handleUpdate = async (id, data) => {
+      const result = await store.updateCarrera(id, data)
+      if (result?.error) {
+        setDeleteError(result.error)
+        setTimeout(() => setDeleteError(null), 5000)
+      } else {
+        setEditingPrograma(null)
+        await reloadFromSupabase()
+        loadData()
+      }
     }
     
-    const handleDelete = (id) => {
-      const result = store.deleteCarrera(id)
+    const handleDelete = async (id) => {
+      const result = await store.deleteCarrera(id)
       if (result.error === 'TIENE_LEADS') {
         setDeleteError(`No se puede eliminar: tiene ${result.count} leads asociados. Reasigna los leads primero.`)
         setTimeout(() => setDeleteError(null), 5000)
+      } else if (result.error) {
+        setDeleteError(result.error)
+        setTimeout(() => setDeleteError(null), 5000)
       } else {
+        await reloadFromSupabase()
         loadData()
       }
     }
@@ -5521,13 +5548,18 @@ function getSupabaseAnonKey() {
       reader.readAsText(file)
     }
     
-    const handleImport = () => {
+    const handleImport = async () => {
       if (!importData || importData.length === 0) return
       
-      store.importarCarreras(importData)
-      setShowImportModal(false)
-      setImportData(null)
-      loadData()
+      const result = await store.importarCarreras(importData)
+      if (result?.error) {
+        setImportError(result.error)
+      } else {
+        setShowImportModal(false)
+        setImportData(null)
+        await reloadFromSupabase()
+        loadData()
+      }
     }
     
     const handleExport = () => {

@@ -22,6 +22,9 @@ import {
   CORREOS_ENVIADOS_INICIAL
 } from '../data/mockData'
 
+// Importar cliente Supabase
+import { supabase } from './supabase'
+
 // Importar funciones de sincronización con Supabase
 import { 
   syncCrearLead, 
@@ -385,16 +388,36 @@ export function marcarReporteLeido(reporteId) {
 }
 
 // Eliminar usuario (con opción de migrar primero)
-export function deleteUsuario(id) {
+export async function deleteUsuario(id) {
+  console.log('🗑️ Eliminando usuario de Supabase:', id)
+  
   // Verificar que no tenga leads asignados
   const leadsDelUsuario = store.consultas.filter(c => c.asignado_a === id)
   if (leadsDelUsuario.length > 0) {
     return { success: false, error: 'El usuario tiene leads asignados', leadsCount: leadsDelUsuario.length }
   }
   
-  store.usuarios = store.usuarios.filter(u => u.id !== id)
-  saveStore()
-  return { success: true }
+  try {
+    const { error } = await supabase
+      .from('usuarios')
+      .delete()
+      .eq('id', id)
+    
+    if (error) {
+      console.error('❌ Error eliminando usuario:', error)
+      return { success: false, error: error.message }
+    }
+    
+    console.log('✅ Usuario eliminado de Supabase')
+    
+    // Eliminar del store local
+    store.usuarios = store.usuarios.filter(u => u.id !== id)
+    
+    return { success: true }
+  } catch (err) {
+    console.error('❌ Error:', err)
+    return { success: false, error: err.message }
+  }
 }
 
 // ============================================
@@ -816,16 +839,43 @@ export function updateConsulta(id, updates, userId) {
   return newConsulta
 }
 
-export function deleteConsulta(id) {
-  store.consultas = store.consultas.filter(c => c.id !== id)
-  store.actividad = store.actividad.filter(a => a.lead_id !== id)
-  store.recordatorios = store.recordatorios.filter(r => r.lead_id !== id)
-  store.cola_leads = store.cola_leads.filter(c => c.lead_id !== id)
-  saveStore()
+export async function deleteConsulta(id) {
+  console.log('🗑️ Eliminando lead:', id)
   
-  // ========== SYNC CON SUPABASE ==========
-  syncEliminarLead(id)
-  // ========================================
+  // Si es ID local (no UUID), solo eliminar localmente
+  if (!id || !id.includes('-') || id.startsWith('c-')) {
+    console.log('⚠️ Lead con ID local, eliminando solo localmente')
+    store.consultas = store.consultas.filter(c => c.id !== id)
+    store.actividad = store.actividad.filter(a => a.lead_id !== id)
+    store.recordatorios = store.recordatorios.filter(r => r.lead_id !== id)
+    store.cola_leads = store.cola_leads.filter(c => c.lead_id !== id)
+    return { success: true }
+  }
+  
+  try {
+    const { error } = await supabase
+      .from('leads')
+      .delete()
+      .eq('id', id)
+    
+    if (error) {
+      console.error('❌ Error eliminando lead:', error)
+      return { success: false, error: error.message }
+    }
+    
+    console.log('✅ Lead eliminado de Supabase')
+    
+    // Eliminar del store local
+    store.consultas = store.consultas.filter(c => c.id !== id)
+    store.actividad = store.actividad.filter(a => a.lead_id !== id)
+    store.recordatorios = store.recordatorios.filter(r => r.lead_id !== id)
+    store.cola_leads = store.cola_leads.filter(c => c.lead_id !== id)
+    
+    return { success: true }
+  } catch (err) {
+    console.error('❌ Error:', err)
+    return { success: false, error: err.message }
+  }
 }
 
 // Reactivar un lead descartado
@@ -1326,12 +1376,36 @@ export function updateFormulario(id, updates) {
   return store.formularios[index]
 }
 
-export function deleteFormulario(id) {
-  store.formularios = store.formularios.filter(f => f.id !== id)
-  saveStore()
+export async function deleteFormulario(id) {
+  console.log('🗑️ Eliminando formulario:', id)
   
-  // Sincronizar con Supabase
-  syncEliminarFormulario(id)
+  // Si es ID local, solo eliminar localmente
+  if (!id || !id.includes('-')) {
+    store.formularios = store.formularios.filter(f => f.id !== id)
+    return { success: true }
+  }
+  
+  try {
+    const { error } = await supabase
+      .from('formularios')
+      .delete()
+      .eq('id', id)
+    
+    if (error) {
+      console.error('❌ Error eliminando formulario:', error)
+      return { success: false, error: error.message }
+    }
+    
+    console.log('✅ Formulario eliminado de Supabase')
+    
+    // Eliminar del store local
+    store.formularios = store.formularios.filter(f => f.id !== id)
+    
+    return { success: true }
+  } catch (err) {
+    console.error('❌ Error:', err)
+    return { success: false, error: err.message }
+  }
 }
 
 export function generarEmbedCode(formId) {
@@ -1767,48 +1841,85 @@ export function getCarreraById(id) {
   return store.carreras.find(c => c.id === id)
 }
 
-export function createCarrera(data) {
-  console.log('🎓 Creando carrera:', data)
+export async function createCarrera(data) {
+  console.log('🎓 Creando carrera en Supabase:', data)
   
   const institucionId = getInstitucionIdFromStore()
   console.log('📍 Institución ID:', institucionId)
   
   if (!institucionId) {
     console.error('❌ No se puede crear carrera: institucionId es null')
-    return null
+    return { error: 'No hay institución configurada' }
   }
   
-  const nueva = {
-    id: `carrera-${Date.now()}`, // ID temporal, Supabase generará UUID
-    nombre: data.nombre,
-    color: data.color || 'bg-violet-500',
-    activa: true,
-    created_at: new Date().toISOString()
+  try {
+    const { data: nueva, error } = await supabase
+      .from('carreras')
+      .insert({
+        institucion_id: institucionId,
+        nombre: data.nombre,
+        color: data.color || 'bg-violet-500',
+        activa: true
+      })
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('❌ Error creando carrera en Supabase:', error)
+      return { error: error.message }
+    }
+    
+    console.log('✅ Carrera creada en Supabase:', nueva)
+    
+    // Agregar al store local para que se refleje inmediatamente
+    store.carreras.push(nueva)
+    
+    return nueva
+  } catch (err) {
+    console.error('❌ Error:', err)
+    return { error: err.message }
   }
-  store.carreras.push(nueva)
-  saveStore()
-  
-  // Sincronizar con Supabase
-  syncCrearCarrera(institucionId, nueva)
-  
-  console.log('✅ Carrera creada localmente:', nueva)
-  return nueva
 }
 
-export function updateCarrera(id, updates) {
-  const index = store.carreras.findIndex(c => c.id === id)
-  if (index === -1) return null
+export async function updateCarrera(id, updates) {
+  console.log('🎓 Actualizando carrera en Supabase:', id, updates)
   
-  store.carreras[index] = { ...store.carreras[index], ...updates }
-  saveStore()
-  
-  // Sincronizar con Supabase
-  syncActualizarCarrera(id, updates)
-  
-  return store.carreras[index]
+  try {
+    const supabaseUpdates = {}
+    if (updates.nombre !== undefined) supabaseUpdates.nombre = updates.nombre
+    if (updates.color !== undefined) supabaseUpdates.color = updates.color
+    if (updates.activa !== undefined) supabaseUpdates.activa = updates.activa
+    
+    const { data, error } = await supabase
+      .from('carreras')
+      .update(supabaseUpdates)
+      .eq('id', id)
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('❌ Error actualizando carrera:', error)
+      return { error: error.message }
+    }
+    
+    console.log('✅ Carrera actualizada en Supabase:', data)
+    
+    // Actualizar en store local
+    const index = store.carreras.findIndex(c => c.id === id)
+    if (index !== -1) {
+      store.carreras[index] = { ...store.carreras[index], ...data }
+    }
+    
+    return data
+  } catch (err) {
+    console.error('❌ Error:', err)
+    return { error: err.message }
+  }
 }
 
-export function deleteCarrera(id) {
+export async function deleteCarrera(id) {
+  console.log('🗑️ Eliminando carrera de Supabase:', id)
+  
   // Verificar si hay leads usando esta carrera
   const leadsConCarrera = store.consultas.filter(c => c.carrera_id === id)
   if (leadsConCarrera.length > 0) {
@@ -1816,34 +1927,66 @@ export function deleteCarrera(id) {
     return { error: 'TIENE_LEADS', count: leadsConCarrera.length }
   }
   
-  store.carreras = store.carreras.filter(c => c.id !== id)
-  saveStore()
-  
-  // Sincronizar con Supabase
-  syncEliminarCarrera(id)
-  
-  return { success: true }
+  try {
+    const { error } = await supabase
+      .from('carreras')
+      .delete()
+      .eq('id', id)
+    
+    if (error) {
+      console.error('❌ Error eliminando carrera:', error)
+      return { error: error.message }
+    }
+    
+    console.log('✅ Carrera eliminada de Supabase')
+    
+    // Eliminar del store local
+    store.carreras = store.carreras.filter(c => c.id !== id)
+    
+    return { success: true }
+  } catch (err) {
+    console.error('❌ Error:', err)
+    return { error: err.message }
+  }
 }
 
-export function importarCarreras(carrerasData) {
-  const nuevas = carrerasData.map((c, idx) => ({
-    id: `carrera-imp-${Date.now()}-${idx}`,
-    nombre: c.nombre,
-    color: c.color || 'bg-violet-500',
-    activa: true,
-    created_at: new Date().toISOString()
-  }))
+export async function importarCarreras(carrerasData) {
+  console.log('📥 Importando carreras a Supabase:', carrerasData.length)
   
-  store.carreras.push(...nuevas)
-  saveStore()
-  
-  // Sincronizar con Supabase
   const institucionId = getInstitucionIdFromStore()
-  if (institucionId) {
-    syncImportarCarreras(institucionId, nuevas)
+  if (!institucionId) {
+    console.error('❌ No se puede importar: institucionId es null')
+    return { error: 'No hay institución configurada' }
   }
   
-  return nuevas
+  try {
+    const insertData = carrerasData.map(c => ({
+      institucion_id: institucionId,
+      nombre: c.nombre,
+      color: c.color || 'bg-violet-500',
+      activa: true
+    }))
+    
+    const { data, error } = await supabase
+      .from('carreras')
+      .insert(insertData)
+      .select()
+    
+    if (error) {
+      console.error('❌ Error importando carreras:', error)
+      return { error: error.message }
+    }
+    
+    console.log('✅ Carreras importadas a Supabase:', data.length)
+    
+    // Agregar al store local
+    store.carreras.push(...data)
+    
+    return data
+  } catch (err) {
+    console.error('❌ Error:', err)
+    return { error: err.message }
+  }
 }
 
 export function getMedios() {
