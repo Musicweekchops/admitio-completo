@@ -2163,8 +2163,11 @@ function parseCSVLine(line) {
 }
 
 // Función principal: Importar leads desde CSV
-export function importarLeadsCSV(csvData, userId, mapeoColumnas = {}) {
+export function importarLeadsCSV(csvData, userId, mapeoColumnas = {}, opciones = {}) {
   console.log('📥 Iniciando importación de CSV...')
+  
+  // Opciones de importación
+  const { asignarA = null } = opciones // ID del encargado al que asignar todos los leads
   
   // Normalizar saltos de línea y filtrar vacías
   const lineas = csvData
@@ -2202,6 +2205,7 @@ export function importarLeadsCSV(csvData, userId, mapeoColumnas = {}) {
     email: mapeoColumnas.email ?? findColumn(['email', 'correo', 'mail']),
     telefono: mapeoColumnas.telefono ?? findColumn(['telefono', 'celular', 'fono', 'movil', 'phone', 'tel']),
     carrera: mapeoColumnas.carrera ?? findColumn(['carrera', 'instrumento', 'curso', 'programa', 'interes']),
+    medio: mapeoColumnas.medio ?? findColumn(['medio', 'fuente', 'origen', 'canal', 'source']),
     notas: mapeoColumnas.notas ?? findColumn(['nota', 'comentario', 'observacion', 'detalle', 'mensaje'])
   }
   
@@ -2237,6 +2241,7 @@ export function importarLeadsCSV(csvData, userId, mapeoColumnas = {}) {
       const email = getValue(mapeo.email)
       const telefono = getValue(mapeo.telefono)
       const carreraTexto = getValue(mapeo.carrera)
+      const medioTexto = getValue(mapeo.medio)
       const notas = getValue(mapeo.notas)
       
       // Validar nombre
@@ -2274,25 +2279,62 @@ export function importarLeadsCSV(csvData, userId, mapeoColumnas = {}) {
         }
       }
       
-      // Buscar carrera que coincida
-      let carrera_id = store.carreras[0]?.id // Default a primera carrera
+      // Buscar carrera que coincida con matching inteligente
+      let carrera_id = null // NO usar default, dejar null si no encuentra
       if (carreraTexto) {
         const carreraTextoNorm = carreraTexto.toLowerCase()
-        const carreraEncontrada = store.carreras.find(c => 
-          c.nombre.toLowerCase().includes(carreraTextoNorm) ||
-          carreraTextoNorm.includes(c.nombre.toLowerCase())
-        )
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Quitar acentos
+          .trim()
+        
+        // Extraer palabra base (primer palabra): "guitarra electrica" -> "guitarra"
+        const palabraBase = carreraTextoNorm.split(/\s+/)[0]
+        
+        // 1. Primero: coincidencia EXACTA (ignorando case y acentos)
+        let carreraEncontrada = store.carreras.find(c => {
+          const nombreNorm = c.nombre.toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .trim()
+          return nombreNorm === carreraTextoNorm
+        })
+        
+        // 2. Si no hay exacta, buscar por palabra base al INICIO del nombre
+        // "guitarra" matchea con "Guitarra" pero NO con "Bajo Guitarra"
+        if (!carreraEncontrada) {
+          carreraEncontrada = store.carreras.find(c => {
+            const nombreNorm = c.nombre.toLowerCase()
+              .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            const primeraPalabra = nombreNorm.split(/\s+/)[0]
+            return primeraPalabra === palabraBase
+          })
+        }
+        
+        // 3. Si aún no hay, buscar que el nombre EMPIECE con el texto buscado
+        if (!carreraEncontrada) {
+          carreraEncontrada = store.carreras.find(c => {
+            const nombreNorm = c.nombre.toLowerCase()
+              .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            return nombreNorm.startsWith(palabraBase)
+          })
+        }
+        
         if (carreraEncontrada) {
           carrera_id = carreraEncontrada.id
+          console.log(`🎸 Carrera mapeada: "${carreraTexto}" → "${carreraEncontrada.nombre}"`)
+        } else {
+          console.warn(`⚠️ Carrera no encontrada: "${carreraTexto}"`)
+          resultados.errores.push(`Línea ${i + 1}: Carrera "${carreraTexto}" no existe en el sistema`)
         }
       }
       
-      // Buscar medio "otro" o usar el primero
-      let medio_id = store.medios.find(m => 
-        m.id === 'otro' || 
-        m.nombre.toLowerCase() === 'otro' ||
-        m.nombre.toLowerCase().includes('import')
-      )?.id || store.medios[0]?.id
+      // Si no se encontró carrera, saltar este lead (no usar default)
+      if (!carrera_id) {
+        console.warn(`⚠️ Línea ${i + 1}: Sin carrera válida, omitiendo`)
+        continue
+      }
+      
+      // Medio: guardar texto directo del CSV
+      const medio_id = medioTexto || 'importacion'
+      console.log(`📱 Medio: "${medio_id}"`)
       
       // Crear el lead
       const nuevoLead = createConsulta({
@@ -2303,7 +2345,8 @@ export function importarLeadsCSV(csvData, userId, mapeoColumnas = {}) {
         medio_id,
         tipo_alumno: 'nuevo',
         notas: notas || 'Importado desde CSV',
-        origen_entrada: 'importacion'
+        origen_entrada: 'importacion',
+        asignado_a: asignarA || null // Asignar al encargado seleccionado
       }, userId, 'keymaster')
       
       resultados.importados++

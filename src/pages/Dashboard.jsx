@@ -666,11 +666,6 @@ export default function Dashboard() {
     }
   }
 
-  // Cargar datos inicial
-  useEffect(() => {
-    loadData()
-  }, [user])
-
   // ========== ACTUALIZACIÓN MANUAL + REALTIME ==========
   // Estilo Trello: Realtime para cambios, botón para forzar actualización
   
@@ -778,18 +773,50 @@ export default function Dashboard() {
   }, [planInfo?.plan, user?.institucion_id])
 
   function loadData() {
-    const data = store.getConsultas(user?.id, user?.rol_id)
+    console.log('📊 loadData() - Rol:', user?.rol_id, 'isRector:', isRector)
+    
+    // Para Rector: cargar TODOS los leads de la institución (para reportes)
+    // Para otros roles: usar filtro normal
+    let data
+    if (isRector) {
+      data = store.getConsultasParaReportes()
+      console.log('📊 Rector - Leads cargados:', data.length)
+      console.log('📊 Rector - Usuarios:', store.getTodosLosUsuarios()?.length || 0)
+      console.log('📊 Rector - Encargados:', store.getEncargadosActivos()?.length || 0)
+    } else {
+      data = store.getConsultas(user?.id, user?.rol_id)
+    }
+    
     setConsultas(data)
     
     if (isEncargado) {
       setMetricas(store.getMetricasEncargado(user.id))
       setLeadsHoy(store.getLeadsContactarHoy(user.id, user.rol_id))
-    } else if (isKeyMaster) {
+    } else if (isKeyMaster || isRector) {
+      // Rector también ve los leads a contactar hoy (para tener contexto)
       setLeadsHoy(store.getLeadsContactarHoy())
     }
     setMetricasGlobales(store.getMetricasGlobales())
     setFormularios(store.getFormularios())
   }
+
+  // Cargar datos inicial - con retry para asegurar que el store esté listo
+  useEffect(() => {
+    loadData()
+    
+    // Retry después de 500ms por si el store aún no tenía datos
+    const timer = setTimeout(() => {
+      if (isRector || isKeyMaster) {
+        const storeLeads = store.getConsultasParaReportes()
+        if (storeLeads.length > 0) {
+          console.log('📊 Retry - Recargando con', storeLeads.length, 'leads')
+          loadData()
+        }
+      }
+    }, 500)
+    
+    return () => clearTimeout(timer)
+  }, [user])
 
   // Helper para abrir modal de nuevo lead con validación de límite
   const handleNuevoLead = () => {
@@ -2370,9 +2397,12 @@ export default function Dashboard() {
       // Para otros: usar las consultas ya filtradas del dashboard
       let leads = isRector ? store.getConsultasParaReportes() : [...consultas]
       
+      console.log('📊 leadsReporte useMemo - isRector:', isRector, 'leads iniciales:', leads.length, 'consultas estado:', consultas.length)
+      
       // Si no hay consultas en el dashboard pero hay en el store, cargar del store
       if (leads.length === 0 && !isRector) {
         leads = store.getConsultasParaReportes()
+        console.log('📊 leadsReporte - Fallback a store:', leads.length)
       }
       
       // Filtrar por rol si es encargado (solo aplica si no es rector)
@@ -3311,8 +3341,60 @@ export default function Dashboard() {
     
     const hayFiltrosActivos = filtroEstados.length > 0 || filtroCarreras.length > 0 || filtroMedios.length > 0 || filtroEncargados.length > 0 || filtroTipoAlumno !== 'todos'
     
+    // Estado de carga
+    const [cargandoDatos, setCargandoDatos] = useState(false)
+    
+    // Función para recargar datos (especialmente para Rector)
+    const recargarDatosReporte = async () => {
+      setCargandoDatos(true)
+      try {
+        await reloadFromSupabase()
+        // Forzar recarga del store
+        store.reloadStore()
+        // Actualizar estado local
+        loadData()
+      } catch (e) {
+        console.error('Error recargando:', e)
+      }
+      setCargandoDatos(false)
+    }
+    
     return (
       <div className="space-y-6">
+        {/* Banner de bienvenida para Rector */}
+        {isRector && leadsReporte.length === 0 && (
+          <div className="bg-gradient-to-r from-violet-500 to-purple-600 rounded-xl p-6 text-white">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-white/20 rounded-xl">
+                <Icon name="BarChart2" size={28} />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-xl font-bold mb-2">Bienvenido al Panel de Reportes</h2>
+                <p className="text-violet-100 mb-4">
+                  Aquí podrás ver el rendimiento de admisiones, métricas de conversión y el progreso de cada encargado.
+                </p>
+                <button
+                  onClick={recargarDatosReporte}
+                  disabled={cargandoDatos}
+                  className="px-4 py-2 bg-white text-violet-600 rounded-lg font-medium hover:bg-violet-50 transition-colors flex items-center gap-2"
+                >
+                  {cargandoDatos ? (
+                    <>
+                      <Icon name="Loader2" size={18} className="animate-spin" />
+                      Cargando datos...
+                    </>
+                  ) : (
+                    <>
+                      <Icon name="RefreshCw" size={18} />
+                      Cargar datos de la institución
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
         {/* Header con selectores de período */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -3663,63 +3745,148 @@ export default function Dashboard() {
             {/* Tab: Encargados */}
             {activeTab === 'encargados' && (isKeyMaster || user?.rol_id === 'superadmin' || isRector) && (
               <div className="space-y-4">
-                <h3 className="font-semibold text-slate-800">Rendimiento por Encargado</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-slate-800">Rendimiento por Encargado</h3>
+                  <span className="text-sm text-slate-500">
+                    {Object.keys(estadisticas?.porEncargado || {}).filter(k => k !== 'sin_asignar').length} encargados activos
+                  </span>
+                </div>
+                
+                {/* Resumen rápido */}
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  <div className="bg-violet-50 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-violet-600">
+                      {Object.values(estadisticas?.porEncargado || {}).reduce((sum, e) => sum + e.total, 0)}
+                    </p>
+                    <p className="text-xs text-violet-600">Total asignados</p>
+                  </div>
+                  <div className="bg-emerald-50 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-emerald-600">
+                      {Object.values(estadisticas?.porEncargado || {}).reduce((sum, e) => sum + e.matriculados, 0)}
+                    </p>
+                    <p className="text-xs text-emerald-600">Matrículas totales</p>
+                  </div>
+                  <div className="bg-amber-50 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-amber-600">
+                      {(() => {
+                        const tasas = Object.values(estadisticas?.porEncargado || {}).filter(e => e.total > 0).map(e => e.tasa || 0)
+                        return tasas.length > 0 ? Math.round(tasas.reduce((a, b) => a + b, 0) / tasas.length) : 0
+                      })()}%
+                    </p>
+                    <p className="text-xs text-amber-600">Conversión promedio</p>
+                  </div>
+                </div>
+                
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr className="text-left text-sm text-slate-500 border-b border-slate-100">
                         <th className="pb-3 font-medium">Encargado</th>
-                        <th className="pb-3 text-center font-medium">Total</th>
-                        <th className="pb-3 text-center font-medium">Matriculados</th>
+                        <th className="pb-3 text-center font-medium">Leads</th>
+                        <th className="pb-3 text-center font-medium">Activos</th>
+                        <th className="pb-3 text-center font-medium">Matrículas</th>
                         <th className="pb-3 text-center font-medium">Conversión</th>
-                        <th className="pb-3 text-right font-medium">Tendencia</th>
+                        <th className="pb-3 text-right font-medium">Performance</th>
                       </tr>
                     </thead>
                     <tbody>
                       {Object.entries(estadisticas?.porEncargado || {})
-                        .filter(([_, v]) => v.total > 0)
+                        .filter(([id, _]) => id !== 'sin_asignar')
                         .sort((a, b) => (b[1].tasa || 0) - (a[1].tasa || 0))
-                        .map(([id, data]) => (
-                          <tr key={id} className="border-b border-slate-50 hover:bg-slate-50">
-                            <td className="py-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-violet-100 rounded-full flex items-center justify-center">
-                                  <span className="text-violet-600 font-medium text-sm">
-                                    {data.nombre?.charAt(0) || '?'}
-                                  </span>
+                        .map(([id, data]) => {
+                          // Calcular activos (no matriculados ni descartados)
+                          const activos = leadsReporte.filter(l => 
+                            l.asignado_a === id && !l.matriculado && !l.descartado
+                          ).length
+                          
+                          return (
+                            <tr key={id} className="border-b border-slate-50 hover:bg-slate-50">
+                              <td className="py-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-purple-600 rounded-full flex items-center justify-center">
+                                    <span className="text-white font-medium">
+                                      {data.nombre?.charAt(0)?.toUpperCase() || '?'}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="font-medium text-slate-800 block">{data.nombre || 'Sin nombre'}</span>
+                                    <span className="text-xs text-slate-400">Encargado</span>
+                                  </div>
                                 </div>
-                                <span className="font-medium text-slate-800">{data.nombre}</span>
+                              </td>
+                              <td className="py-4 text-center text-slate-600 font-medium">{data.total}</td>
+                              <td className="py-4 text-center">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                  activos > 5 ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                                }`}>
+                                  {activos}
+                                </span>
+                              </td>
+                              <td className="py-4 text-center text-emerald-600 font-bold">{data.matriculados}</td>
+                              <td className="py-4 text-center">
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-bold ${
+                                  (data.tasa || 0) >= 25 ? 'bg-emerald-100 text-emerald-700' :
+                                  (data.tasa || 0) >= 15 ? 'bg-amber-100 text-amber-700' :
+                                  (data.tasa || 0) > 0 ? 'bg-orange-100 text-orange-700' :
+                                  'bg-slate-100 text-slate-500'
+                                }`}>
+                                  {data.tasa || 0}%
+                                </span>
+                              </td>
+                              <td className="py-4 text-right">
+                                <div className="flex items-center gap-2 justify-end">
+                                  <div className="w-24 h-3 bg-slate-100 rounded-full overflow-hidden">
+                                    <div 
+                                      className={`h-full rounded-full transition-all ${
+                                        (data.tasa || 0) >= 25 ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' :
+                                        (data.tasa || 0) >= 15 ? 'bg-gradient-to-r from-amber-400 to-amber-500' :
+                                        'bg-gradient-to-r from-slate-300 to-slate-400'
+                                      }`}
+                                      style={{ width: `${Math.min(100, (data.tasa || 0) * 2)}%` }}
+                                    />
+                                  </div>
+                                  {(data.tasa || 0) >= 25 && <Icon name="TrendingUp" size={16} className="text-emerald-500" />}
+                                  {(data.tasa || 0) > 0 && (data.tasa || 0) < 15 && <Icon name="TrendingDown" size={16} className="text-orange-500" />}
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      
+                      {/* Fila de Sin Asignar si hay leads sin asignar */}
+                      {estadisticas?.porEncargado?.['sin_asignar']?.total > 0 && (
+                        <tr className="border-b border-slate-50 bg-amber-50/50">
+                          <td className="py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-amber-200 rounded-full flex items-center justify-center">
+                                <Icon name="AlertCircle" size={20} className="text-amber-600" />
                               </div>
-                            </td>
-                            <td className="py-4 text-center text-slate-600">{data.total}</td>
-                            <td className="py-4 text-center text-emerald-600 font-medium">{data.matriculados}</td>
-                            <td className="py-4 text-center">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium ${
-                                (data.tasa || 0) >= 25 ? 'bg-emerald-100 text-emerald-700' :
-                                (data.tasa || 0) >= 15 ? 'bg-amber-100 text-amber-700' :
-                                'bg-slate-100 text-slate-600'
-                              }`}>
-                                {data.tasa || 0}%
-                              </span>
-                            </td>
-                            <td className="py-4 text-right">
-                              <div className="w-16 h-2 bg-slate-100 rounded-full overflow-hidden ml-auto">
-                                <div 
-                                  className={`h-full rounded-full ${
-                                    (data.tasa || 0) >= 25 ? 'bg-emerald-500' :
-                                    (data.tasa || 0) >= 15 ? 'bg-amber-500' :
-                                    'bg-slate-400'
-                                  }`}
-                                  style={{ width: `${Math.min(100, (data.tasa || 0) * 2)}%` }}
-                                />
+                              <div>
+                                <span className="font-medium text-amber-800 block">Sin Asignar</span>
+                                <span className="text-xs text-amber-600">Requiere atención</span>
                               </div>
-                            </td>
-                          </tr>
-                        ))}
+                            </div>
+                          </td>
+                          <td className="py-4 text-center text-amber-700 font-medium">
+                            {estadisticas.porEncargado['sin_asignar'].total}
+                          </td>
+                          <td className="py-4 text-center text-amber-600">-</td>
+                          <td className="py-4 text-center text-amber-600">-</td>
+                          <td className="py-4 text-center text-amber-600">-</td>
+                          <td className="py-4 text-right">
+                            <span className="text-xs text-amber-600">Asignar leads</span>
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
-                  {Object.keys(estadisticas?.porEncargado || {}).length === 0 && (
-                    <p className="text-center text-slate-400 py-8">Sin datos de encargados</p>
+                  
+                  {Object.keys(estadisticas?.porEncargado || {}).filter(k => k !== 'sin_asignar').length === 0 && (
+                    <div className="text-center py-12">
+                      <Icon name="Users" size={48} className="text-slate-300 mx-auto mb-4" />
+                      <p className="text-slate-500 font-medium">No hay encargados con leads asignados</p>
+                      <p className="text-slate-400 text-sm mt-1">Los leads deben ser asignados a encargados para ver métricas</p>
+                    </div>
                   )}
                 </div>
               </div>
