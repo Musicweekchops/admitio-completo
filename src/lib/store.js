@@ -193,6 +193,32 @@ export function getEncargadosActivos() {
   return store.usuarios.filter(u => u.rol_id === 'encargado' && u.activo && !u.oculto)
 }
 
+// Obtener todos los usuarios (para reportes y mapeo de nombres)
+export function getTodosLosUsuarios() {
+  return store.usuarios
+}
+
+// Obtener nombre de usuario por ID
+export function getNombreUsuario(userId) {
+  if (!userId) return 'Sin asignar'
+  const usuario = store.usuarios.find(u => u.id === userId)
+  return usuario?.nombre || 'Usuario desconocido'
+}
+
+// Obtener nombre de carrera por ID
+export function getNombreCarrera(carreraId) {
+  if (!carreraId) return 'Sin carrera'
+  const carrera = store.carreras.find(c => c.id === carreraId)
+  return carrera?.nombre || 'Carrera desconocida'
+}
+
+// Obtener nombre de medio por ID
+export function getNombreMedio(medioId) {
+  if (!medioId) return 'Sin medio'
+  const medio = store.medios.find(m => m.id === medioId)
+  return medio?.nombre || medioId // Fallback al ID si no se encuentra
+}
+
 export function getRolesDisponibles(requesterId = null) {
   const requester = store.usuarios.find(u => u.id === requesterId)
   const isSuperAdmin = requester?.rol_id === 'superadmin'
@@ -374,23 +400,31 @@ export function deleteUsuario(id) {
 // ============================================
 // CONSULTAS / LEADS
 // ============================================
-export function getConsultas(userId = null, rol = null) {
+export function getConsultas(userId = null, rol = null, paraReportes = false) {
   let consultas = [...store.consultas]
   
-  // Filtrar por rol
-  if (rol === 'encargado' && userId) {
-    consultas = consultas.filter(c => c.asignado_a === userId)
-  }
-  // Asistente ve solo los leads que creó
-  if (rol === 'asistente' && userId) {
-    consultas = consultas.filter(c => c.creado_por === userId)
-  }
-  if (rol === 'rector') {
-    return [] // Rector no ve leads, solo reportes
+  // Filtrar por rol (excepto si es para reportes)
+  if (!paraReportes) {
+    if (rol === 'encargado' && userId) {
+      consultas = consultas.filter(c => c.asignado_a === userId)
+    }
+    // Asistente ve solo los leads que creó
+    if (rol === 'asistente' && userId) {
+      consultas = consultas.filter(c => c.creado_por === userId)
+    }
+    if (rol === 'rector') {
+      return [] // Rector no ve leads en listado, solo reportes
+    }
   }
   
   // Agregar datos relacionados
   return consultas.map(c => enrichConsulta(c))
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+}
+
+// Función específica para reportes - todos los leads sin filtro de rol
+export function getConsultasParaReportes() {
+  return store.consultas.map(c => enrichConsulta(c))
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
 }
 

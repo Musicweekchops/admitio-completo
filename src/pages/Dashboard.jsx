@@ -2364,12 +2364,18 @@ export default function Dashboard() {
     const [filtroTipoAlumno, setFiltroTipoAlumno] = useState('todos')
     const [showFilters, setShowFilters] = useState(false)
     
-    // USAR DATOS FRESCOS DEL DASHBOARD (ya sincronizados con Supabase)
-    // En lugar de store.getReporteLeads que puede estar desactualizado
+    // USAR DATOS FRESCOS - Para Rector usar todos los leads, para otros usar consultas del dashboard
     const leadsReporte = useMemo(() => {
-      let leads = [...consultas] // ← Usar consultas del Dashboard (sincronizadas)
+      // Para Rector: cargar todos los leads directamente del store
+      // Para otros: usar las consultas ya filtradas del dashboard
+      let leads = isRector ? store.getConsultasParaReportes() : [...consultas]
       
-      // Filtrar por rol si es encargado
+      // Si no hay consultas en el dashboard pero hay en el store, cargar del store
+      if (leads.length === 0 && !isRector) {
+        leads = store.getConsultasParaReportes()
+      }
+      
+      // Filtrar por rol si es encargado (solo aplica si no es rector)
       if (user?.rol_id === 'encargado' && user?.id) {
         leads = leads.filter(c => c.asignado_a === user.id)
       }
@@ -2417,7 +2423,7 @@ export default function Dashboard() {
       }
       
       return leads
-    }, [consultas, fechaInicio, fechaFin, filtroEstados, filtroCarreras, filtroMedios, filtroEncargados, filtroTipoAlumno, user])
+    }, [consultas, isRector, fechaInicio, fechaFin, filtroEstados, filtroCarreras, filtroMedios, filtroEncargados, filtroTipoAlumno, user])
     
     // Calcular estadísticas desde los leads filtrados
     const estadisticas = useMemo(() => {
@@ -2436,34 +2442,46 @@ export default function Dashboard() {
         descartado: descartados
       }
       
-      // Por carrera
+      // Por carrera - usar store para obtener nombres
       const porCarrera = {}
+      const todasCarreras = store.getCarreras()
       leadsReporte.forEach(c => {
         const carreraId = c.carrera_id || 'sin_carrera'
         if (!porCarrera[carreraId]) {
-          porCarrera[carreraId] = { total: 0, matriculados: 0, nombre: c.carrera?.nombre || c.carrera_nombre || 'Sin carrera' }
+          // Buscar nombre de carrera en store, luego en el lead, luego fallback
+          const carrera = todasCarreras.find(ca => ca.id === carreraId)
+          const nombreCarrera = carrera?.nombre || c.carrera?.nombre || c.carrera_nombre || 'Sin carrera'
+          porCarrera[carreraId] = { total: 0, matriculados: 0, nombre: nombreCarrera, color: carrera?.color }
         }
         porCarrera[carreraId].total++
         if (c.matriculado) porCarrera[carreraId].matriculados++
       })
       
-      // Por medio
+      // Por medio - usar store para obtener nombres
       const porMedio = {}
+      const todosLosMedios = store.getMedios()
       leadsReporte.forEach(c => {
         const medioId = c.medio_id || 'sin_medio'
         if (!porMedio[medioId]) {
-          porMedio[medioId] = { total: 0, matriculados: 0, nombre: c.medio?.nombre || medioId }
+          // Buscar nombre del medio en store
+          const medio = todosLosMedios.find(m => m.id === medioId)
+          const nombreMedio = medio?.nombre || c.medio?.nombre || medioId
+          porMedio[medioId] = { total: 0, matriculados: 0, nombre: nombreMedio, color: medio?.color }
         }
         porMedio[medioId].total++
         if (c.matriculado) porMedio[medioId].matriculados++
       })
       
-      // Por encargado
+      // Por encargado - usar store para obtener nombres
       const porEncargado = {}
+      const todosUsuarios = store.getTodosLosUsuarios()
       leadsReporte.forEach(c => {
         const encargadoId = c.asignado_a || 'sin_asignar'
         if (!porEncargado[encargadoId]) {
-          porEncargado[encargadoId] = { total: 0, matriculados: 0, nombre: c.encargado?.nombre || 'Sin asignar', tasa: 0 }
+          // Buscar nombre del encargado
+          const usuario = todosUsuarios.find(u => u.id === encargadoId)
+          const nombreEncargado = usuario?.nombre || c.encargado?.nombre || 'Sin asignar'
+          porEncargado[encargadoId] = { total: 0, matriculados: 0, nombre: nombreEncargado, tasa: 0 }
         }
         porEncargado[encargadoId].total++
         if (c.matriculado) porEncargado[encargadoId].matriculados++
@@ -2520,7 +2538,13 @@ export default function Dashboard() {
     
     // Calcular estadísticas del período anterior para comparación
     const estadisticasAnteriores = useMemo(() => {
-      let leads = [...consultas]
+      // Para Rector: usar todos los leads del store
+      let leads = isRector ? store.getConsultasParaReportes() : [...consultas]
+      
+      // Si no hay consultas pero hay en el store, cargar del store
+      if (leads.length === 0 && !isRector) {
+        leads = store.getConsultasParaReportes()
+      }
       
       // Filtrar por rol si es encargado
       if (user?.rol_id === 'encargado' && user?.id) {
@@ -2547,7 +2571,7 @@ export default function Dashboard() {
         matriculados,
         tasaConversion: total > 0 ? Math.round((matriculados / total) * 100) : 0
       }
-    }, [consultas, fechaInicioAnterior, fechaFinAnterior, user])
+    }, [consultas, isRector, fechaInicioAnterior, fechaFinAnterior, user])
     
     // Calcular cambios vs período anterior
     const cambios = useMemo(() => {
@@ -2613,6 +2637,323 @@ export default function Dashboard() {
       link.href = URL.createObjectURL(blob)
       link.download = `reporte_admisiones_${fechaInicio}_${fechaFin}.csv`
       link.click()
+    }
+    
+    // Estado para modal de generación PDF
+    const [generandoPDF, setGenerandoPDF] = useState(false)
+    const [showPDFPreview, setShowPDFPreview] = useState(false)
+    
+    // Función para generar PDF con gráficos
+    const descargarPDF = async () => {
+      setGenerandoPDF(true)
+      
+      try {
+        // Importar dinámicamente las librerías
+        const html2canvas = (await import('html2canvas')).default
+        const { jsPDF } = await import('jspdf')
+        
+        const pdf = new jsPDF('p', 'mm', 'a4')
+        const pageWidth = pdf.internal.pageSize.getWidth()
+        const pageHeight = pdf.internal.pageSize.getHeight()
+        const margin = 15
+        let yPosition = margin
+        
+        // Colores
+        const violetRGB = [139, 92, 246]
+        const slateRGB = [100, 116, 139]
+        const emeraldRGB = [16, 185, 129]
+        
+        // ============ PÁGINA 1: RESUMEN EJECUTIVO ============
+        
+        // Header con gradiente simulado
+        pdf.setFillColor(139, 92, 246)
+        pdf.rect(0, 0, pageWidth, 45, 'F')
+        
+        // Título
+        pdf.setTextColor(255, 255, 255)
+        pdf.setFontSize(24)
+        pdf.setFont('helvetica', 'bold')
+        pdf.text('Reporte de Admisiones', margin, 20)
+        
+        // Subtítulo
+        pdf.setFontSize(12)
+        pdf.setFont('helvetica', 'normal')
+        pdf.text(nombreInstitucion, margin, 30)
+        
+        // Período
+        const periodoTexto = {
+          'semana': 'Última semana',
+          'mes': 'Último mes',
+          'trimestre': 'Último trimestre',
+          'año': 'Último año'
+        }[periodo] || periodo
+        pdf.text(`Período: ${periodoTexto} | Generado: ${new Date().toLocaleDateString('es-CL')}`, margin, 38)
+        
+        yPosition = 55
+        
+        // ============ KPI PRINCIPAL: CONVERSIÓN ============
+        pdf.setFillColor(245, 243, 255) // violet-50
+        pdf.roundedRect(margin, yPosition, pageWidth - margin * 2, 35, 3, 3, 'F')
+        
+        pdf.setTextColor(...violetRGB)
+        pdf.setFontSize(10)
+        pdf.text('TASA DE CONVERSIÓN', margin + 5, yPosition + 10)
+        
+        pdf.setFontSize(36)
+        pdf.setFont('helvetica', 'bold')
+        pdf.text(`${estadisticas?.tasaConversion || 0}%`, margin + 5, yPosition + 28)
+        
+        // Comparación
+        pdf.setFontSize(10)
+        pdf.setFont('helvetica', 'normal')
+        const cambioTexto = cambios.conversion >= 0 ? `+${cambios.conversion}pp vs anterior` : `${cambios.conversion}pp vs anterior`
+        pdf.setTextColor(cambios.conversion >= 0 ? 16 : 239, cambios.conversion >= 0 ? 185 : 68, cambios.conversion >= 0 ? 129 : 68)
+        pdf.text(cambioTexto, margin + 50, yPosition + 15)
+        
+        // Detalle
+        pdf.setTextColor(...slateRGB)
+        pdf.text(`${estadisticas?.matriculados || 0} matrículas de ${estadisticas?.total || 0} leads`, margin + 50, yPosition + 25)
+        
+        yPosition += 45
+        
+        // ============ KPIS SECUNDARIOS (2x2) ============
+        const kpiWidth = (pageWidth - margin * 2 - 10) / 2
+        const kpiHeight = 28
+        
+        const kpis = [
+          { label: 'Total Leads', value: estadisticas?.total || 0, subtext: cambios.leads !== 0 ? `${cambios.leads > 0 ? '+' : ''}${cambios.leads} vs anterior` : '', color: violetRGB },
+          { label: 'Matrículas', value: estadisticas?.matriculados || 0, subtext: `Meta: ${Math.round((estadisticas?.matriculados || 0) * 1.2)} (+20%)`, color: emeraldRGB },
+          { label: 'Tiempo Respuesta', value: estadisticas?.tiempoRespuestaPromedio ? `${estadisticas.tiempoRespuestaPromedio}h` : '-', subtext: 'Primer contacto', color: [245, 158, 11] },
+          { label: 'Ciclo de Cierre', value: estadisticas?.tiempoCierrePromedio ? `${estadisticas.tiempoCierrePromedio}d` : '-', subtext: 'Días promedio', color: [168, 85, 247] }
+        ]
+        
+        kpis.forEach((kpi, idx) => {
+          const x = margin + (idx % 2) * (kpiWidth + 10)
+          const y = yPosition + Math.floor(idx / 2) * (kpiHeight + 5)
+          
+          pdf.setFillColor(248, 250, 252) // slate-50
+          pdf.roundedRect(x, y, kpiWidth, kpiHeight, 2, 2, 'F')
+          
+          pdf.setTextColor(...slateRGB)
+          pdf.setFontSize(9)
+          pdf.text(kpi.label, x + 5, y + 8)
+          
+          pdf.setTextColor(...kpi.color)
+          pdf.setFontSize(18)
+          pdf.setFont('helvetica', 'bold')
+          pdf.text(String(kpi.value), x + 5, y + 20)
+          
+          pdf.setTextColor(...slateRGB)
+          pdf.setFontSize(8)
+          pdf.setFont('helvetica', 'normal')
+          pdf.text(kpi.subtext, x + 45, y + 20)
+        })
+        
+        yPosition += kpiHeight * 2 + 20
+        
+        // ============ EMBUDO DE CONVERSIÓN ============
+        pdf.setTextColor(30, 41, 59) // slate-800
+        pdf.setFontSize(14)
+        pdf.setFont('helvetica', 'bold')
+        pdf.text('Embudo de Conversión', margin, yPosition)
+        yPosition += 8
+        
+        const embudoColores = {
+          'Nuevos': [245, 158, 11],
+          'Contactados': [59, 130, 246],
+          'Seguimiento': [168, 85, 247],
+          'Examen': [6, 182, 212],
+          'Matriculados': [16, 185, 129]
+        }
+        
+        const barHeight = 12
+        const maxBarWidth = pageWidth - margin * 2 - 40
+        
+        datosEmbudo.forEach((item, idx) => {
+          const y = yPosition + idx * (barHeight + 4)
+          const barWidth = Math.max(5, (item.cantidad / (estadisticas?.total || 1)) * maxBarWidth)
+          
+          // Etiqueta
+          pdf.setTextColor(...slateRGB)
+          pdf.setFontSize(9)
+          pdf.text(item.etapa, margin, y + 8)
+          
+          // Barra
+          pdf.setFillColor(...(embudoColores[item.etapa] || [139, 92, 246]))
+          pdf.roundedRect(margin + 30, y, barWidth, barHeight, 2, 2, 'F')
+          
+          // Valor
+          pdf.setTextColor(255, 255, 255)
+          pdf.setFontSize(9)
+          pdf.setFont('helvetica', 'bold')
+          if (barWidth > 20) {
+            pdf.text(String(item.cantidad), margin + 32, y + 8)
+          }
+          
+          // Porcentaje
+          pdf.setTextColor(...slateRGB)
+          pdf.setFont('helvetica', 'normal')
+          pdf.text(`${item.percent}%`, margin + 35 + barWidth, y + 8)
+        })
+        
+        yPosition += datosEmbudo.length * (barHeight + 4) + 15
+        
+        // ============ PÁGINA 2: GRÁFICO TENDENCIA ============
+        pdf.addPage()
+        yPosition = margin
+        
+        // Título
+        pdf.setTextColor(30, 41, 59)
+        pdf.setFontSize(14)
+        pdf.setFont('helvetica', 'bold')
+        pdf.text('Tendencia de Leads', margin, yPosition + 5)
+        yPosition += 15
+        
+        // Capturar gráfico del DOM
+        const chartElement = document.querySelector('[data-chart-tendencia]')
+        if (chartElement) {
+          const canvas = await html2canvas(chartElement, { 
+            scale: 2, 
+            backgroundColor: '#ffffff',
+            logging: false 
+          })
+          const imgData = canvas.toDataURL('image/png')
+          const imgWidth = pageWidth - margin * 2
+          const imgHeight = (canvas.height / canvas.width) * imgWidth
+          pdf.addImage(imgData, 'PNG', margin, yPosition, imgWidth, Math.min(imgHeight, 80))
+          yPosition += Math.min(imgHeight, 80) + 10
+        } else {
+          // Si no hay gráfico, dibujar uno simple con los datos
+          pdf.setTextColor(...slateRGB)
+          pdf.setFontSize(10)
+          pdf.text('Datos de tendencia:', margin, yPosition + 5)
+          yPosition += 10
+          
+          datosGrafico.slice(-10).forEach((d, i) => {
+            pdf.text(`${d.fecha}: ${d.total} leads, ${d.matriculados} matrículas`, margin + 5, yPosition + i * 6)
+          })
+          yPosition += datosGrafico.slice(-10).length * 6 + 10
+        }
+        
+        // ============ RENDIMIENTO POR CARRERA ============
+        pdf.setTextColor(30, 41, 59)
+        pdf.setFontSize(14)
+        pdf.setFont('helvetica', 'bold')
+        pdf.text('Rendimiento por Carrera/Programa', margin, yPosition + 5)
+        yPosition += 12
+        
+        // Header tabla
+        pdf.setFillColor(248, 250, 252)
+        pdf.rect(margin, yPosition, pageWidth - margin * 2, 8, 'F')
+        pdf.setTextColor(...slateRGB)
+        pdf.setFontSize(9)
+        pdf.setFont('helvetica', 'bold')
+        pdf.text('Carrera', margin + 3, yPosition + 5.5)
+        pdf.text('Leads', margin + 90, yPosition + 5.5)
+        pdf.text('Matrículas', margin + 115, yPosition + 5.5)
+        pdf.text('Conversión', margin + 145, yPosition + 5.5)
+        yPosition += 10
+        
+        // Filas
+        pdf.setFont('helvetica', 'normal')
+        Object.entries(estadisticas?.porCarrera || {})
+          .sort((a, b) => b[1].total - a[1].total)
+          .slice(0, 10)
+          .forEach(([id, data], idx) => {
+            const tasa = data.total > 0 ? Math.round((data.matriculados / data.total) * 100) : 0
+            const y = yPosition + idx * 7
+            
+            if (idx % 2 === 0) {
+              pdf.setFillColor(252, 252, 253)
+              pdf.rect(margin, y - 1, pageWidth - margin * 2, 7, 'F')
+            }
+            
+            pdf.setTextColor(30, 41, 59)
+            pdf.text(data.nombre?.substring(0, 35) || 'Sin carrera', margin + 3, y + 4)
+            pdf.text(String(data.total), margin + 90, y + 4)
+            pdf.setTextColor(...emeraldRGB)
+            pdf.text(String(data.matriculados), margin + 115, y + 4)
+            pdf.setTextColor(tasa >= 20 ? 16 : tasa >= 10 ? 245 : 100, tasa >= 20 ? 185 : tasa >= 10 ? 158 : 116, tasa >= 20 ? 129 : tasa >= 10 ? 11 : 139)
+            pdf.text(`${tasa}%`, margin + 145, y + 4)
+          })
+        
+        yPosition += Object.keys(estadisticas?.porCarrera || {}).slice(0, 10).length * 7 + 15
+        
+        // ============ RENDIMIENTO POR ENCARGADO ============
+        if (yPosition > pageHeight - 60) {
+          pdf.addPage()
+          yPosition = margin
+        }
+        
+        pdf.setTextColor(30, 41, 59)
+        pdf.setFontSize(14)
+        pdf.setFont('helvetica', 'bold')
+        pdf.text('Rendimiento por Encargado', margin, yPosition + 5)
+        yPosition += 12
+        
+        // Header tabla
+        pdf.setFillColor(248, 250, 252)
+        pdf.rect(margin, yPosition, pageWidth - margin * 2, 8, 'F')
+        pdf.setTextColor(...slateRGB)
+        pdf.setFontSize(9)
+        pdf.setFont('helvetica', 'bold')
+        pdf.text('Encargado', margin + 3, yPosition + 5.5)
+        pdf.text('Leads', margin + 80, yPosition + 5.5)
+        pdf.text('Matrículas', margin + 105, yPosition + 5.5)
+        pdf.text('Conversión', margin + 140, yPosition + 5.5)
+        yPosition += 10
+        
+        pdf.setFont('helvetica', 'normal')
+        Object.entries(estadisticas?.porEncargado || {})
+          .filter(([_, v]) => v.total > 0)
+          .sort((a, b) => (b[1].tasa || 0) - (a[1].tasa || 0))
+          .slice(0, 8)
+          .forEach(([id, data], idx) => {
+            const y = yPosition + idx * 7
+            
+            if (idx % 2 === 0) {
+              pdf.setFillColor(252, 252, 253)
+              pdf.rect(margin, y - 1, pageWidth - margin * 2, 7, 'F')
+            }
+            
+            pdf.setTextColor(30, 41, 59)
+            pdf.text(data.nombre?.substring(0, 30) || 'Sin asignar', margin + 3, y + 4)
+            pdf.text(String(data.total), margin + 80, y + 4)
+            pdf.setTextColor(...emeraldRGB)
+            pdf.text(String(data.matriculados), margin + 105, y + 4)
+            
+            const tasa = data.tasa || 0
+            pdf.setTextColor(tasa >= 25 ? 16 : tasa >= 15 ? 245 : 100, tasa >= 25 ? 185 : tasa >= 15 ? 158 : 116, tasa >= 25 ? 129 : tasa >= 15 ? 11 : 139)
+            pdf.text(`${tasa}%`, margin + 140, y + 4)
+          })
+        
+        // ============ FOOTER ============
+        const totalPages = pdf.internal.getNumberOfPages()
+        for (let i = 1; i <= totalPages; i++) {
+          pdf.setPage(i)
+          pdf.setTextColor(...slateRGB)
+          pdf.setFontSize(8)
+          pdf.text(
+            `Página ${i} de ${totalPages} | Generado por Admitio | ${new Date().toLocaleDateString('es-CL')}`,
+            pageWidth / 2,
+            pageHeight - 8,
+            { align: 'center' }
+          )
+        }
+        
+        // Descargar
+        pdf.save(`Reporte_Admisiones_${nombreInstitucion.replace(/\s+/g, '_')}_${fechaInicio}.pdf`)
+        
+        setNotification({ type: 'success', message: 'PDF generado correctamente' })
+        setTimeout(() => setNotification(null), 3000)
+        
+      } catch (error) {
+        console.error('Error generando PDF:', error)
+        setNotification({ type: 'error', message: 'Error al generar PDF. Verifica que las librerías estén instaladas.' })
+        setTimeout(() => setNotification(null), 5000)
+      }
+      
+      setGenerandoPDF(false)
     }
     
     // Calcular máximo para escala del gráfico
@@ -2937,10 +3278,29 @@ export default function Dashboard() {
               </button>
               <button
                 onClick={descargarCSV}
-                className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium flex items-center gap-2 transition-colors"
+                title="Exportar datos como CSV"
               >
-                <Icon name="Download" size={18} />
-                Exportar
+                <Icon name="FileSpreadsheet" size={18} />
+                CSV
+              </button>
+              <button
+                onClick={descargarPDF}
+                disabled={generandoPDF}
+                className="px-4 py-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors disabled:opacity-50"
+                title="Exportar reporte como PDF con gráficos"
+              >
+                {generandoPDF ? (
+                  <>
+                    <Icon name="Loader2" size={18} className="animate-spin" />
+                    Generando...
+                  </>
+                ) : (
+                  <>
+                    <Icon name="FileText" size={18} />
+                    PDF
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -3007,19 +3367,29 @@ export default function Dashboard() {
             )}
           </div>
           
-          <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+          {/* KPI Matrículas con Meta - Destacado para Rector */}
+          <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-5 shadow-sm border border-emerald-200">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-slate-500 text-sm">En Proceso</p>
-                <p className="text-2xl font-bold text-blue-600">{estadisticas?.activos || 0}</p>
+                <p className="text-emerald-700 text-sm font-medium">Matrículas</p>
+                <p className="text-2xl font-bold text-emerald-700">{estadisticas?.matriculados || 0}</p>
               </div>
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                <Icon name="Clock" size={24} className="text-blue-600" />
+              <div className="w-12 h-12 bg-emerald-500 rounded-xl flex items-center justify-center">
+                <Icon name="GraduationCap" size={24} className="text-white" />
               </div>
             </div>
-            <p className="text-sm mt-2 text-slate-500">
-              {estadisticas?.activos && estadisticas?.total ? Math.round((estadisticas.activos / estadisticas.total) * 100) : 0}% del total
-            </p>
+            <div className="mt-2">
+              <div className="flex items-center justify-between text-xs text-emerald-600 mb-1">
+                <span>Progreso del período</span>
+                <span className="font-medium">{estadisticas?.activos || 0} en proceso</span>
+              </div>
+              <div className="h-1.5 bg-emerald-200 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-emerald-500 rounded-full transition-all"
+                  style={{ width: `${Math.min(100, ((estadisticas?.matriculados || 0) / Math.max(1, (estadisticas?.total || 1))) * 100)}%` }}
+                />
+              </div>
+            </div>
           </div>
           
           <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
@@ -3153,13 +3523,15 @@ export default function Dashboard() {
                   </div>
                 </div>
                 
-                {datosGrafico.length > 0 ? (
-                  tipoGrafico === 'linea' ? <LineChart data={datosGrafico} /> : <BarChart data={datosGrafico} />
-                ) : (
-                  <div className="h-64 flex items-center justify-center text-slate-400">
-                    No hay datos para el período seleccionado
-                  </div>
-                )}
+                <div data-chart-tendencia className="bg-white">
+                  {datosGrafico.length > 0 ? (
+                    tipoGrafico === 'linea' ? <LineChart data={datosGrafico} /> : <BarChart data={datosGrafico} />
+                  ) : (
+                    <div className="h-64 flex items-center justify-center text-slate-400">
+                      No hay datos para el período seleccionado
+                    </div>
+                  )}
+                </div>
               </div>
             )}
             
