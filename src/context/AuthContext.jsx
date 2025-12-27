@@ -328,50 +328,108 @@ export function AuthProvider({ children }) {
     return { success: false, error: 'Credenciales inválidas' }
   }
 
-  // Signup (crear institución + usuario) - CORREGIDO
+  // Signup (crear institución + usuario) - CON VALIDACIONES
   async function signUp({ institucion: nombreInstitucion, nombre, email, password }) {
     if (!isSupabaseConfigured()) {
       return { success: false, error: 'Registro no disponible en modo local' }
     }
 
     try {
-      // Crear institución - CORREGIDO: usar 'estado' en lugar de 'activa'
-      const { data: nuevaInst, error: instError } = await supabase
+      // ========== VALIDACIONES PREVIAS ==========
+      
+      // 1. Verificar si el email ya existe
+      const { data: emailExiste, error: emailError } = await supabase
+        .from('usuarios')
+        .select('id')
+        .eq('email', email.toLowerCase().trim())
+        .maybeSingle()
+
+      if (emailError) {
+        console.error('Error verificando email:', emailError)
+      }
+      
+      if (emailExiste) {
+        return { success: false, error: 'Este correo electrónico ya está registrado' }
+      }
+
+      // 2. Verificar si la institución ya existe (por nombre/codigo)
+      const { data: instExiste, error: instError } = await supabase
+        .from('instituciones')
+        .select('id')
+        .eq('codigo', nombreInstitucion.trim())
+        .maybeSingle()
+
+      if (instError) {
+        console.error('Error verificando institución:', instError)
+      }
+
+      if (instExiste) {
+        return { success: false, error: 'Ya existe una institución con este nombre' }
+      }
+
+      // ========== CREAR INSTITUCIÓN ==========
+      const { data: nuevaInst, error: crearInstError } = await supabase
         .from('instituciones')
         .insert({ 
-          nombre: nombreInstitucion, 
+          nombre: nombreInstitucion.trim(), 
+          codigo: nombreInstitucion.trim(),  // ✅ Mismo valor que nombre
           plan: 'free', 
-          estado: 'activo'  // ✅ CORREGIDO - era 'activa: true'
+          estado: 'activo'
         })
         .select()
         .single()
 
-      if (instError) throw instError
+      if (crearInstError) {
+        // Manejar errores específicos de constraint
+        if (crearInstError.code === '23505') {
+          return { success: false, error: 'Ya existe una institución con este nombre' }
+        }
+        throw crearInstError
+      }
 
-      // Crear usuario KeyMaster
-      const { data: nuevoUser, error: userError } = await supabase
+      // ========== CREAR USUARIO KEYMASTER ==========
+      const { data: nuevoUser, error: crearUserError } = await supabase
         .from('usuarios')
         .insert({
           institucion_id: nuevaInst.id,
-          email,
-          password_hash: password,
-          nombre,
+          email: email.toLowerCase().trim(),
+          password_hash: password,  // TODO: En producción usar hash real
+          nombre: nombre.trim(),
           rol: 'keymaster',
           activo: true
         })
         .select()
         .single()
 
-      if (userError) {
+      if (crearUserError) {
+        // Rollback: eliminar institución si falla el usuario
         await supabase.from('instituciones').delete().eq('id', nuevaInst.id)
-        throw userError
+        
+        if (crearUserError.code === '23505') {
+          return { success: false, error: 'Este correo electrónico ya está registrado' }
+        }
+        throw crearUserError
       }
 
-      // Login automático
-      return signInWithSupabase(email, password)
+      console.log('✅ Cuenta creada:', {
+        institucion: nuevaInst.nombre,
+        usuario: nuevoUser.email
+      })
+
+      // ========== LOGIN AUTOMÁTICO ==========
+      return signInWithSupabase(email.toLowerCase().trim(), password)
 
     } catch (error) {
       console.error('Error en signup:', error)
+      
+      // Mensajes de error más amigables
+      if (error.message?.includes('duplicate')) {
+        return { success: false, error: 'Este registro ya existe' }
+      }
+      if (error.message?.includes('violates')) {
+        return { success: false, error: 'Datos inválidos. Revisa la información ingresada.' }
+      }
+      
       return { success: false, error: error.message || 'Error al crear cuenta' }
     }
   }
