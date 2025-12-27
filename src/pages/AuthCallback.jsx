@@ -8,66 +8,66 @@
 // - Magic links
 // ============================================
 
-import React, { useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { supabase, isSupabaseConfigured } from '../lib/supabase'
-import { GraduationCap, CheckCircle, XCircle, Loader, AlertTriangle } from 'lucide-react'
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { GraduationCap, CheckCircle, XCircle, Loader, AlertTriangle } from 'lucide-react';
 
 const AuthCallback = () => {
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   
-  const [estado, setEstado] = useState('procesando') // procesando, exito, error
-  const [mensaje, setMensaje] = useState('')
-  const [tipo, setTipo] = useState('') // signup, recovery, invite
+  const [estado, setEstado] = useState('procesando'); // procesando, exito, error
+  const [mensaje, setMensaje] = useState('');
+  const [tipo, setTipo] = useState(''); // signup, recovery, invite
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
-      setEstado('error')
-      setMensaje('Supabase no está configurado')
-      return
+      setEstado('error');
+      setMensaje('Supabase no está configurado');
+      return;
     }
 
-    procesarCallback()
-  }, [])
+    procesarCallback();
+  }, []);
 
   const procesarCallback = async () => {
     try {
       // Supabase maneja automáticamente el token en la URL
       // Solo necesitamos verificar la sesión
       
-      const { data: { session }, error } = await supabase.auth.getSession()
+      const { data: { session }, error } = await supabase.auth.getSession();
       
       if (error) {
-        console.error('Error en callback:', error)
-        throw error
+        console.error('Error en callback:', error);
+        throw error;
       }
 
       // Detectar el tipo de callback por los parámetros de URL
-      const type = searchParams.get('type')
-      const errorCode = searchParams.get('error')
-      const errorDescription = searchParams.get('error_description')
+      const type = searchParams.get('type');
+      const errorCode = searchParams.get('error');
+      const errorDescription = searchParams.get('error_description');
 
       // Si hay error en la URL
       if (errorCode) {
-        throw new Error(errorDescription || 'Error en la verificación')
+        throw new Error(errorDescription || 'Error en la verificación');
       }
 
       // Determinar tipo de callback
       if (type === 'recovery') {
-        setTipo('recovery')
-        setEstado('exito')
-        setMensaje('Ahora puedes cambiar tu contraseña')
+        setTipo('recovery');
+        setEstado('exito');
+        setMensaje('Ahora puedes cambiar tu contraseña');
         
         // Redirigir a página de cambio de contraseña después de 2 segundos
         setTimeout(() => {
-          navigate('/cambiar-password', { replace: true })
-        }, 2000)
-        return
+          navigate('/cambiar-password?type=recovery', { replace: true });
+        }, 2000);
+        return;
       }
 
       if (type === 'signup' || type === 'email') {
-        setTipo('signup')
+        setTipo('signup');
         
         if (session?.user) {
           // Verificar que el usuario exista en nuestra tabla
@@ -75,10 +75,10 @@ const AuthCallback = () => {
             .from('usuarios')
             .select('id, nombre, email_verificado')
             .eq('auth_id', session.user.id)
-            .single()
+            .single();
 
           if (userError && userError.code !== 'PGRST116') {
-            throw userError
+            throw userError;
           }
 
           // Actualizar email_verificado en nuestra tabla
@@ -86,79 +86,79 @@ const AuthCallback = () => {
             await supabase
               .from('usuarios')
               .update({ email_verificado: true })
-              .eq('auth_id', session.user.id)
+              .eq('auth_id', session.user.id);
           }
 
-          setEstado('exito')
-          setMensaje('¡Tu cuenta ha sido verificada correctamente!')
+          setEstado('exito');
+          setMensaje('¡Tu cuenta ha sido verificada correctamente!');
           
           // Redirigir al dashboard después de 2 segundos
           setTimeout(() => {
-            navigate('/dashboard', { replace: true })
-          }, 2000)
+            navigate('/dashboard', { replace: true });
+          }, 2000);
         } else {
           // No hay sesión, puede que el token haya expirado
-          throw new Error('El enlace ha expirado o ya fue utilizado')
+          throw new Error('El enlace ha expirado o ya fue utilizado');
         }
-        return
+        return;
       }
 
       if (type === 'invite') {
-        setTipo('invite')
-        setEstado('exito')
-        setMensaje('Invitación aceptada. Configura tu contraseña.')
+        setTipo('invite');
+        setEstado('exito');
+        setMensaje('Invitación aceptada. Configura tu contraseña.');
         
         setTimeout(() => {
-          navigate('/cambiar-password', { replace: true })
-        }, 2000)
-        return
+          navigate('/cambiar-password?type=recovery', { replace: true });
+        }, 2000);
+        return;
       }
 
       // Si hay sesión pero no sabemos el tipo, verificar
       if (session?.user) {
-        setTipo('signup')
-        setEstado('exito')
-        setMensaje('Sesión iniciada correctamente')
+        setTipo('signup');
+        setEstado('exito');
+        setMensaje('Sesión iniciada correctamente');
         
         setTimeout(() => {
-          navigate('/dashboard', { replace: true })
-        }, 2000)
+          navigate('/dashboard', { replace: true });
+        }, 2000);
       } else {
-        throw new Error('No se pudo procesar la verificación')
+        throw new Error('No se pudo procesar la verificación');
       }
 
     } catch (error) {
-      console.error('Error procesando callback:', error)
-      setEstado('error')
-      setMensaje(error.message || 'Error al verificar tu cuenta')
+      console.error('Error procesando callback:', error);
+      setEstado('error');
+      setMensaje(error.message || 'Error al verificar tu cuenta');
     }
-  }
+  };
 
   const handleIrALogin = () => {
-    navigate('/login', { replace: true })
-  }
+    navigate('/login', { replace: true });
+  };
 
   const handleReenviarEmail = async () => {
     // Obtener email del localStorage si existe
-    const savedEmail = localStorage.getItem('admitio_pending_email')
+    const savedEmail = localStorage.getItem('admitio_pending_email');
     
-    if (savedEmail) {
+    if (savedEmail && supabase) {
       try {
         const { error } = await supabase.auth.resend({
           type: 'signup',
           email: savedEmail
-        })
+        });
         
-        if (error) throw error
+        if (error) throw error;
         
-        alert('Email de verificación reenviado. Revisa tu bandeja de entrada.')
+        alert('Email de verificación reenviado. Revisa tu bandeja de entrada.');
       } catch (err) {
-        alert('Error al reenviar: ' + err.message)
+        alert('Error al reenviar: ' + err.message);
       }
     } else {
-      navigate('/login', { replace: true })
+      navigate('/login', { replace: true });
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-violet-50 to-white flex items-center justify-center p-4">
@@ -251,7 +251,7 @@ const AuthCallback = () => {
         )}
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default AuthCallback
+export default AuthCallback;

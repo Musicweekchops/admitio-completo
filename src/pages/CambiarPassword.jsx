@@ -1,98 +1,72 @@
 // ============================================
 // ADMITIO - Página de Cambiar Contraseña
 // src/pages/CambiarPassword.jsx
-// Funciona con Supabase Auth (reset password link)
-// Y con cambio manual de contraseña
 // ============================================
 
-import React, { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
-import { GraduationCap, Lock, Eye, EyeOff, CheckCircle, AlertCircle, Loader } from 'lucide-react'
-
-// Importar Supabase si está disponible
-let supabase = null
-let isSupabaseConfigured = () => false
-try {
-  const supabaseModule = require('../lib/supabase')
-  supabase = supabaseModule.supabase || supabaseModule.default
-  isSupabaseConfigured = supabaseModule.isSupabaseConfigured || (() => !!supabase)
-} catch (e) {
-  console.log('Supabase no disponible, usando solo API')
-}
-
-// Importar API si está disponible
-let authAPI = null
-try {
-  const apiModule = require('../services/api')
-  authAPI = apiModule.authAPI
-} catch (e) {
-  console.log('API no disponible, usando solo Supabase')
-}
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { GraduationCap, Lock, Eye, EyeOff, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 
 const CambiarPassword = () => {
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const auth = useAuth()
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const auth = useAuth();
   
   // Detectar si viene de un link de reset password
-  const [isRecoveryMode, setIsRecoveryMode] = useState(false)
-  const [checkingSession, setCheckingSession] = useState(true)
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   
   const [formData, setFormData] = useState({
     passwordActual: '',
     passwordNueva: '',
     passwordConfirmar: '',
-  })
+  });
   const [showPasswords, setShowPasswords] = useState({
     actual: false,
     nueva: false,
     confirmar: false,
-  })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState(false)
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
 
   // Verificar si viene de recovery al cargar
   useEffect(() => {
     const checkRecoveryMode = async () => {
       // Si hay parámetros de tipo recovery en la URL
-      const type = searchParams.get('type')
+      const type = searchParams.get('type');
       if (type === 'recovery') {
-        setIsRecoveryMode(true)
-        setCheckingSession(false)
-        return
+        setIsRecoveryMode(true);
+        setCheckingSession(false);
+        return;
       }
 
       // Verificar sesión de Supabase para recovery
       if (isSupabaseConfigured() && supabase) {
         try {
-          const { data: { session } } = await supabase.auth.getSession()
+          const { data: { session } } = await supabase.auth.getSession();
           
           // Si hay sesión pero no hay usuario en auth context, probablemente es recovery
           if (session?.user && !auth?.user) {
-            setIsRecoveryMode(true)
-          }
-          
-          // Verificar si el usuario tiene password temporal
-          if (session?.user && auth?.user?.password_temporal) {
-            setIsRecoveryMode(true)
+            setIsRecoveryMode(true);
           }
         } catch (err) {
-          console.error('Error verificando sesión:', err)
+          console.error('Error verificando sesión:', err);
         }
       }
       
       // Si el usuario debe cambiar password (flag del context)
       if (auth?.user?.debeCambiarPassword || auth?.debeCambiarPassword) {
-        setIsRecoveryMode(true)
+        setIsRecoveryMode(true);
       }
       
-      setCheckingSession(false)
-    }
+      setCheckingSession(false);
+    };
     
-    checkRecoveryMode()
-  }, [searchParams, auth?.user])
+    checkRecoveryMode();
+  }, [searchParams, auth?.user]);
 
   // Validaciones de contraseña
   const validaciones = {
@@ -101,32 +75,36 @@ const CambiarPassword = () => {
     hasLowercase: /[a-z]/.test(formData.passwordNueva),
     hasNumber: /[0-9]/.test(formData.passwordNueva),
     match: formData.passwordNueva === formData.passwordConfirmar && formData.passwordConfirmar !== '',
-  }
+  };
 
-  const passwordValida = Object.values(validaciones).every(Boolean)
+  const passwordValida = Object.values(validaciones).every(Boolean);
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
+    e.preventDefault();
     
     if (!passwordValida) {
-      setError('La contraseña no cumple con los requisitos')
-      return
+      setError('La contraseña no cumple con los requisitos');
+      return;
     }
 
-    setLoading(true)
-    setError('')
+    setLoading(true);
+    setError('');
 
     try {
-      // Método 1: Usar Supabase Auth (para recovery o si está configurado)
-      if (isSupabaseConfigured() && supabase && isRecoveryMode) {
+      if (!isSupabaseConfigured() || !supabase) {
+        throw new Error('Supabase no está configurado');
+      }
+
+      // Si es recovery mode, actualizar directamente
+      if (isRecoveryMode) {
         const { error: updateError } = await supabase.auth.updateUser({
           password: formData.passwordNueva
-        })
+        });
 
-        if (updateError) throw updateError
+        if (updateError) throw updateError;
 
         // Actualizar flag de password temporal si existe
-        const { data: { session } } = await supabase.auth.getSession()
+        const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           await supabase
             .from('usuarios')
@@ -134,60 +112,51 @@ const CambiarPassword = () => {
               password_temporal: false,
               email_verificado: true 
             })
-            .eq('auth_id', session.user.id)
+            .eq('auth_id', session.user.id);
         }
-      }
-      // Método 2: Usar API de backend (para cambio normal)
-      else if (authAPI) {
-        await authAPI.cambiarPassword(formData.passwordActual, formData.passwordNueva)
-      }
-      // Método 3: Supabase Auth con verificación de password actual
-      else if (isSupabaseConfigured() && supabase) {
+      } else {
         // Re-autenticar con password actual primero
-        const { data: { user } } = await supabase.auth.getUser()
+        const { data: { user } } = await supabase.auth.getUser();
         if (user?.email) {
           const { error: signInError } = await supabase.auth.signInWithPassword({
             email: user.email,
             password: formData.passwordActual
-          })
-          if (signInError) throw new Error('Contraseña actual incorrecta')
+          });
+          if (signInError) throw new Error('Contraseña actual incorrecta');
         }
         
         // Actualizar password
         const { error: updateError } = await supabase.auth.updateUser({
           password: formData.passwordNueva
-        })
-        if (updateError) throw updateError
-      }
-      else {
-        throw new Error('No hay método de autenticación disponible')
+        });
+        if (updateError) throw updateError;
       }
 
       // Actualizar contexto si tiene el método
       if (auth?.actualizarUsuario) {
-        auth.actualizarUsuario({ debeCambiarPassword: false })
+        auth.actualizarUsuario({ debeCambiarPassword: false });
       }
 
-      setSuccess(true)
+      setSuccess(true);
 
       // Redirigir después de 2 segundos
       setTimeout(() => {
         if (auth?.isSuperOwner) {
-          navigate('/admin', { replace: true })
+          navigate('/admin', { replace: true });
         } else if (auth?.user) {
-          navigate('/dashboard', { replace: true })
+          navigate('/dashboard', { replace: true });
         } else {
-          navigate('/login', { replace: true })
+          navigate('/login', { replace: true });
         }
-      }, 2000)
+      }, 2000);
 
     } catch (err) {
-      console.error('Error cambiando contraseña:', err)
-      setError(err.message || 'Error al cambiar la contraseña')
+      console.error('Error cambiando contraseña:', err);
+      setError(err.message || 'Error al cambiar la contraseña');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   // Loading inicial
   if (checkingSession) {
@@ -198,7 +167,7 @@ const CambiarPassword = () => {
           <p className="text-gray-600">Verificando sesión...</p>
         </div>
       </div>
-    )
+    );
   }
 
   // Éxito
@@ -223,7 +192,7 @@ const CambiarPassword = () => {
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -340,18 +309,26 @@ const CambiarPassword = () => {
           {/* Requisitos */}
           <div className="bg-gray-50 rounded-lg p-4 space-y-2">
             <p className="text-sm font-medium text-gray-700 mb-2">Requisitos de la contraseña:</p>
-            {[
-              { key: 'minLength', text: 'Mínimo 8 caracteres' },
-              { key: 'hasUppercase', text: 'Al menos una mayúscula' },
-              { key: 'hasLowercase', text: 'Al menos una minúscula' },
-              { key: 'hasNumber', text: 'Al menos un número' },
-              { key: 'match', text: 'Las contraseñas coinciden' },
-            ].map(({ key, text }) => (
-              <div key={key} className={`flex items-center gap-2 text-sm ${validaciones[key] ? 'text-green-600' : 'text-gray-500'}`}>
-                <CheckCircle className={`w-4 h-4 ${validaciones[key] ? '' : 'opacity-30'}`} />
-                {text}
-              </div>
-            ))}
+            <div className={`flex items-center gap-2 text-sm ${validaciones.minLength ? 'text-green-600' : 'text-gray-500'}`}>
+              <CheckCircle className={`w-4 h-4 ${validaciones.minLength ? '' : 'opacity-30'}`} />
+              Mínimo 8 caracteres
+            </div>
+            <div className={`flex items-center gap-2 text-sm ${validaciones.hasUppercase ? 'text-green-600' : 'text-gray-500'}`}>
+              <CheckCircle className={`w-4 h-4 ${validaciones.hasUppercase ? '' : 'opacity-30'}`} />
+              Al menos una mayúscula
+            </div>
+            <div className={`flex items-center gap-2 text-sm ${validaciones.hasLowercase ? 'text-green-600' : 'text-gray-500'}`}>
+              <CheckCircle className={`w-4 h-4 ${validaciones.hasLowercase ? '' : 'opacity-30'}`} />
+              Al menos una minúscula
+            </div>
+            <div className={`flex items-center gap-2 text-sm ${validaciones.hasNumber ? 'text-green-600' : 'text-gray-500'}`}>
+              <CheckCircle className={`w-4 h-4 ${validaciones.hasNumber ? '' : 'opacity-30'}`} />
+              Al menos un número
+            </div>
+            <div className={`flex items-center gap-2 text-sm ${validaciones.match ? 'text-green-600' : 'text-gray-500'}`}>
+              <CheckCircle className={`w-4 h-4 ${validaciones.match ? '' : 'opacity-30'}`} />
+              Las contraseñas coinciden
+            </div>
           </div>
 
           {/* Submit */}
@@ -382,7 +359,7 @@ const CambiarPassword = () => {
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default CambiarPassword
+export default CambiarPassword;

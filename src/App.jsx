@@ -6,12 +6,11 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
-import Verificar from './pages/Verificar';
 import Dashboard from './pages/Dashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import CambiarPassword from './pages/CambiarPassword';
 import Usuarios from './pages/Usuarios';
-import AuthCallback from './pages/AuthCallback';  // <-- NUEVO
+import AuthCallback from './pages/AuthCallback';
 
 // Loading spinner
 const LoadingSpinner = () => (
@@ -77,19 +76,6 @@ const PublicRoute = ({ children }) => {
   return children;
 };
 
-// Ruta para cambio de contraseña
-const PasswordRoute = ({ children }) => {
-  const { isAuthenticated, loading, debeCambiarPassword } = useAuth();
-
-  if (loading) {
-    return <LoadingSpinner />;
-  }
-
-  // Permitir acceso si está autenticado O si viene de un reset de password
-  // (en reset, Supabase crea una sesión temporal)
-  return children;
-};
-
 // App Routes
 const AppRoutes = () => {
   return (
@@ -113,17 +99,10 @@ const AppRoutes = () => {
         }
       />
       
-      {/* Verificación de email (legacy) */}
-      <Route path="/verificar" element={<Verificar />} />
-      <Route path="/verificar/:token" element={<Verificar />} />
-      
-      {/* ============================================ */}
-      {/* AUTH CALLBACK - Para Supabase Auth          */}
-      {/* Maneja: verificación email, reset password  */}
-      {/* ============================================ */}
+      {/* Auth Callback - Para Supabase Auth (verificación email, reset password) */}
       <Route path="/auth/callback" element={<AuthCallback />} />
 
-      {/* Cambiar contraseña (accesible desde reset password) */}
+      {/* Cambiar contraseña */}
       <Route path="/cambiar-password" element={<CambiarPassword />} />
       <Route path="/reset-password" element={<CambiarPassword />} />
 
