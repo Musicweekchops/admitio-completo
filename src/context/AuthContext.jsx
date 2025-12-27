@@ -1,11 +1,10 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { USUARIOS, ROLES } from '../data/mockData'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
-import * as store from '../lib/store'
 
 const AuthContext = createContext(null)
 
-// Configuración de planes por defecto (si no hay en BD)
+// Configuración de planes por defecto
 const PLANES_DEFAULT = {
   free: { nombre: 'Gratis', max_leads: 10, max_usuarios: 1, max_formularios: 1 },
   prueba: { nombre: 'Prueba', max_leads: 15, max_usuarios: 1, max_formularios: 1 },
@@ -26,23 +25,53 @@ export function AuthProvider({ children }) {
   })
 
   useEffect(() => {
+    // Verificar sesión al cargar
     checkSession()
+
+    // Escuchar cambios de autenticación de Supabase
+    if (isSupabaseConfigured()) {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log('🔔 Auth event:', event)
+        
+        if (event === 'SIGNED_IN' && session?.user) {
+          await loadUserFromAuth(session.user)
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null)
+          setInstitucion(null)
+          localStorage.removeItem('admitio_user')
+          localStorage.removeItem('admitio_data')
+        } else if (event === 'TOKEN_REFRESHED') {
+          console.log('🔄 Token refreshed')
+        }
+      })
+
+      return () => subscription.unsubscribe()
+    }
   }, [])
 
   async function checkSession() {
     try {
+      if (isSupabaseConfigured()) {
+        // Verificar sesión de Supabase Auth
+        const { data: { session } } = await supabase.auth.getSession()
+        
+        if (session?.user) {
+          await loadUserFromAuth(session.user)
+          return
+        }
+      }
+
+      // Fallback: verificar sesión local (mockData)
       const savedUser = localStorage.getItem('admitio_user')
       if (savedUser) {
         const userData = JSON.parse(savedUser)
         
+        // Si tiene institucion_id pero no hay sesión de Supabase, limpiar
         if (userData.institucion_id && isSupabaseConfigured()) {
-          setUser(userData)
-          setInstitucion({ id: userData.institucion_id, nombre: userData.institucion_nombre })
-          
-          console.log('🔄 Recargando datos de Supabase...')
-          await loadInstitucionData(userData.institucion_id)
-          
+          localStorage.removeItem('admitio_user')
+          localStorage.removeItem('admitio_data')
         } else {
+          // Usuario local (mockData)
           const fullUser = USUARIOS.find(u => u.id === userData.id)
           if (fullUser && fullUser.activo) {
             setUser(enrichUser(fullUser))
@@ -51,6 +80,52 @@ export function AuthProvider({ children }) {
       }
     } catch (error) {
       console.error('Error checking session:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Cargar usuario desde auth.users
+  async function loadUserFromAuth(authUser) {
+    try {
+      // Buscar usuario en nuestra tabla por auth_id
+      const { data: usuario, error } = await supabase
+        .from('usuarios')
+        .select('*, instituciones(id, nombre)')
+        .eq('auth_id', authUser.id)
+        .eq('activo', true)
+        .single()
+
+      if (error || !usuario) {
+        console.log('⚠️ Usuario no encontrado en tabla usuarios')
+        setLoading(false)
+        return
+      }
+
+      const enrichedUser = {
+        id: usuario.id,
+        auth_id: authUser.id,
+        email: usuario.email,
+        nombre: usuario.nombre,
+        rol_id: usuario.rol,
+        activo: true,
+        institucion_id: usuario.institucion_id,
+        institucion_nombre: usuario.instituciones?.nombre || 'Mi Institución',
+        email_verificado: authUser.email_confirmed_at != null,
+        rol: ROLES[usuario.rol] || ROLES.encargado,
+        permisos: ROLES[usuario.rol]?.permisos || {}
+      }
+
+      setUser(enrichedUser)
+      setInstitucion(usuario.instituciones)
+      localStorage.setItem('admitio_user', JSON.stringify(enrichedUser))
+
+      // Cargar datos de la institución
+      await loadInstitucionData(usuario.institucion_id)
+
+      console.log('✅ Usuario cargado:', enrichedUser.nombre)
+    } catch (error) {
+      console.error('Error cargando usuario:', error)
     } finally {
       setLoading(false)
     }
@@ -65,59 +140,253 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // ========== SIGN IN ==========
   async function signIn(email, password) {
     if (isSupabaseConfigured()) {
       const result = await signInWithSupabase(email, password)
       if (result.success) return result
+      // Si el error no es de credenciales, no intentar local
+      if (result.error !== 'Usuario no encontrado') {
+        return result
+      }
     }
     return signInLocal(email, password)
   }
 
   async function signInWithSupabase(email, password) {
     try {
-      const { data: usuarios, error } = await supabase
-        .from('usuarios')
-        .select('*, instituciones(id, nombre)')
-        .eq('email', email)
-        .eq('activo', true)
+      // Login con Supabase Auth
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.toLowerCase().trim(),
+        password
+      })
 
-      if (error || !usuarios || usuarios.length === 0) {
-        return { success: false, error: 'Usuario no encontrado' }
+      if (error) {
+        console.error('Error en login:', error)
+        if (error.message.includes('Invalid login')) {
+          return { success: false, error: 'Credenciales inválidas' }
+        }
+        if (error.message.includes('Email not confirmed')) {
+          return { success: false, error: 'Debes verificar tu email antes de iniciar sesión' }
+        }
+        return { success: false, error: error.message }
       }
 
-      const usuario = usuarios[0]
-
-      if (usuario.password_hash !== password) {
-        return { success: false, error: 'Contraseña incorrecta' }
+      // Verificar que el email esté confirmado
+      if (!data.user.email_confirmed_at) {
+        await supabase.auth.signOut()
+        return { success: false, error: 'Debes verificar tu email antes de iniciar sesión. Revisa tu bandeja de entrada.' }
       }
 
-      const enrichedUser = {
-        id: usuario.id,
-        email: usuario.email,
-        nombre: usuario.nombre,
-        rol_id: usuario.rol,
-        activo: true,
-        institucion_id: usuario.institucion_id,
-        institucion_nombre: usuario.instituciones?.nombre || 'Mi Institución',
-        rol: ROLES[usuario.rol] || ROLES.encargado,
-        permisos: ROLES[usuario.rol]?.permisos || {}
-      }
-
-      setUser(enrichedUser)
-      setInstitucion(usuario.instituciones)
-      localStorage.setItem('admitio_user', JSON.stringify(enrichedUser))
-
-      await loadInstitucionData(usuario.institucion_id)
-
-      console.log('✅ Login Supabase exitoso:', enrichedUser.nombre)
-      return { success: true, user: enrichedUser }
+      // El usuario se carga automáticamente via onAuthStateChange
+      return { success: true, user: data.user }
 
     } catch (error) {
-      console.error('Error en login Supabase:', error)
+      console.error('Error en signIn:', error)
       return { success: false, error: 'Error de conexión' }
     }
   }
 
+  function signInLocal(email, password) {
+    const usuario = USUARIOS.find(u => 
+      u.email.toLowerCase() === email.toLowerCase() && 
+      u.password === password &&
+      u.activo
+    )
+    
+    if (usuario) {
+      const enrichedUser = enrichUser(usuario)
+      setUser(enrichedUser)
+      localStorage.setItem('admitio_user', JSON.stringify({ id: usuario.id }))
+      console.log('✅ Login local exitoso:', enrichedUser.nombre)
+      return { success: true, user: enrichedUser }
+    }
+    
+    return { success: false, error: 'Credenciales inválidas' }
+  }
+
+  // ========== SIGN UP ==========
+  async function signUp({ institucion: nombreInstitucion, nombre, email, password }) {
+    if (!isSupabaseConfigured()) {
+      return { success: false, error: 'Registro no disponible en modo local' }
+    }
+
+    const emailNormalizado = email.toLowerCase().trim()
+    const nombreInst = nombreInstitucion.trim()
+    const nombreUsuario = nombre.trim()
+
+    try {
+      // ========== VALIDACIONES PREVIAS ==========
+      
+      // 1. Verificar si el email ya existe en nuestra tabla
+      const { data: emailExiste } = await supabase
+        .from('usuarios')
+        .select('id')
+        .eq('email', emailNormalizado)
+        .maybeSingle()
+
+      if (emailExiste) {
+        return { success: false, error: 'Este correo electrónico ya está registrado' }
+      }
+
+      // 2. Verificar si la institución ya existe
+      const { data: instExiste } = await supabase
+        .from('instituciones')
+        .select('id')
+        .eq('codigo', nombreInst)
+        .maybeSingle()
+
+      if (instExiste) {
+        return { success: false, error: 'Ya existe una institución con este nombre' }
+      }
+
+      // ========== CREAR USUARIO EN SUPABASE AUTH ==========
+      // Esto envía el email de verificación automáticamente
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: emailNormalizado,
+        password,
+        options: {
+          data: {
+            nombre: nombreUsuario,
+            institucion: nombreInst
+          },
+          emailRedirectTo: `${window.location.origin}/auth/callback`
+        }
+      })
+
+      if (authError) {
+        console.error('Error creando auth user:', authError)
+        if (authError.message.includes('already registered')) {
+          return { success: false, error: 'Este correo electrónico ya está registrado' }
+        }
+        return { success: false, error: authError.message }
+      }
+
+      if (!authData.user) {
+        return { success: false, error: 'Error al crear usuario' }
+      }
+
+      // ========== CREAR INSTITUCIÓN ==========
+      const { data: nuevaInst, error: instError } = await supabase
+        .from('instituciones')
+        .insert({ 
+          nombre: nombreInst, 
+          codigo: nombreInst,
+          plan: 'free', 
+          estado: 'activo'
+        })
+        .select()
+        .single()
+
+      if (instError) {
+        // Rollback: eliminar usuario de auth si falla
+        console.error('Error creando institución:', instError)
+        // No podemos eliminar el auth user fácilmente, pero no pasa nada
+        return { success: false, error: 'Error al crear la institución' }
+      }
+
+      // ========== CREAR USUARIO EN NUESTRA TABLA ==========
+      const { error: userError } = await supabase
+        .from('usuarios')
+        .insert({
+          institucion_id: nuevaInst.id,
+          auth_id: authData.user.id,  // ✅ Relacionar con auth.users
+          email: emailNormalizado,
+          nombre: nombreUsuario,
+          rol: 'keymaster',
+          activo: true,
+          email_verificado: false
+        })
+
+      if (userError) {
+        // Rollback: eliminar institución
+        console.error('Error creando usuario:', userError)
+        await supabase.from('instituciones').delete().eq('id', nuevaInst.id)
+        return { success: false, error: 'Error al crear el usuario' }
+      }
+
+      // Guardar email para poder reenviar verificación
+      localStorage.setItem('admitio_pending_email', emailNormalizado)
+
+      console.log('✅ Cuenta creada:', {
+        institucion: nuevaInst.nombre,
+        email: emailNormalizado,
+        authId: authData.user.id
+      })
+
+      // Retornar éxito - el usuario debe verificar su email
+      return { 
+        success: true, 
+        requiresVerification: true,
+        message: 'Cuenta creada. Revisa tu correo para verificar tu cuenta.',
+        email: emailNormalizado
+      }
+
+    } catch (error) {
+      console.error('Error en signup:', error)
+      return { success: false, error: error.message || 'Error al crear cuenta' }
+    }
+  }
+
+  // ========== SIGN OUT ==========
+  async function signOut() {
+    if (isSupabaseConfigured()) {
+      await supabase.auth.signOut()
+    }
+    setUser(null)
+    setInstitucion(null)
+    localStorage.removeItem('admitio_user')
+    localStorage.removeItem('admitio_data')
+    localStorage.removeItem('admitio_pending_email')
+    console.log('👋 Sesión cerrada')
+  }
+
+  // ========== RESET PASSWORD ==========
+  async function resetPassword(email) {
+    if (!isSupabaseConfigured()) {
+      return { success: false, error: 'No disponible en modo local' }
+    }
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        email.toLowerCase().trim(),
+        { redirectTo: `${window.location.origin}/cambiar-password` }
+      )
+
+      if (error) throw error
+
+      return { success: true, message: 'Revisa tu correo para restablecer tu contraseña' }
+    } catch (error) {
+      console.error('Error en reset password:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  // ========== RESEND VERIFICATION ==========
+  async function resendVerification(email) {
+    if (!isSupabaseConfigured()) {
+      return { success: false, error: 'No disponible en modo local' }
+    }
+
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email.toLowerCase().trim(),
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`
+        }
+      })
+
+      if (error) throw error
+
+      return { success: true, message: 'Email de verificación reenviado' }
+    } catch (error) {
+      console.error('Error reenviando verificación:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  // ========== LOAD INSTITUCION DATA ==========
   async function loadInstitucionData(institucionId) {
     try {
       const { data: leads } = await supabase
@@ -246,19 +515,12 @@ export function AuthProvider({ children }) {
     try {
       const { data: inst } = await supabase
         .from('instituciones')
-        .select('plan, leads_count, usuarios_count')
+        .select('plan')
         .eq('id', institucionId)
         .single()
 
       const planId = inst?.plan || 'free'
-      
-      const { data: planConfig } = await supabase
-        .from('planes_config')
-        .select('*')
-        .eq('id', planId)
-        .single()
-
-      const limites = planConfig || PLANES_DEFAULT[planId] || PLANES_DEFAULT.free
+      const limites = PLANES_DEFAULT[planId] || PLANES_DEFAULT.free
 
       const { count: formCount } = await supabase
         .from('formularios')
@@ -280,8 +542,6 @@ export function AuthProvider({ children }) {
         }
       })
 
-      console.log(`📊 Plan: ${planId} | Leads: ${leadsCount}/${limites.max_leads} | Usuarios: ${usuariosCount}/${limites.max_usuarios}`)
-
     } catch (error) {
       console.error('Error cargando info del plan:', error)
       setPlanInfo({
@@ -302,166 +562,34 @@ export function AuthProvider({ children }) {
     }))
   }
 
-  const puedeCrearLead = () => planInfo.uso.leads < planInfo.limites.max_leads
-  const puedeCrearUsuario = () => planInfo.uso.usuarios < planInfo.limites.max_usuarios
-  const puedeCrearFormulario = () => planInfo.uso.formularios < planInfo.limites.max_formularios
-  
-  const porcentajeUsoLeads = () => Math.round((planInfo.uso.leads / planInfo.limites.max_leads) * 100)
-  const porcentajeUsoUsuarios = () => Math.round((planInfo.uso.usuarios / planInfo.limites.max_usuarios) * 100)
-  const porcentajeUsoFormularios = () => Math.round((planInfo.uso.formularios / planInfo.limites.max_formularios) * 100)
-
-  function signInLocal(email, password) {
-    const usuario = USUARIOS.find(u => 
-      u.email.toLowerCase() === email.toLowerCase() && 
-      u.password === password &&
-      u.activo
-    )
-    
-    if (usuario) {
-      const enrichedUser = enrichUser(usuario)
-      setUser(enrichedUser)
-      localStorage.setItem('admitio_user', JSON.stringify({ id: usuario.id }))
-      console.log('✅ Login local exitoso:', enrichedUser.nombre)
-      return { success: true, user: enrichedUser }
-    }
-    
-    return { success: false, error: 'Credenciales inválidas' }
-  }
-
-  // Signup (crear institución + usuario) - CON VALIDACIONES
-  async function signUp({ institucion: nombreInstitucion, nombre, email, password }) {
-    if (!isSupabaseConfigured()) {
-      return { success: false, error: 'Registro no disponible en modo local' }
-    }
-
-    try {
-      // ========== VALIDACIONES PREVIAS ==========
-      
-      // 1. Verificar si el email ya existe
-      const { data: emailExiste, error: emailError } = await supabase
-        .from('usuarios')
-        .select('id')
-        .eq('email', email.toLowerCase().trim())
-        .maybeSingle()
-
-      if (emailError) {
-        console.error('Error verificando email:', emailError)
-      }
-      
-      if (emailExiste) {
-        return { success: false, error: 'Este correo electrónico ya está registrado' }
-      }
-
-      // 2. Verificar si la institución ya existe (por nombre/codigo)
-      const { data: instExiste, error: instError } = await supabase
-        .from('instituciones')
-        .select('id')
-        .eq('codigo', nombreInstitucion.trim())
-        .maybeSingle()
-
-      if (instError) {
-        console.error('Error verificando institución:', instError)
-      }
-
-      if (instExiste) {
-        return { success: false, error: 'Ya existe una institución con este nombre' }
-      }
-
-      // ========== CREAR INSTITUCIÓN ==========
-      const { data: nuevaInst, error: crearInstError } = await supabase
-        .from('instituciones')
-        .insert({ 
-          nombre: nombreInstitucion.trim(), 
-          codigo: nombreInstitucion.trim(),  // ✅ Mismo valor que nombre
-          plan: 'free', 
-          estado: 'activo'
-        })
-        .select()
-        .single()
-
-      if (crearInstError) {
-        // Manejar errores específicos de constraint
-        if (crearInstError.code === '23505') {
-          return { success: false, error: 'Ya existe una institución con este nombre' }
-        }
-        throw crearInstError
-      }
-
-      // ========== CREAR USUARIO KEYMASTER ==========
-      const { data: nuevoUser, error: crearUserError } = await supabase
-        .from('usuarios')
-        .insert({
-          institucion_id: nuevaInst.id,
-          email: email.toLowerCase().trim(),
-          password_hash: password,  // TODO: En producción usar hash real
-          nombre: nombre.trim(),
-          rol: 'keymaster',
-          activo: true
-        })
-        .select()
-        .single()
-
-      if (crearUserError) {
-        // Rollback: eliminar institución si falla el usuario
-        await supabase.from('instituciones').delete().eq('id', nuevaInst.id)
-        
-        if (crearUserError.code === '23505') {
-          return { success: false, error: 'Este correo electrónico ya está registrado' }
-        }
-        throw crearUserError
-      }
-
-      console.log('✅ Cuenta creada:', {
-        institucion: nuevaInst.nombre,
-        usuario: nuevoUser.email
-      })
-
-      // ========== LOGIN AUTOMÁTICO ==========
-      return signInWithSupabase(email.toLowerCase().trim(), password)
-
-    } catch (error) {
-      console.error('Error en signup:', error)
-      
-      // Mensajes de error más amigables
-      if (error.message?.includes('duplicate')) {
-        return { success: false, error: 'Este registro ya existe' }
-      }
-      if (error.message?.includes('violates')) {
-        return { success: false, error: 'Datos inválidos. Revisa la información ingresada.' }
-      }
-      
-      return { success: false, error: error.message || 'Error al crear cuenta' }
-    }
-  }
-
-  function signOut() {
-    setUser(null)
-    setInstitucion(null)
-    localStorage.removeItem('admitio_user')
-    localStorage.removeItem('admitio_data')
-    console.log('👋 Sesión cerrada')
-  }
-
   async function reloadFromSupabase() {
     if (!user?.institucion_id || !isSupabaseConfigured()) {
-      console.log('⚠️ No se puede recargar: sin institución o Supabase no configurado')
       return false
     }
     
-    console.log('🔄 Recargando datos desde Supabase...')
     try {
       await loadInstitucionData(user.institucion_id)
       return true
     } catch (error) {
-      console.error('❌ Error recargando desde Supabase:', error)
+      console.error('Error recargando:', error)
       return false
     }
   }
 
+  // Helpers
+  const puedeCrearLead = () => planInfo.uso.leads < planInfo.limites.max_leads
+  const puedeCrearUsuario = () => planInfo.uso.usuarios < planInfo.limites.max_usuarios
+  const puedeCrearFormulario = () => planInfo.uso.formularios < planInfo.limites.max_formularios
+  const porcentajeUsoLeads = () => Math.round((planInfo.uso.leads / planInfo.limites.max_leads) * 100)
+  const porcentajeUsoUsuarios = () => Math.round((planInfo.uso.usuarios / planInfo.limites.max_usuarios) * 100)
+  const porcentajeUsoFormularios = () => Math.round((planInfo.uso.formularios / planInfo.limites.max_formularios) * 100)
+
+  // Aliases
   const login = signIn
   const logout = signOut
   const signup = signUp
 
+  // Roles y permisos
   const isSuperAdmin = user?.rol_id === 'superadmin'
   const isKeyMaster = user?.rol_id === 'keymaster' || isSuperAdmin
   const isEncargado = user?.rol_id === 'encargado'
@@ -484,19 +612,26 @@ export function AuthProvider({ children }) {
       user,
       institucion,
       loading,
+      // Auth methods
       signIn,
       signOut,
       signUp,
+      resetPassword,
+      resendVerification,
       reloadFromSupabase,
+      // Aliases
       login,
       logout,
       signup,
+      // Estado
       isAuthenticated: !!user,
+      // Roles
       isSuperAdmin,
       isKeyMaster,
       isEncargado,
       isAsistente,
       isRector,
+      // Permisos
       canViewAll,
       canViewOwn,
       canEdit,
@@ -507,6 +642,7 @@ export function AuthProvider({ children }) {
       canManageForms,
       canCreateLeads,
       canDeleteKeyMaster,
+      // Plan
       planInfo,
       actualizarUso,
       puedeCrearLead,

@@ -6,9 +6,7 @@ import Icon from '../components/Icon'
 const Signup = () => {
   const [step, setStep] = useState(1)
   const [formData, setFormData] = useState({
-    // Institución
     institucion: '',
-    // Usuario
     nombre: '',
     email: '',
     password: '',
@@ -16,8 +14,10 @@ const Signup = () => {
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [registroExitoso, setRegistroExitoso] = useState(false)
+  const [emailRegistrado, setEmailRegistrado] = useState('')
   const navigate = useNavigate()
-  const { signup } = useAuth()
+  const { signup, resendVerification } = useAuth()
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
@@ -37,7 +37,6 @@ const Signup = () => {
     e.preventDefault()
     setError('')
 
-    // Validaciones
     if (formData.password !== formData.confirmPassword) {
       setError('Las contraseñas no coinciden')
       return
@@ -58,7 +57,14 @@ const Signup = () => {
       })
 
       if (result.success) {
-        navigate('/app')
+        // Si requiere verificación, mostrar pantalla de éxito
+        if (result.requiresVerification) {
+          setEmailRegistrado(result.email || formData.email)
+          setRegistroExitoso(true)
+        } else {
+          // Si no requiere verificación (no debería pasar), ir al dashboard
+          navigate('/dashboard')
+        }
       } else {
         setError(result.error || 'Error al crear la cuenta')
       }
@@ -69,12 +75,123 @@ const Signup = () => {
     }
   }
 
+  const handleResendEmail = async () => {
+    if (!emailRegistrado) return
+    
+    setLoading(true)
+    try {
+      const result = await resendVerification(emailRegistrado)
+      if (result.success) {
+        alert('Email de verificación reenviado. Revisa tu bandeja de entrada.')
+      } else {
+        alert(result.error || 'Error al reenviar email')
+      }
+    } catch (err) {
+      alert('Error al reenviar email')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ========== PANTALLA DE ÉXITO ==========
+  if (registroExitoso) {
+    return (
+      <div className="auth-container">
+        <div className="auth-left items-center justify-center p-12">
+          <div className="relative z-10 max-w-lg">
+            <div className="absolute -top-20 -left-20 w-40 h-40 bg-white/10 rounded-full animate-float"></div>
+            <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-white/10 rounded-full animate-float" style={{ animationDelay: '-2s' }}></div>
+            
+            <div className="flex items-center gap-3 mb-8">
+              <div className="w-14 h-14 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
+                <Icon name="GraduationCap" className="text-white" size={32} />
+              </div>
+              <span className="font-display text-3xl font-bold text-white">Admitio</span>
+            </div>
+            
+            <h1 className="font-display text-4xl font-bold text-white mb-4 leading-tight">
+              ¡Ya casi está listo!
+            </h1>
+            <p className="text-white/80 text-lg">
+              Solo falta un paso para comenzar a gestionar tus admisiones.
+            </p>
+          </div>
+        </div>
+
+        <div className="auth-right bg-slate-50">
+          <div className="auth-form text-center">
+            {/* Icono de email */}
+            <div className="w-20 h-20 bg-violet-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Icon name="Mail" className="text-violet-600" size={40} />
+            </div>
+
+            <h2 className="font-display text-2xl font-bold text-slate-800 mb-4">
+              Verifica tu correo electrónico
+            </h2>
+
+            <p className="text-slate-600 mb-6">
+              Hemos enviado un email de verificación a:
+            </p>
+
+            <div className="bg-slate-100 rounded-lg px-4 py-3 mb-6">
+              <span className="font-semibold text-slate-800">{emailRegistrado}</span>
+            </div>
+
+            <p className="text-slate-500 text-sm mb-8">
+              Haz clic en el enlace del correo para activar tu cuenta. 
+              Si no lo ves, revisa tu carpeta de spam.
+            </p>
+
+            {/* Acciones */}
+            <div className="space-y-4">
+              <button
+                onClick={handleResendEmail}
+                disabled={loading}
+                className="btn btn-secondary w-full justify-center"
+              >
+                {loading ? (
+                  <>
+                    <div className="spinner"></div>
+                    Enviando...
+                  </>
+                ) : (
+                  <>
+                    <Icon name="RefreshCw" size={18} />
+                    Reenviar email de verificación
+                  </>
+                )}
+              </button>
+
+              <Link
+                to="/login"
+                className="btn btn-primary w-full justify-center"
+              >
+                <Icon name="LogIn" size={18} />
+                Ir a iniciar sesión
+              </Link>
+            </div>
+
+            {/* Ayuda */}
+            <div className="mt-8 pt-6 border-t border-slate-200">
+              <p className="text-slate-500 text-sm">
+                ¿Problemas con el registro?{' '}
+                <a href="mailto:soporte@admitio.cl" className="text-violet-600 hover:underline">
+                  Contáctanos
+                </a>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ========== FORMULARIO DE REGISTRO ==========
   return (
     <div className="auth-container">
       {/* Left Side - Branding */}
       <div className="auth-left items-center justify-center p-12">
         <div className="relative z-10 max-w-lg">
-          {/* Floating shapes */}
           <div className="absolute -top-20 -left-20 w-40 h-40 bg-white/10 rounded-full animate-float"></div>
           <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-white/10 rounded-full animate-float" style={{ animationDelay: '-2s' }}></div>
           
@@ -92,7 +209,6 @@ const Signup = () => {
             Únete a las instituciones que ya transformaron su proceso de admisiones con Admitio.
           </p>
           
-          {/* Features list */}
           <div className="space-y-4">
             {[
               'Dashboard intuitivo para gestionar leads',
