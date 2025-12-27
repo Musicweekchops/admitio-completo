@@ -25,10 +25,8 @@ export function AuthProvider({ children }) {
   })
 
   useEffect(() => {
-    // Verificar sesión al cargar
     checkSession()
 
-    // Escuchar cambios de autenticación de Supabase
     if (isSupabaseConfigured()) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
         console.log('🔔 Auth event:', event)
@@ -40,8 +38,6 @@ export function AuthProvider({ children }) {
           setInstitucion(null)
           localStorage.removeItem('admitio_user')
           localStorage.removeItem('admitio_data')
-        } else if (event === 'TOKEN_REFRESHED') {
-          console.log('🔄 Token refreshed')
         }
       })
 
@@ -52,7 +48,6 @@ export function AuthProvider({ children }) {
   async function checkSession() {
     try {
       if (isSupabaseConfigured()) {
-        // Verificar sesión de Supabase Auth
         const { data: { session } } = await supabase.auth.getSession()
         
         if (session?.user) {
@@ -61,17 +56,14 @@ export function AuthProvider({ children }) {
         }
       }
 
-      // Fallback: verificar sesión local (mockData)
       const savedUser = localStorage.getItem('admitio_user')
       if (savedUser) {
         const userData = JSON.parse(savedUser)
         
-        // Si tiene institucion_id pero no hay sesión de Supabase, limpiar
         if (userData.institucion_id && isSupabaseConfigured()) {
           localStorage.removeItem('admitio_user')
           localStorage.removeItem('admitio_data')
         } else {
-          // Usuario local (mockData)
           const fullUser = USUARIOS.find(u => u.id === userData.id)
           if (fullUser && fullUser.activo) {
             setUser(enrichUser(fullUser))
@@ -85,10 +77,8 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // Cargar usuario desde auth.users
   async function loadUserFromAuth(authUser) {
     try {
-      // Buscar usuario en nuestra tabla por auth_id
       const { data: usuario, error } = await supabase
         .from('usuarios')
         .select('*, instituciones(id, nombre)')
@@ -120,7 +110,6 @@ export function AuthProvider({ children }) {
       setInstitucion(usuario.instituciones)
       localStorage.setItem('admitio_user', JSON.stringify(enrichedUser))
 
-      // Cargar datos de la institución
       await loadInstitucionData(usuario.institucion_id)
 
       console.log('✅ Usuario cargado:', enrichedUser.nombre)
@@ -145,7 +134,6 @@ export function AuthProvider({ children }) {
     if (isSupabaseConfigured()) {
       const result = await signInWithSupabase(email, password)
       if (result.success) return result
-      // Si el error no es de credenciales, no intentar local
       if (result.error !== 'Usuario no encontrado') {
         return result
       }
@@ -155,7 +143,6 @@ export function AuthProvider({ children }) {
 
   async function signInWithSupabase(email, password) {
     try {
-      // Login con Supabase Auth
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.toLowerCase().trim(),
         password
@@ -172,13 +159,11 @@ export function AuthProvider({ children }) {
         return { success: false, error: error.message }
       }
 
-      // Verificar que el email esté confirmado
       if (!data.user.email_confirmed_at) {
         await supabase.auth.signOut()
         return { success: false, error: 'Debes verificar tu email antes de iniciar sesión. Revisa tu bandeja de entrada.' }
       }
 
-      // El usuario se carga automáticamente via onAuthStateChange
       return { success: true, user: data.user }
 
     } catch (error) {
@@ -216,32 +201,61 @@ export function AuthProvider({ children }) {
     const nombreUsuario = nombre.trim()
 
     try {
-      // ========== VALIDACIONES PREVIAS ==========
+      // ========== VALIDACIONES PREVIAS (ANTES de crear nada) ==========
       
-      // 1. Verificar si el email ya existe en nuestra tabla
-      const { data: emailExiste } = await supabase
+      // 1. Validar campos
+      if (!nombreInst || nombreInst.length < 3) {
+        return { success: false, error: 'El nombre de la institución debe tener al menos 3 caracteres' }
+      }
+      
+      if (!nombreUsuario || nombreUsuario.length < 2) {
+        return { success: false, error: 'El nombre debe tener al menos 2 caracteres' }
+      }
+
+      if (!emailNormalizado || !emailNormalizado.includes('@')) {
+        return { success: false, error: 'Email inválido' }
+      }
+
+      if (!password || password.length < 6) {
+        return { success: false, error: 'La contraseña debe tener al menos 6 caracteres' }
+      }
+
+      // 2. Verificar si la institución ya existe (POR NOMBRE Y CODIGO)
+      const { data: instExistePorCodigo } = await supabase
+        .from('instituciones')
+        .select('id, nombre')
+        .eq('codigo', nombreInst)
+        .maybeSingle()
+
+      if (instExistePorCodigo) {
+        return { success: false, error: `Ya existe una institución llamada "${instExistePorCodigo.nombre}"` }
+      }
+
+      // También verificar por nombre (case insensitive)
+      const { data: instExistePorNombre } = await supabase
+        .from('instituciones')
+        .select('id, nombre')
+        .ilike('nombre', nombreInst)
+        .maybeSingle()
+
+      if (instExistePorNombre) {
+        return { success: false, error: `Ya existe una institución con un nombre similar: "${instExistePorNombre.nombre}"` }
+      }
+
+      // 3. Verificar si el email ya existe en nuestra tabla
+      const { data: emailExisteEnUsuarios } = await supabase
         .from('usuarios')
         .select('id')
         .eq('email', emailNormalizado)
         .maybeSingle()
 
-      if (emailExiste) {
+      if (emailExisteEnUsuarios) {
         return { success: false, error: 'Este correo electrónico ya está registrado' }
       }
 
-      // 2. Verificar si la institución ya existe
-      const { data: instExiste } = await supabase
-        .from('instituciones')
-        .select('id')
-        .eq('codigo', nombreInst)
-        .maybeSingle()
+      // ========== TODO VALIDADO - AHORA SÍ CREAR ==========
 
-      if (instExiste) {
-        return { success: false, error: 'Ya existe una institución con este nombre' }
-      }
-
-      // ========== CREAR USUARIO EN SUPABASE AUTH ==========
-      // Esto envía el email de verificación automáticamente
+      // 4. Crear usuario en Supabase Auth (esto envía el email)
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: emailNormalizado,
         password,
@@ -257,7 +271,7 @@ export function AuthProvider({ children }) {
       if (authError) {
         console.error('Error creando auth user:', authError)
         if (authError.message.includes('already registered')) {
-          return { success: false, error: 'Este correo electrónico ya está registrado' }
+          return { success: false, error: 'Este correo electrónico ya está registrado en el sistema de autenticación' }
         }
         return { success: false, error: authError.message }
       }
@@ -266,7 +280,7 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'Error al crear usuario' }
       }
 
-      // ========== CREAR INSTITUCIÓN ==========
+      // 5. Crear institución
       const { data: nuevaInst, error: instError } = await supabase
         .from('instituciones')
         .insert({ 
@@ -279,18 +293,17 @@ export function AuthProvider({ children }) {
         .single()
 
       if (instError) {
-        // Rollback: eliminar usuario de auth si falla
         console.error('Error creando institución:', instError)
-        // No podemos eliminar el auth user fácilmente, pero no pasa nada
-        return { success: false, error: 'Error al crear la institución' }
+        // No podemos eliminar fácil el auth user, pero al menos informamos
+        return { success: false, error: 'Error al crear la institución. Por favor contacta soporte.' }
       }
 
-      // ========== CREAR USUARIO EN NUESTRA TABLA ==========
+      // 6. Crear usuario en nuestra tabla (SIN password_hash)
       const { error: userError } = await supabase
         .from('usuarios')
         .insert({
           institucion_id: nuevaInst.id,
-          auth_id: authData.user.id,  // ✅ Relacionar con auth.users
+          auth_id: authData.user.id,
           email: emailNormalizado,
           nombre: nombreUsuario,
           rol: 'keymaster',
@@ -299,13 +312,13 @@ export function AuthProvider({ children }) {
         })
 
       if (userError) {
-        // Rollback: eliminar institución
         console.error('Error creando usuario:', userError)
+        // Rollback: eliminar institución
         await supabase.from('instituciones').delete().eq('id', nuevaInst.id)
-        return { success: false, error: 'Error al crear el usuario' }
+        return { success: false, error: 'Error al crear el usuario. Por favor intenta de nuevo.' }
       }
 
-      // Guardar email para poder reenviar verificación
+      // Guardar email para reenvío
       localStorage.setItem('admitio_pending_email', emailNormalizado)
 
       console.log('✅ Cuenta creada:', {
@@ -314,7 +327,6 @@ export function AuthProvider({ children }) {
         authId: authData.user.id
       })
 
-      // Retornar éxito - el usuario debe verificar su email
       return { 
         success: true, 
         requiresVerification: true,
@@ -612,26 +624,21 @@ export function AuthProvider({ children }) {
       user,
       institucion,
       loading,
-      // Auth methods
       signIn,
       signOut,
       signUp,
       resetPassword,
       resendVerification,
       reloadFromSupabase,
-      // Aliases
       login,
       logout,
       signup,
-      // Estado
       isAuthenticated: !!user,
-      // Roles
       isSuperAdmin,
       isKeyMaster,
       isEncargado,
       isAsistente,
       isRector,
-      // Permisos
       canViewAll,
       canViewOwn,
       canEdit,
@@ -642,7 +649,6 @@ export function AuthProvider({ children }) {
       canManageForms,
       canCreateLeads,
       canDeleteKeyMaster,
-      // Plan
       planInfo,
       actualizarUso,
       puedeCrearLead,
