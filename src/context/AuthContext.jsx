@@ -8,7 +8,7 @@ const AuthContext = createContext(null)
 // Configuración de planes por defecto (si no hay en BD)
 const PLANES_DEFAULT = {
   free: { nombre: 'Gratis', max_leads: 10, max_usuarios: 1, max_formularios: 1 },
-  prueba: { nombre: 'Prueba', max_leads: 15, max_usuarios: 1, max_formularios: 1 }, // Plan legacy, similar a free
+  prueba: { nombre: 'Prueba', max_leads: 15, max_usuarios: 1, max_formularios: 1 },
   inicial: { nombre: 'Inicial', max_leads: 300, max_usuarios: 5, max_formularios: 1 },
   profesional: { nombre: 'Profesional', max_leads: 1500, max_usuarios: 15, max_formularios: 3 },
   premium: { nombre: 'Premium', max_leads: 5000, max_usuarios: 50, max_formularios: 10 },
@@ -31,22 +31,18 @@ export function AuthProvider({ children }) {
 
   async function checkSession() {
     try {
-      // Verificar sesión guardada
       const savedUser = localStorage.getItem('admitio_user')
       if (savedUser) {
         const userData = JSON.parse(savedUser)
         
-        // Si es usuario de Supabase (tiene institucion_id)
         if (userData.institucion_id && isSupabaseConfigured()) {
           setUser(userData)
           setInstitucion({ id: userData.institucion_id, nombre: userData.institucion_nombre })
           
-          // IMPORTANTE: Recargar datos de Supabase al hacer refresh
           console.log('🔄 Recargando datos de Supabase...')
           await loadInstitucionData(userData.institucion_id)
           
         } else {
-          // Usuario local (mockData)
           const fullUser = USUARIOS.find(u => u.id === userData.id)
           if (fullUser && fullUser.activo) {
             setUser(enrichUser(fullUser))
@@ -69,20 +65,14 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // Login principal - intenta Supabase primero, luego local
   async function signIn(email, password) {
-    // Intentar con Supabase si está configurado
     if (isSupabaseConfigured()) {
       const result = await signInWithSupabase(email, password)
       if (result.success) return result
-      // Si falla Supabase, intentar local
     }
-    
-    // Fallback a login local (mockData)
     return signInLocal(email, password)
   }
 
-  // Login con Supabase
   async function signInWithSupabase(email, password) {
     try {
       const { data: usuarios, error } = await supabase
@@ -97,12 +87,10 @@ export function AuthProvider({ children }) {
 
       const usuario = usuarios[0]
 
-      // Verificar contraseña
       if (usuario.password_hash !== password) {
         return { success: false, error: 'Contraseña incorrecta' }
       }
 
-      // Crear usuario enriquecido
       const enrichedUser = {
         id: usuario.id,
         email: usuario.email,
@@ -119,7 +107,6 @@ export function AuthProvider({ children }) {
       setInstitucion(usuario.instituciones)
       localStorage.setItem('admitio_user', JSON.stringify(enrichedUser))
 
-      // Cargar datos de la institución en localStorage para el store
       await loadInstitucionData(usuario.institucion_id)
 
       console.log('✅ Login Supabase exitoso:', enrichedUser.nombre)
@@ -131,24 +118,20 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // Cargar datos de institución desde Supabase
   async function loadInstitucionData(institucionId) {
     try {
-      // Cargar leads
       const { data: leads } = await supabase
         .from('leads')
         .select('*')
         .eq('institucion_id', institucionId)
         .order('created_at', { ascending: false })
 
-      // Cargar usuarios
       const { data: usuarios } = await supabase
         .from('usuarios')
         .select('*')
         .eq('institucion_id', institucionId)
         .eq('activo', true)
 
-      // Cargar carreras (solo activas)
       const { data: carreras } = await supabase
         .from('carreras')
         .select('*')
@@ -156,21 +139,18 @@ export function AuthProvider({ children }) {
         .eq('activa', true)
         .order('nombre', { ascending: true })
 
-      // Cargar formularios
       const { data: formularios } = await supabase
         .from('formularios')
         .select('*')
         .eq('institucion_id', institucionId)
         .order('created_at', { ascending: false })
 
-      // Cargar acciones
       const { data: acciones } = await supabase
         .from('acciones_lead')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(100)
 
-      // Guardar en localStorage para que el store lo use
       const storeData = {
         consultas: (leads || []).map(lead => ({
           id: lead.id,
@@ -188,7 +168,6 @@ export function AuthProvider({ children }) {
           created_at: lead.created_at,
           fecha_primer_contacto: lead.fecha_primer_contacto,
           fecha_cierre: lead.fecha_cierre,
-          // Campos adicionales importantes para reportes y métricas
           matriculado: lead.matriculado || false,
           descartado: lead.descartado || false,
           tipo_alumno: lead.tipo_alumno || 'nuevo',
@@ -231,7 +210,6 @@ export function AuthProvider({ children }) {
           usuario_id: a.usuario_id,
           lead_id: a.lead_id
         })),
-        // Campos adicionales requeridos por el store
         medios: [
           { id: 'instagram', nombre: 'Instagram', icono: 'Instagram', color: 'text-pink-500' },
           { id: 'web', nombre: 'Sitio Web', icono: 'Globe', color: 'text-blue-500' },
@@ -239,41 +217,33 @@ export function AuthProvider({ children }) {
           { id: 'telefono', nombre: 'Teléfono', icono: 'Phone', color: 'text-slate-500' },
           { id: 'referido', nombre: 'Referido', icono: 'Users', color: 'text-violet-500' },
           { id: 'facebook', nombre: 'Facebook', icono: 'Facebook', color: 'text-blue-600' },
-          { id: 'email', nombre: 'Email directo', icono: 'Mail', color: 'text-amber-500' },
+          { id: 'email', nombre: 'Email', icono: 'Mail', color: 'text-amber-500' },
+          { id: 'presencial', nombre: 'Presencial', icono: 'MapPin', color: 'text-emerald-500' },
+          { id: 'otro', nombre: 'Otro', icono: 'MoreHorizontal', color: 'text-gray-500' }
         ],
-        plantillas: [],
-        config: { nombre: 'Mi Institución', logo: null },
-        metricas_encargados: {},
         recordatorios: [],
-        cola_leads: [],
-        correos_enviados: [],
-        notificaciones: [],
-        importaciones: [],
-        _institucion_id: institucionId,
-        _supabase_sync: true
+        lastSync: new Date().toISOString()
       }
 
-      // Guardar en localStorage
       localStorage.setItem('admitio_data', JSON.stringify(storeData))
-      localStorage.setItem('admitio_version', '2.7')  // Debe coincidir con store.js
-      
-      // Recargar store con los nuevos datos
-      store.reloadStore()
-      
-      console.log(`✅ Datos cargados: ${leads?.length || 0} leads, ${usuarios?.length || 0} usuarios, ${carreras?.length || 0} carreras, ${formularios?.length || 0} formularios`)
+      console.log('📦 Datos cargados:', {
+        leads: storeData.consultas.length,
+        usuarios: storeData.usuarios.length,
+        carreras: storeData.carreras.length,
+        formularios: storeData.formularios.length
+      })
 
-      // Cargar info del plan
-      await loadPlanInfo(institucionId, leads?.length || 0, usuarios?.length || 0)
+      const leadsCount = storeData.consultas.length
+      const usuariosCount = storeData.usuarios.length
+      await loadPlanInfo(institucionId, leadsCount, usuariosCount)
 
     } catch (error) {
       console.error('Error cargando datos de institución:', error)
     }
   }
 
-  // Cargar información del plan y uso
   async function loadPlanInfo(institucionId, leadsCount, usuariosCount) {
     try {
-      // Obtener info de la institución con su plan
       const { data: inst } = await supabase
         .from('instituciones')
         .select('plan, leads_count, usuarios_count')
@@ -282,17 +252,14 @@ export function AuthProvider({ children }) {
 
       const planId = inst?.plan || 'free'
       
-      // Intentar cargar config del plan desde la BD
       const { data: planConfig } = await supabase
         .from('planes_config')
         .select('*')
         .eq('id', planId)
         .single()
 
-      // Usar config de BD o default
       const limites = planConfig || PLANES_DEFAULT[planId] || PLANES_DEFAULT.free
 
-      // Contar formularios
       const { count: formCount } = await supabase
         .from('formularios')
         .select('*', { count: 'exact', head: true })
@@ -317,7 +284,6 @@ export function AuthProvider({ children }) {
 
     } catch (error) {
       console.error('Error cargando info del plan:', error)
-      // Usar defaults si hay error
       setPlanInfo({
         plan: 'free',
         limites: PLANES_DEFAULT.free,
@@ -326,7 +292,6 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // Actualizar uso después de crear/eliminar
   function actualizarUso(tipo, delta) {
     setPlanInfo(prev => ({
       ...prev,
@@ -337,7 +302,6 @@ export function AuthProvider({ children }) {
     }))
   }
 
-  // Helpers para verificar límites
   const puedeCrearLead = () => planInfo.uso.leads < planInfo.limites.max_leads
   const puedeCrearUsuario = () => planInfo.uso.usuarios < planInfo.limites.max_usuarios
   const puedeCrearFormulario = () => planInfo.uso.formularios < planInfo.limites.max_formularios
@@ -346,7 +310,6 @@ export function AuthProvider({ children }) {
   const porcentajeUsoUsuarios = () => Math.round((planInfo.uso.usuarios / planInfo.limites.max_usuarios) * 100)
   const porcentajeUsoFormularios = () => Math.round((planInfo.uso.formularios / planInfo.limites.max_formularios) * 100)
 
-  // Login local (mockData)
   function signInLocal(email, password) {
     const usuario = USUARIOS.find(u => 
       u.email.toLowerCase() === email.toLowerCase() && 
@@ -365,17 +328,21 @@ export function AuthProvider({ children }) {
     return { success: false, error: 'Credenciales inválidas' }
   }
 
-  // Signup (crear institución + usuario)
+  // Signup (crear institución + usuario) - CORREGIDO
   async function signUp({ institucion: nombreInstitucion, nombre, email, password }) {
     if (!isSupabaseConfigured()) {
       return { success: false, error: 'Registro no disponible en modo local' }
     }
 
     try {
-      // Crear institución
+      // Crear institución - CORREGIDO: usar 'estado' en lugar de 'activa'
       const { data: nuevaInst, error: instError } = await supabase
         .from('instituciones')
-        .insert({ nombre: nombreInstitucion, plan: 'free', activa: true })
+        .insert({ 
+          nombre: nombreInstitucion, 
+          plan: 'free', 
+          estado: 'activo'  // ✅ CORREGIDO - era 'activa: true'
+        })
         .select()
         .single()
 
@@ -417,7 +384,6 @@ export function AuthProvider({ children }) {
     console.log('👋 Sesión cerrada')
   }
 
-  // Recargar datos desde Supabase (para sincronización en tiempo real)
   async function reloadFromSupabase() {
     if (!user?.institucion_id || !isSupabaseConfigured()) {
       console.log('⚠️ No se puede recargar: sin institución o Supabase no configurado')
@@ -434,12 +400,10 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // Aliases para compatibilidad
   const login = signIn
   const logout = signOut
   const signup = signUp
 
-  // Helpers de permisos (igual que el original)
   const isSuperAdmin = user?.rol_id === 'superadmin'
   const isKeyMaster = user?.rol_id === 'keymaster' || isSuperAdmin
   const isEncargado = user?.rol_id === 'encargado'
@@ -462,24 +426,19 @@ export function AuthProvider({ children }) {
       user,
       institucion,
       loading,
-      // Auth methods
       signIn,
       signOut,
       signUp,
       reloadFromSupabase,
-      // Aliases
       login,
       logout,
       signup,
-      // Para verificar autenticación
       isAuthenticated: !!user,
-      // Roles
       isSuperAdmin,
       isKeyMaster,
       isEncargado,
       isAsistente,
       isRector,
-      // Permisos
       canViewAll,
       canViewOwn,
       canEdit,
@@ -490,7 +449,6 @@ export function AuthProvider({ children }) {
       canManageForms,
       canCreateLeads,
       canDeleteKeyMaster,
-      // Plan y límites
       planInfo,
       actualizarUso,
       puedeCrearLead,
