@@ -3,14 +3,12 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Pages
+import AuthCallback from './pages/AuthCallback';
+import CambiarPassword from './pages/CambiarPassword';
+import Dashboard from './pages/Dashboard';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
-import Dashboard from './pages/Dashboard';
-import AdminDashboard from './pages/AdminDashboard';
-import CambiarPassword from './pages/CambiarPassword';
-import Usuarios from './pages/Usuarios';
-import AuthCallback from './pages/AuthCallback';
 
 // Loading spinner
 const LoadingSpinner = () => (
@@ -21,7 +19,7 @@ const LoadingSpinner = () => (
 
 // Ruta protegida para usuarios autenticados
 const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading, debeCambiarPassword, isSuperOwner } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
 
   if (loading) {
     return <LoadingSpinner />;
@@ -29,30 +27,6 @@ const ProtectedRoute = ({ children }) => {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
-  }
-
-  // Si debe cambiar contraseña, redirigir
-  if (debeCambiarPassword) {
-    return <Navigate to="/cambiar-password" replace />;
-  }
-
-  return children;
-};
-
-// Ruta protegida para Super Owners
-const AdminRoute = ({ children }) => {
-  const { isAuthenticated, loading, isSuperOwner } = useAuth();
-
-  if (loading) {
-    return <LoadingSpinner />;
-  }
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  if (!isSuperOwner) {
-    return <Navigate to="/dashboard" replace />;
   }
 
   return children;
@@ -60,17 +34,14 @@ const AdminRoute = ({ children }) => {
 
 // Ruta pública (redirige si ya está autenticado)
 const PublicRoute = ({ children }) => {
-  const { isAuthenticated, loading, isSuperOwner, debeCambiarPassword } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
 
   if (loading) {
     return <LoadingSpinner />;
   }
 
   if (isAuthenticated) {
-    if (debeCambiarPassword) {
-      return <Navigate to="/cambiar-password" replace />;
-    }
-    return <Navigate to={isSuperOwner ? '/admin' : '/dashboard'} replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return children;
@@ -106,7 +77,7 @@ const AppRoutes = () => {
       <Route path="/cambiar-password" element={<CambiarPassword />} />
       <Route path="/reset-password" element={<CambiarPassword />} />
 
-      {/* Dashboard de usuario */}
+      {/* Dashboard */}
       <Route
         path="/dashboard"
         element={
@@ -117,68 +88,6 @@ const AppRoutes = () => {
       />
       <Route
         path="/dashboard/*"
-        element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
-
-      {/* Gestión de usuarios (KeyMaster) */}
-      <Route
-        path="/usuarios"
-        element={
-          <ProtectedRoute>
-            <Usuarios />
-          </ProtectedRoute>
-        }
-      />
-
-      {/* Panel de administración (Super Owner) */}
-      <Route
-        path="/admin"
-        element={
-          <AdminRoute>
-            <AdminDashboard />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/*"
-        element={
-          <AdminRoute>
-            <AdminDashboard />
-          </AdminRoute>
-        }
-      />
-
-      {/* Rutas placeholder para futuras páginas */}
-      <Route
-        path="/leads"
-        element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/reportes"
-        element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/configuracion"
-        element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/configuracion/*"
         element={
           <ProtectedRoute>
             <Dashboard />
