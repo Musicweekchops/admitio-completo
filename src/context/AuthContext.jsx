@@ -3,7 +3,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 const AuthContext = createContext(null)
 
-// Configuración de roles (esto NO son datos mock, es config del sistema)
+// Configuración de roles
 const ROLES = {
   superadmin: {
     nombre: 'Super Admin',
@@ -52,7 +52,6 @@ export function AuthProvider({ children }) {
     if (oldData) {
       try {
         const parsed = JSON.parse(oldData)
-        // Si tiene datos mock (consultas con IDs que empiezan con números), limpiar
         if (parsed.consultas?.some(c => typeof c.id === 'number')) {
           console.log('🧹 Limpiando datos de demostración...')
           localStorage.removeItem('admitio_data')
@@ -96,7 +95,6 @@ export function AuthProvider({ children }) {
       if (session?.user) {
         await loadUserFromAuth(session.user)
       } else {
-        // No hay sesión - limpiar localStorage
         localStorage.removeItem('admitio_user')
         localStorage.removeItem('admitio_data')
         setLoading(false)
@@ -111,7 +109,7 @@ export function AuthProvider({ children }) {
     try {
       const { data: usuario, error } = await supabase
         .from('usuarios')
-        .select('*, instituciones(id, nombre)')
+        .select('*, instituciones(id, nombre, tipo, pais, ciudad, region, sitio_web, plan)')
         .eq('auth_id', authUser.id)
         .eq('activo', true)
         .single()
@@ -189,7 +187,17 @@ export function AuthProvider({ children }) {
   }
 
   // ========== SIGN UP ==========
-  async function signUp({ institucion: nombreInstitucion, nombre, email, password }) {
+  async function signUp({ 
+    institucion: nombreInstitucion, 
+    tipo,
+    pais,
+    ciudad,
+    region,
+    sitioWeb,
+    nombre, 
+    email, 
+    password 
+  }) {
     if (!isSupabaseConfigured()) {
       return { success: false, error: 'Sistema no configurado. Contacta al administrador.' }
     }
@@ -203,6 +211,18 @@ export function AuthProvider({ children }) {
       
       if (!nombreInst || nombreInst.length < 3) {
         return { success: false, error: 'El nombre de la institución debe tener al menos 3 caracteres' }
+      }
+      
+      if (!tipo) {
+        return { success: false, error: 'Selecciona el tipo de institución' }
+      }
+
+      if (!pais) {
+        return { success: false, error: 'Selecciona el país' }
+      }
+
+      if (!ciudad || ciudad.trim().length < 2) {
+        return { success: false, error: 'Ingresa la ciudad' }
       }
       
       if (!nombreUsuario || nombreUsuario.length < 2) {
@@ -274,12 +294,17 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'Error al crear usuario' }
       }
 
-      // ========== CREAR INSTITUCIÓN ==========
+      // ========== CREAR INSTITUCIÓN CON TODOS LOS CAMPOS ==========
       const { data: nuevaInst, error: instError } = await supabase
         .from('instituciones')
         .insert({ 
           nombre: nombreInst, 
           codigo: nombreInst,
+          tipo: tipo,
+          pais: pais,
+          ciudad: ciudad.trim(),
+          region: region || null,
+          sitio_web: sitioWeb || null,
           plan: 'free', 
           estado: 'activo'
         })
@@ -314,6 +339,9 @@ export function AuthProvider({ children }) {
 
       console.log('✅ Cuenta creada:', {
         institucion: nuevaInst.nombre,
+        tipo: tipo,
+        pais: pais,
+        ciudad: ciudad,
         email: emailNormalizado
       })
 

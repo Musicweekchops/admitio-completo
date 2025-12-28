@@ -9,6 +9,7 @@ import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import CambiarPassword from './pages/CambiarPassword';
 import AuthCallback from './pages/AuthCallback';
+import Backoffice from './pages/backoffice/Backoffice';
 
 // Componente para detectar tokens en el hash y redirigir
 const HashTokenHandler = ({ children }) => {
@@ -126,6 +127,9 @@ const AppRoutes = () => {
             </ProtectedRoute>
           }
         />
+
+        {/* Backoffice - Panel de administración de Admitio */}
+        <Route path="/backoffice" element={<Backoffice />} />
 
         {/* 404 - Redirigir a home */}
         <Route path="*" element={<Navigate to="/" replace />} />
