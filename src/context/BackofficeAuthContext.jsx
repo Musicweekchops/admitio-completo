@@ -147,26 +147,29 @@ export function BackofficeAuthProvider({ children }) {
 
   // Enviar código por email
   async function enviarCodigo2FA(email, codigo, nombre) {
+    // Por ahora mostramos el código en consola
+    // TODO: Configurar Edge Function o Resend para enviar por email
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    console.log('🔐 CÓDIGO 2FA:', codigo)
+    console.log('📧 Para:', email)
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    
+    // Cuando tengas la Edge Function configurada, descomenta esto:
+    /*
     try {
-      // Intentar con Edge Function
       const { data, error } = await supabase.functions.invoke('send-2fa-code', {
         body: { email, codigo, nombre }
       })
-
-      if (error) {
-        console.warn('Edge function no disponible, usando fallback')
-        // Fallback: mostrar código en consola (solo desarrollo)
-        console.log('🔐 CÓDIGO 2FA:', codigo)
-        return { success: true }
-      }
-
+      if (error) throw error
       return { success: true }
     } catch (error) {
       console.error('Error enviando código:', error)
-      // En desarrollo, permitir continuar
       console.log('🔐 CÓDIGO 2FA (fallback):', codigo)
       return { success: true }
     }
+    */
+    
+    return { success: true }
   }
 
   // Reenviar código
