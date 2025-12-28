@@ -1,13 +1,35 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
-import { USUARIOS, ROLES } from '../data/mockData'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 const AuthContext = createContext(null)
 
-// Configuración de planes por defecto
+// Configuración de roles (esto NO son datos mock, es config del sistema)
+const ROLES = {
+  superadmin: {
+    nombre: 'Super Admin',
+    permisos: { ver_todos: true, editar: true, reasignar: true, config: true, usuarios: true, reportes: true, formularios: true, crear_leads: true, eliminar_keymaster: true }
+  },
+  keymaster: {
+    nombre: 'Key Master',
+    permisos: { ver_todos: true, editar: true, reasignar: true, config: true, usuarios: true, reportes: true, formularios: true, crear_leads: true }
+  },
+  encargado: {
+    nombre: 'Encargado',
+    permisos: { ver_todos: true, editar: true, reasignar: true, reportes: true, crear_leads: true }
+  },
+  asistente: {
+    nombre: 'Asistente',
+    permisos: { ver_propios: true, editar: true, crear_leads: true }
+  },
+  rector: {
+    nombre: 'Rector',
+    permisos: { ver_todos: true, reportes: true }
+  }
+}
+
+// Configuración de planes
 const PLANES_DEFAULT = {
   free: { nombre: 'Gratis', max_leads: 10, max_usuarios: 1, max_formularios: 1 },
-  prueba: { nombre: 'Prueba', max_leads: 15, max_usuarios: 1, max_formularios: 1 },
   inicial: { nombre: 'Inicial', max_leads: 300, max_usuarios: 5, max_formularios: 1 },
   profesional: { nombre: 'Profesional', max_leads: 1500, max_usuarios: 15, max_formularios: 3 },
   premium: { nombre: 'Premium', max_leads: 5000, max_usuarios: 50, max_formularios: 10 },
@@ -25,6 +47,22 @@ export function AuthProvider({ children }) {
   })
 
   useEffect(() => {
+    // Limpiar datos viejos de localStorage al iniciar
+    const oldData = localStorage.getItem('admitio_data')
+    if (oldData) {
+      try {
+        const parsed = JSON.parse(oldData)
+        // Si tiene datos mock (consultas con IDs que empiezan con números), limpiar
+        if (parsed.consultas?.some(c => typeof c.id === 'number')) {
+          console.log('🧹 Limpiando datos de demostración...')
+          localStorage.removeItem('admitio_data')
+          localStorage.removeItem('admitio_user')
+        }
+      } catch (e) {
+        localStorage.removeItem('admitio_data')
+      }
+    }
+
     checkSession()
 
     if (isSupabaseConfigured()) {
@@ -47,32 +85,24 @@ export function AuthProvider({ children }) {
 
   async function checkSession() {
     try {
-      if (isSupabaseConfigured()) {
-        const { data: { session } } = await supabase.auth.getSession()
-        
-        if (session?.user) {
-          await loadUserFromAuth(session.user)
-          return
-        }
+      if (!isSupabaseConfigured()) {
+        console.log('⚠️ Supabase no configurado')
+        setLoading(false)
+        return
       }
 
-      const savedUser = localStorage.getItem('admitio_user')
-      if (savedUser) {
-        const userData = JSON.parse(savedUser)
-        
-        if (userData.institucion_id && isSupabaseConfigured()) {
-          localStorage.removeItem('admitio_user')
-          localStorage.removeItem('admitio_data')
-        } else {
-          const fullUser = USUARIOS.find(u => u.id === userData.id)
-          if (fullUser && fullUser.activo) {
-            setUser(enrichUser(fullUser))
-          }
-        }
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (session?.user) {
+        await loadUserFromAuth(session.user)
+      } else {
+        // No hay sesión - limpiar localStorage
+        localStorage.removeItem('admitio_user')
+        localStorage.removeItem('admitio_data')
+        setLoading(false)
       }
     } catch (error) {
       console.error('Error checking session:', error)
-    } finally {
       setLoading(false)
     }
   }
@@ -92,6 +122,8 @@ export function AuthProvider({ children }) {
         return
       }
 
+      const rol = ROLES[usuario.rol] || ROLES.asistente
+
       const enrichedUser = {
         id: usuario.id,
         auth_id: authUser.id,
@@ -102,8 +134,8 @@ export function AuthProvider({ children }) {
         institucion_id: usuario.institucion_id,
         institucion_nombre: usuario.instituciones?.nombre || 'Mi Institución',
         email_verificado: authUser.email_confirmed_at != null,
-        rol: ROLES[usuario.rol] || ROLES.encargado,
-        permisos: ROLES[usuario.rol]?.permisos || {}
+        rol: rol,
+        permisos: rol.permisos || {}
       }
 
       setUser(enrichedUser)
@@ -120,28 +152,12 @@ export function AuthProvider({ children }) {
     }
   }
 
-  function enrichUser(userData) {
-    const rol = ROLES[userData.rol_id]
-    return {
-      ...userData,
-      rol,
-      permisos: rol?.permisos || {}
-    }
-  }
-
   // ========== SIGN IN ==========
   async function signIn(email, password) {
-    if (isSupabaseConfigured()) {
-      const result = await signInWithSupabase(email, password)
-      if (result.success) return result
-      if (result.error !== 'Usuario no encontrado') {
-        return result
-      }
+    if (!isSupabaseConfigured()) {
+      return { success: false, error: 'Sistema no configurado. Contacta al administrador.' }
     }
-    return signInLocal(email, password)
-  }
 
-  async function signInWithSupabase(email, password) {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.toLowerCase().trim(),
@@ -154,7 +170,7 @@ export function AuthProvider({ children }) {
           return { success: false, error: 'Credenciales inválidas' }
         }
         if (error.message.includes('Email not confirmed')) {
-          return { success: false, error: 'Debes verificar tu email antes de iniciar sesión' }
+          return { success: false, error: 'Debes verificar tu email antes de iniciar sesión. Revisa tu bandeja de entrada.' }
         }
         return { success: false, error: error.message }
       }
@@ -172,28 +188,10 @@ export function AuthProvider({ children }) {
     }
   }
 
-  function signInLocal(email, password) {
-    const usuario = USUARIOS.find(u => 
-      u.email.toLowerCase() === email.toLowerCase() && 
-      u.password === password &&
-      u.activo
-    )
-    
-    if (usuario) {
-      const enrichedUser = enrichUser(usuario)
-      setUser(enrichedUser)
-      localStorage.setItem('admitio_user', JSON.stringify({ id: usuario.id }))
-      console.log('✅ Login local exitoso:', enrichedUser.nombre)
-      return { success: true, user: enrichedUser }
-    }
-    
-    return { success: false, error: 'Credenciales inválidas' }
-  }
-
   // ========== SIGN UP ==========
   async function signUp({ institucion: nombreInstitucion, nombre, email, password }) {
     if (!isSupabaseConfigured()) {
-      return { success: false, error: 'Registro no disponible en modo local' }
+      return { success: false, error: 'Sistema no configurado. Contacta al administrador.' }
     }
 
     const emailNormalizado = email.toLowerCase().trim()
@@ -201,9 +199,8 @@ export function AuthProvider({ children }) {
     const nombreUsuario = nombre.trim()
 
     try {
-      // ========== VALIDACIONES PREVIAS (ANTES de crear nada) ==========
+      // ========== VALIDACIONES PREVIAS ==========
       
-      // 1. Validar campos
       if (!nombreInst || nombreInst.length < 3) {
         return { success: false, error: 'El nombre de la institución debe tener al menos 3 caracteres' }
       }
@@ -220,7 +217,7 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'La contraseña debe tener al menos 6 caracteres' }
       }
 
-      // 2. Verificar si la institución ya existe (POR NOMBRE Y CODIGO)
+      // Verificar si la institución ya existe
       const { data: instExistePorCodigo } = await supabase
         .from('instituciones')
         .select('id, nombre')
@@ -231,7 +228,6 @@ export function AuthProvider({ children }) {
         return { success: false, error: `Ya existe una institución llamada "${instExistePorCodigo.nombre}"` }
       }
 
-      // También verificar por nombre (case insensitive)
       const { data: instExistePorNombre } = await supabase
         .from('instituciones')
         .select('id, nombre')
@@ -242,7 +238,7 @@ export function AuthProvider({ children }) {
         return { success: false, error: `Ya existe una institución con un nombre similar: "${instExistePorNombre.nombre}"` }
       }
 
-      // 3. Verificar si el email ya existe en nuestra tabla
+      // Verificar si el email ya existe
       const { data: emailExisteEnUsuarios } = await supabase
         .from('usuarios')
         .select('id')
@@ -253,9 +249,7 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'Este correo electrónico ya está registrado' }
       }
 
-      // ========== TODO VALIDADO - AHORA SÍ CREAR ==========
-
-      // 4. Crear usuario en Supabase Auth (esto envía el email)
+      // ========== CREAR EN SUPABASE AUTH ==========
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: emailNormalizado,
         password,
@@ -271,7 +265,7 @@ export function AuthProvider({ children }) {
       if (authError) {
         console.error('Error creando auth user:', authError)
         if (authError.message.includes('already registered')) {
-          return { success: false, error: 'Este correo electrónico ya está registrado en el sistema de autenticación' }
+          return { success: false, error: 'Este correo electrónico ya está registrado' }
         }
         return { success: false, error: authError.message }
       }
@@ -280,7 +274,7 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'Error al crear usuario' }
       }
 
-      // 5. Crear institución
+      // ========== CREAR INSTITUCIÓN ==========
       const { data: nuevaInst, error: instError } = await supabase
         .from('instituciones')
         .insert({ 
@@ -294,11 +288,10 @@ export function AuthProvider({ children }) {
 
       if (instError) {
         console.error('Error creando institución:', instError)
-        // No podemos eliminar fácil el auth user, pero al menos informamos
         return { success: false, error: 'Error al crear la institución. Por favor contacta soporte.' }
       }
 
-      // 6. Crear usuario en nuestra tabla (SIN password_hash)
+      // ========== CREAR USUARIO ==========
       const { error: userError } = await supabase
         .from('usuarios')
         .insert({
@@ -313,18 +306,15 @@ export function AuthProvider({ children }) {
 
       if (userError) {
         console.error('Error creando usuario:', userError)
-        // Rollback: eliminar institución
         await supabase.from('instituciones').delete().eq('id', nuevaInst.id)
         return { success: false, error: 'Error al crear el usuario. Por favor intenta de nuevo.' }
       }
 
-      // Guardar email para reenvío
       localStorage.setItem('admitio_pending_email', emailNormalizado)
 
       console.log('✅ Cuenta creada:', {
         institucion: nuevaInst.nombre,
-        email: emailNormalizado,
-        authId: authData.user.id
+        email: emailNormalizado
       })
 
       return { 
@@ -356,7 +346,7 @@ export function AuthProvider({ children }) {
   // ========== RESET PASSWORD ==========
   async function resetPassword(email) {
     if (!isSupabaseConfigured()) {
-      return { success: false, error: 'No disponible en modo local' }
+      return { success: false, error: 'Sistema no configurado' }
     }
 
     try {
@@ -377,7 +367,7 @@ export function AuthProvider({ children }) {
   // ========== RESEND VERIFICATION ==========
   async function resendVerification(email) {
     if (!isSupabaseConfigured()) {
-      return { success: false, error: 'No disponible en modo local' }
+      return { success: false, error: 'Sistema no configurado' }
     }
 
     try {
@@ -451,10 +441,6 @@ export function AuthProvider({ children }) {
           fecha_cierre: lead.fecha_cierre,
           matriculado: lead.matriculado || false,
           descartado: lead.descartado || false,
-          tipo_alumno: lead.tipo_alumno || 'nuevo',
-          emails_enviados: lead.emails_enviados || 0,
-          fecha_proximo_contacto: lead.fecha_proximo_contacto,
-          nuevo_interes: lead.nuevo_interes || false,
           updated_at: lead.updated_at
         })),
         usuarios: (usuarios || []).map(u => ({
@@ -479,15 +465,13 @@ export function AuthProvider({ children }) {
           carrera_default: f.carrera_default,
           activo: f.activo !== false,
           submissions: f.submissions || 0,
-          created_at: f.created_at,
-          updated_at: f.updated_at
+          created_at: f.created_at
         })),
         actividad: (acciones || []).map(a => ({
           id: a.id,
           tipo: a.tipo,
           descripcion: a.descripcion,
           fecha: a.created_at,
-          created_at: a.created_at,
           usuario_id: a.usuario_id,
           lead_id: a.lead_id
         })),
@@ -507,16 +491,14 @@ export function AuthProvider({ children }) {
       }
 
       localStorage.setItem('admitio_data', JSON.stringify(storeData))
-      console.log('📦 Datos cargados:', {
+      console.log('📦 Datos cargados desde Supabase:', {
         leads: storeData.consultas.length,
         usuarios: storeData.usuarios.length,
         carreras: storeData.carreras.length,
         formularios: storeData.formularios.length
       })
 
-      const leadsCount = storeData.consultas.length
-      const usuariosCount = storeData.usuarios.length
-      await loadPlanInfo(institucionId, leadsCount, usuariosCount)
+      await loadPlanInfo(institucionId, storeData.consultas.length, storeData.usuarios.length)
 
     } catch (error) {
       console.error('Error cargando datos de institución:', error)
@@ -541,12 +523,7 @@ export function AuthProvider({ children }) {
 
       setPlanInfo({
         plan: planId,
-        limites: {
-          nombre: limites.nombre,
-          max_leads: limites.max_leads,
-          max_usuarios: limites.max_usuarios,
-          max_formularios: limites.max_formularios || 1
-        },
+        limites,
         uso: {
           leads: leadsCount,
           usuarios: usuariosCount,
@@ -556,11 +533,6 @@ export function AuthProvider({ children }) {
 
     } catch (error) {
       console.error('Error cargando info del plan:', error)
-      setPlanInfo({
-        plan: 'free',
-        limites: PLANES_DEFAULT.free,
-        uso: { leads: leadsCount || 0, usuarios: usuariosCount || 0, formularios: 0 }
-      })
     }
   }
 
