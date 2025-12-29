@@ -467,9 +467,10 @@ export function AuthProvider({ children }) {
 
       const { data: acciones } = await supabase
         .from('acciones_lead')
-        .select('*')
+        .select('*, leads!inner(institucion_id)')
+        .eq('leads.institucion_id', institucionId)
         .order('created_at', { ascending: false })
-        .limit(100)
+        .limit(500)
 
       const storeData = {
         consultas: (leads || []).map(lead => ({
@@ -520,7 +521,7 @@ export function AuthProvider({ children }) {
           id: a.id,
           tipo: a.tipo,
           descripcion: a.descripcion,
-          fecha: a.created_at,
+          created_at: a.created_at, // Usar created_at consistentemente
           usuario_id: a.usuario_id,
           lead_id: a.lead_id
         })),

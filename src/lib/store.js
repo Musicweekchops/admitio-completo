@@ -28,7 +28,8 @@ import { supabase } from './supabase'
 // Importar funciones de sincronización con Supabase
 import { 
   syncCrearLead, 
-  syncActualizarLead, 
+  syncActualizarLead,
+  syncActualizarLeadDirecto,
   syncEliminarLead,
   syncCrearAccion,
   syncCrearUsuario,
@@ -592,7 +593,7 @@ function enrichConsulta(c) {
   }
 }
 
-export function createConsulta(data, userId, userRol = null) {
+export async function createConsulta(data, userId, userRol = null) {
   // Determinar asignación
   let asignado_a = data.asignado_a
   let en_cola = false
@@ -617,10 +618,10 @@ export function createConsulta(data, userId, userRol = null) {
     carrera_nombre = carrera?.nombre || null
   }
   
-  const newConsulta = {
-    id: `c-${Date.now()}`,
+  // Preparar datos del lead
+  const leadData = {
     ...data,
-    carrera_nombre, // Asegurar que siempre tenga el nombre
+    carrera_nombre,
     estado: 'nueva',
     emails_enviados: 0,
     created_at: new Date().toISOString(),
@@ -633,11 +634,74 @@ export function createConsulta(data, userId, userRol = null) {
     asignado_a,
     en_cola,
     ultimo_whatsapp: null,
-    // Nuevo: Registro de quién creó el lead
     creado_por: userId,
     creado_por_nombre: creador?.nombre || 'Sistema',
     creado_por_rol: userRol || creador?.rol_id || 'sistema',
     origen_entrada: userRol === 'asistente' ? 'secretaria' : (data.origen_entrada || 'manual')
+  }
+  
+  // ========== CREAR EN SUPABASE PRIMERO ==========
+  const institucionId = getInstitucionIdFromStore()
+  let finalId = `c-${Date.now()}` // Fallback ID local
+  
+  if (institucionId) {
+    try {
+      // Preparar datos para Supabase
+      const insertData = {
+        institucion_id: institucionId,
+        nombre: leadData.nombre,
+        email: leadData.email || null,
+        telefono: leadData.telefono || null,
+        carrera_nombre: leadData.carrera_nombre || null,
+        medio: leadData.medio_id || 'otro',
+        estado: 'nueva',
+        prioridad: leadData.prioridad || 'media',
+        notas: leadData.notas || null
+      }
+      
+      // Solo incluir carrera_id si es UUID válido
+      if (leadData.carrera_id && typeof leadData.carrera_id === 'string' && 
+          leadData.carrera_id.includes('-') && leadData.carrera_id.length > 30) {
+        insertData.carrera_id = leadData.carrera_id
+      }
+      
+      // Solo incluir asignado_a si es UUID válido
+      if (asignado_a && typeof asignado_a === 'string' && 
+          asignado_a.includes('-') && asignado_a.length > 30) {
+        insertData.asignado_a = asignado_a
+      }
+      
+      // Solo incluir creado_por si es UUID válido
+      if (userId && typeof userId === 'string' && 
+          userId.includes('-') && userId.length > 30) {
+        insertData.creado_por = userId
+      }
+      
+      console.log('📤 Creando lead en Supabase...')
+      const { data: nuevoLead, error } = await supabase
+        .from('leads')
+        .insert(insertData)
+        .select()
+        .single()
+      
+      if (error) {
+        console.error('❌ Error creando lead en Supabase:', error)
+        // Continuar con ID local como fallback
+      } else {
+        // Usar el UUID de Supabase
+        finalId = nuevoLead.id
+        console.log('✅ Lead creado en Supabase con ID:', finalId)
+      }
+    } catch (err) {
+      console.error('❌ Error en Supabase:', err)
+      // Continuar con ID local
+    }
+  }
+  // ================================================
+  
+  const newConsulta = {
+    id: finalId, // UUID de Supabase o fallback local
+    ...leadData
   }
   
   store.consultas.push(newConsulta)
@@ -656,25 +720,17 @@ export function createConsulta(data, userId, userRol = null) {
       prioridad: 0,
       created_at: new Date().toISOString()
     })
-    // Crear notificación para KeyMaster
     crearNotificacion('keymaster', 'cola_llena', `Nuevo lead en cola: ${data.nombre}`, newConsulta.id)
   } else if (asignado_a) {
-    // Notificar al encargado
     crearNotificacion(asignado_a, 'nuevo_lead', `Nuevo lead asignado: ${data.nombre}`, newConsulta.id)
   }
   
   saveStore()
   
-  // ========== SYNC CON SUPABASE ==========
-  const institucionId = getInstitucionIdFromStore()
-  if (institucionId) {
-    syncCrearLead(institucionId, newConsulta)
-  }
-  // ========================================
-  
   // Log para debugging
   const encargado = store.usuarios.find(u => u.id === asignado_a)
   console.log(`✅ Lead creado: ${data.nombre}`)
+  console.log(`   → ID: ${finalId}`)
   console.log(`   → Creado por: ${creador?.nombre || 'Sistema'} (${newConsulta.origen_entrada})`)
   console.log(`   → Asignado a: ${encargado?.nombre || 'En cola'}`)
   console.log(`   → Total leads: ${store.consultas.length}`)
@@ -952,10 +1008,65 @@ export function updateConsulta(id, updates, userId) {
     syncUpdates.carreras_interes = newConsulta.carreras_interes
   }
   
-  syncActualizarLead(id, syncUpdates)
+  syncActualizarLeadDirecto(id, syncUpdates)
   // ========================================
   
   return newConsulta
+}
+
+// Versión async que espera confirmación de Supabase (para operaciones críticas)
+export async function updateConsultaAsync(id, updates, userId) {
+  const index = store.consultas.findIndex(c => c.id === id)
+  if (index === -1) return { success: false, error: 'Lead no encontrado' }
+  
+  const oldConsulta = store.consultas[index]
+  const newConsulta = { ...oldConsulta, ...updates }
+  
+  // Detectar cambio de estado
+  if (updates.estado && oldConsulta.estado !== newConsulta.estado) {
+    addActividad(id, userId, 'cambio_estado', `Estado: ${oldConsulta.estado} → ${newConsulta.estado}`)
+    
+    // Primer contacto
+    if (!oldConsulta.fecha_primer_contacto && newConsulta.estado !== 'nueva') {
+      newConsulta.fecha_primer_contacto = new Date().toISOString()
+    }
+    
+    // Cierre
+    if (newConsulta.estado === 'matriculado') {
+      newConsulta.fecha_cierre = new Date().toISOString()
+      newConsulta.matriculado = true
+      addActividad(id, userId, 'matriculado', '🎉 Lead matriculado exitosamente')
+      cancelarRecordatorios(id)
+    }
+    if (newConsulta.estado === 'descartado') {
+      newConsulta.fecha_cierre = new Date().toISOString()
+      newConsulta.descartado = true
+      addActividad(id, userId, 'descartado', `Lead descartado: ${updates.motivo_descarte || 'Sin motivo especificado'}`)
+      cancelarRecordatorios(id)
+    }
+  }
+  
+  // Actualizar store local
+  store.consultas[index] = newConsulta
+  saveStore()
+  
+  // Calcular campos para sync
+  const syncUpdates = { ...updates }
+  if (newConsulta.matriculado !== oldConsulta.matriculado) syncUpdates.matriculado = newConsulta.matriculado
+  if (newConsulta.descartado !== oldConsulta.descartado) syncUpdates.descartado = newConsulta.descartado
+  if (newConsulta.fecha_cierre !== oldConsulta.fecha_cierre) syncUpdates.fecha_cierre = newConsulta.fecha_cierre
+  if (newConsulta.fecha_primer_contacto !== oldConsulta.fecha_primer_contacto) syncUpdates.fecha_primer_contacto = newConsulta.fecha_primer_contacto
+  
+  // Sincronizar con Supabase y ESPERAR resultado
+  const syncResult = await syncActualizarLeadDirecto(id, syncUpdates)
+  
+  if (!syncResult.success) {
+    console.error('❌ Error sincronizando cambio:', syncResult.error)
+    return { success: false, error: syncResult.error, lead: newConsulta }
+  }
+  
+  console.log('✅ Cambio sincronizado correctamente')
+  return { success: true, lead: newConsulta }
 }
 
 export async function deleteConsulta(id) {
@@ -998,11 +1109,11 @@ export async function deleteConsulta(id) {
 }
 
 // Reactivar un lead descartado
-export function reactivarLead(id, userId) {
+export async function reactivarLead(id, userId) {
   const lead = store.consultas.find(c => c.id === id)
   if (!lead || !lead.descartado) return null
   
-  const nuevoLead = createConsulta({
+  const nuevoLead = await createConsulta({
     nombre: lead.nombre,
     email: lead.email,
     telefono: lead.telefono,
@@ -2433,7 +2544,7 @@ function parseCSVLine(line) {
 }
 
 // Función principal: Importar leads desde CSV
-export function importarLeadsCSV(csvData, userId, mapeoColumnas = {}, opciones = {}) {
+export async function importarLeadsCSV(csvData, userId, mapeoColumnas = {}, opciones = {}) {
   console.log('📥 Iniciando importación de CSV...')
   
   // Opciones de importación
@@ -2617,7 +2728,7 @@ export function importarLeadsCSV(csvData, userId, mapeoColumnas = {}, opciones =
       console.log(`📱 Medio: "${medio_id}"`)
       
       // Crear el lead
-      const nuevoLead = createConsulta({
+      const nuevoLead = await createConsulta({
         nombre,
         email: email || '',
         telefono: telefono || '',
