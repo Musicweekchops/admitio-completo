@@ -815,7 +815,18 @@ export default function Dashboard() {
       }
     }, 500)
     
-    return () => clearTimeout(timer)
+    // Escuchar evento de actualización del store (cuando AuthContext carga datos de Supabase)
+    const handleStoreUpdate = () => {
+      console.log('📊 Dashboard: Store actualizado, recargando datos...')
+      store.reloadStore()
+      loadData()
+    }
+    window.addEventListener('admitio-store-updated', handleStoreUpdate)
+    
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('admitio-store-updated', handleStoreUpdate)
+    }
   }, [user])
 
   // Helper para abrir modal de nuevo lead con validación de límite

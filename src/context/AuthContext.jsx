@@ -515,10 +515,26 @@ export function AuthProvider({ children }) {
           { id: 'otro', nombre: 'Otro', icono: 'MoreHorizontal', color: 'text-gray-500' }
         ],
         recordatorios: [],
-        lastSync: new Date().toISOString()
+        notificaciones: [],
+        importaciones: [],
+        cola_leads: [],
+        metricas_encargados: {},
+        plantillas: [],
+        config: { nombre: 'Mi Institución' },
+        // ========== CAMPOS CRÍTICOS PARA SUPABASE ==========
+        _supabase_sync: true,
+        _institucion_id: institucionId,
+        _last_sync: new Date().toISOString()
       }
 
       localStorage.setItem('admitio_data', JSON.stringify(storeData))
+      localStorage.setItem('admitio_version', '2.7') // Asegurar versión correcta
+      
+      // Disparar evento para que el store se recargue
+      window.dispatchEvent(new CustomEvent('admitio-store-updated', { 
+        detail: { institucionId, source: 'auth' }
+      }))
+      
       console.log('📦 Datos cargados desde Supabase:', {
         leads: storeData.consultas.length,
         usuarios: storeData.usuarios.length,

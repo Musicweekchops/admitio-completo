@@ -130,6 +130,22 @@ function initStore() {
 
 let store = initStore()
 
+// Escuchar evento de actualización desde AuthContext
+if (typeof window !== 'undefined') {
+  window.addEventListener('admitio-store-updated', (event) => {
+    console.log('🔄 Evento admitio-store-updated recibido, recargando store...')
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (stored) {
+      try {
+        store = JSON.parse(stored)
+        console.log(`✅ Store recargado: ${store.consultas?.length || 0} leads, ${store.usuarios?.length || 0} usuarios (Supabase: ${store._supabase_sync ? 'Sí' : 'No'})`)
+      } catch (e) {
+        console.warn('⚠️ Error al recargar store desde evento')
+      }
+    }
+  })
+}
+
 function saveStore() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(store))
 }
