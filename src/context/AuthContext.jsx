@@ -47,6 +47,14 @@ export function AuthProvider({ children }) {
   })
 
   useEffect(() => {
+    // Timeout de seguridad - nunca quedarse en loading más de 5 segundos
+    const safetyTimeout = setTimeout(() => {
+      if (loading) {
+        console.warn('⚠️ Timeout de carga - forzando fin de loading')
+        setLoading(false)
+      }
+    }, 5000)
+
     // Limpiar datos viejos de localStorage al iniciar
     const oldData = localStorage.getItem('admitio_data')
     if (oldData) {
@@ -64,21 +72,26 @@ export function AuthProvider({ children }) {
 
     checkSession()
 
+    let subscription = null
     if (isSupabaseConfigured()) {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
         console.log('🔔 Auth event:', event)
         
-        if (event === 'SIGNED_IN' && session?.user) {
-          await loadUserFromAuth(session.user)
-        } else if (event === 'SIGNED_OUT') {
+        // Solo procesar SIGNED_OUT - el resto lo maneja checkSession
+        if (event === 'SIGNED_OUT') {
           setUser(null)
           setInstitucion(null)
           localStorage.removeItem('admitio_user')
           localStorage.removeItem('admitio_data')
+          setLoading(false)
         }
       })
+      subscription = data.subscription
+    }
 
-      return () => subscription.unsubscribe()
+    return () => {
+      clearTimeout(safetyTimeout)
+      if (subscription) subscription.unsubscribe()
     }
   }, [])
 
@@ -360,14 +373,22 @@ export function AuthProvider({ children }) {
 
   // ========== SIGN OUT ==========
   async function signOut() {
-    if (isSupabaseConfigured()) {
-      await supabase.auth.signOut()
-    }
+    // Limpiar estado local primero
     setUser(null)
     setInstitucion(null)
     localStorage.removeItem('admitio_user')
     localStorage.removeItem('admitio_data')
     localStorage.removeItem('admitio_pending_email')
+    setLoading(false)
+    
+    // Luego cerrar sesión en Supabase
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.auth.signOut()
+      } catch (e) {
+        console.warn('Error en signOut:', e)
+      }
+    }
     console.log('👋 Sesión cerrada')
   }
 

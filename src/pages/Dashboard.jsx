@@ -684,46 +684,56 @@ export default function Dashboard() {
 
   // Supabase Realtime - Solo escucha cambios, no hace polling
   useEffect(() => {
-    if (!isSupabaseConfigured() || !user?.institucion_id) return
+    // No conectar si no hay usuario autenticado
+    if (!isSupabaseConfigured() || !user?.institucion_id || !user?.id) {
+      return
+    }
 
     console.log('🔌 Conectando Supabase Realtime...')
     
-    const channel = supabase
-      .channel('db-changes')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'leads', filter: `institucion_id=eq.${user.institucion_id}` },
-        async (payload) => {
-          console.log('📡 Cambio en leads:', payload.eventType)
-          // Solo actualizar si NO hay ficha abierta (evita parpadeo del botón editar)
-          if (!selectedConsulta) {
-            await reloadFromSupabase()
-            loadData()
-            setLastUpdate(new Date())
+    let channel = null
+    
+    try {
+      channel = supabase
+        .channel(`db-changes-${user.institucion_id}`)
+        .on('postgres_changes', 
+          { event: '*', schema: 'public', table: 'leads', filter: `institucion_id=eq.${user.institucion_id}` },
+          async (payload) => {
+            console.log('📡 Cambio en leads:', payload.eventType)
+            if (user?.institucion_id) { // Verificar que aún hay usuario
+              await reloadFromSupabase()
+              loadData()
+              setLastUpdate(new Date())
+            }
           }
-        }
-      )
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'usuarios', filter: `institucion_id=eq.${user.institucion_id}` },
-        async (payload) => {
-          console.log('📡 Cambio en usuarios:', payload.eventType)
-          if (!selectedConsulta) {
-            await reloadFromSupabase()
-            loadData()
+        )
+        .on('postgres_changes',
+          { event: '*', schema: 'public', table: 'usuarios', filter: `institucion_id=eq.${user.institucion_id}` },
+          async (payload) => {
+            console.log('📡 Cambio en usuarios:', payload.eventType)
+            if (user?.institucion_id) {
+              await reloadFromSupabase()
+              loadData()
+            }
           }
-        }
-      )
-      .subscribe((status) => {
-        console.log('📡 Realtime status:', status)
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ Realtime conectado - recibirás cambios automáticamente')
-        }
-      })
+        )
+        .subscribe((status) => {
+          console.log('📡 Realtime status:', status)
+          if (status === 'SUBSCRIBED') {
+            console.log('✅ Realtime conectado')
+          }
+        })
+    } catch (e) {
+      console.warn('Error conectando Realtime:', e)
+    }
 
     return () => {
-      console.log('🔌 Desconectando Realtime...')
-      supabase.removeChannel(channel)
+      if (channel) {
+        console.log('🔌 Desconectando Realtime...')
+        supabase.removeChannel(channel)
+      }
     }
-  }, [user?.institucion_id, selectedConsulta])
+  }, [user?.institucion_id, user?.id]) // Re-suscribir si cambia usuario o institución
   // ========================================
 
   // Cargar importaciones pendientes (solo Enterprise)
@@ -884,9 +894,15 @@ export default function Dashboard() {
     }
   }
 
-  function handleLogout() {
-    signOut()
-    navigate('/login')
+  async function handleLogout() {
+    try {
+      // Primero cerrar sesión (limpia estado)
+      await signOut()
+    } catch (e) {
+      console.warn('Error en signOut:', e)
+    }
+    // Luego navegar
+    navigate('/login', { replace: true })
   }
   
   function navigateToEstado(estado) {
@@ -4128,12 +4144,6 @@ export default function Dashboard() {
         return
       }
       
-      // Validar contraseña para usuarios nuevos
-      if (!localEditingUser && (!userFormData.password || userFormData.password.length < 6)) {
-        alert('La contraseña es requerida y debe tener al menos 6 caracteres')
-        return
-      }
-      
       try {
         if (localEditingUser) {
           // Actualizar usuario existente
@@ -4143,17 +4153,13 @@ export default function Dashboard() {
             rol_id: userFormData.rol_id,
             activo: userFormData.activo
           }
-          if (userFormData.password) {
-            updates.password = userFormData.password
-          }
           await store.updateUsuario(localEditingUser.id, updates)
           setNotification({ type: 'success', message: 'Usuario actualizado' })
         } else {
-          // Crear nuevo usuario - incluir contraseña
+          // Crear nuevo usuario
           const nuevoUsuario = await store.createUsuario({
             nombre: userFormData.nombre,
             email: userFormData.email,
-            password: userFormData.password, // Importante: pasar la contraseña
             rol_id: userFormData.rol_id,
             activo: userFormData.activo
           })
@@ -4161,7 +4167,7 @@ export default function Dashboard() {
           console.log('✅ Usuario creado:', nuevoUsuario)
           setNotification({ 
             type: 'success', 
-            message: 'Usuario creado. Se envió email de verificación.' 
+            message: 'Usuario creado. Debe usar "Olvidé mi contraseña" para activar su cuenta.' 
           })
           
           // Actualizar contador de uso del plan si existe
@@ -4183,8 +4189,6 @@ export default function Dashboard() {
         let errorMsg = 'Error al guardar usuario'
         if (error.message?.includes('duplicate') || error.code === '23505') {
           errorMsg = 'Ya existe un usuario con ese email'
-        } else if (error.message?.includes('already registered')) {
-          errorMsg = 'Este email ya está registrado en el sistema'
         } else if (error.message) {
           errorMsg = error.message
         }
@@ -4418,19 +4422,11 @@ export default function Dashboard() {
                     className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                     placeholder="juan@projazz.cl"
                   />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Contraseña {localEditingUser ? '(dejar vacío para mantener)' : '*'}
-                  </label>
-                  <input
-                    type="password"
-                    value={userFormData.password}
-                    onChange={e => setUserFormData({...userFormData, password: e.target.value})}
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                    placeholder="••••••••"
-                  />
+                  {!localEditingUser && (
+                    <p className="text-xs text-slate-400 mt-1">
+                      El usuario recibirá instrucciones para activar su cuenta
+                    </p>
+                  )}
                 </div>
                 
                 <div>
@@ -6795,7 +6791,7 @@ const handleImportCSV = async () => {
             </button>
             
             <button
-              onClick={() => signOut()}
+              onClick={handleLogout}
               className="w-full mt-4 py-3 border border-slate-200 text-slate-600 rounded-xl font-medium hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
             >
               <Icon name="LogOut" size={20} />

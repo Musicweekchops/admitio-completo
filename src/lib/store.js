@@ -252,12 +252,12 @@ export function getRolesDisponibles(requesterId = null) {
 export async function createUsuario(data) {
   const institucionId = getInstitucionIdFromStore()
   
-  // Si hay conexión a Supabase, crear en Auth Y en tabla usuarios
+  // Si hay conexión a Supabase, crear en tabla usuarios
   if (institucionId) {
     try {
       const emailNormalizado = data.email.toLowerCase().trim()
       
-      // Verificar si ya existe un usuario con ese email en la tabla
+      // Verificar si ya existe un usuario con ese email
       const { data: existente } = await supabase
         .from('usuarios')
         .select('id')
@@ -268,54 +268,29 @@ export async function createUsuario(data) {
         throw new Error('Ya existe un usuario con ese email')
       }
       
-      console.log('📤 Creando usuario en Supabase Auth...', emailNormalizado)
+      console.log('📤 Creando usuario en Supabase...', emailNormalizado)
       
-      // 1. Crear usuario en Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: emailNormalizado,
-        password: data.password || 'Temporal123!', // Password temporal si no se proporciona
-        options: {
-          data: {
-            nombre: data.nombre,
-            rol: data.rol_id || 'encargado'
-          }
-        }
-      })
-      
-      if (authError) {
-        console.error('❌ Error creando usuario en Auth:', authError)
-        throw authError
-      }
-      
-      if (!authData.user) {
-        throw new Error('No se pudo crear el usuario en Auth')
-      }
-      
-      console.log('✅ Usuario creado en Auth:', authData.user.id)
-      
-      // 2. Crear registro en tabla usuarios con el auth_id
+      // Crear registro en tabla usuarios (SIN auth_id)
+      // El usuario usará "Olvidé mi contraseña" para activar su cuenta
       const { data: nuevoUsuario, error: dbError } = await supabase
         .from('usuarios')
         .insert({
           institucion_id: institucionId,
-          auth_id: authData.user.id, // Vincular con Supabase Auth
           nombre: data.nombre,
           email: emailNormalizado,
           rol: data.rol_id || 'encargado',
           activo: true,
-          email_verificado: false // El usuario debe verificar su email
+          email_verificado: false
         })
         .select()
         .single()
       
       if (dbError) {
-        console.error('❌ Error creando usuario en tabla:', dbError)
-        // Si falla la creación en la tabla, deberíamos eliminar el usuario de Auth
-        // pero no tenemos permisos de admin, así que solo reportamos el error
+        console.error('❌ Error creando usuario:', dbError)
         throw dbError
       }
       
-      console.log('✅ Usuario creado en tabla usuarios:', nuevoUsuario.id)
+      console.log('✅ Usuario creado:', nuevoUsuario.id)
       
       // Formatear para el store local
       const usuarioParaStore = {
@@ -332,12 +307,27 @@ export async function createUsuario(data) {
       store.usuarios.push(usuarioParaStore)
       saveStore()
       
-      // Nota: El usuario recibirá un email de verificación
-      console.log('📧 Se enviará email de verificación a:', emailNormalizado)
-      
       return usuarioParaStore
       
     } catch (error) {
+      console.error('❌ Error creando usuario:', error)
+      throw error
+    }
+  }
+  
+  // Fallback: crear solo localmente (modo demo)
+  const nuevoUsuario = {
+    id: `user-${Date.now()}`,
+    ...data,
+    activo: data.activo !== undefined ? data.activo : true,
+    config: { notificaciones_email: true, notificaciones_popup: true },
+    created_at: new Date().toISOString()
+  }
+  store.usuarios.push(nuevoUsuario)
+  saveStore()
+  
+  return nuevoUsuario
+} {
       console.error('❌ Error creando usuario:', error)
       throw error
     }
