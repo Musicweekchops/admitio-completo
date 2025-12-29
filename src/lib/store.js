@@ -233,7 +233,58 @@ export function getRolesDisponibles(requesterId = null) {
   })
 }
 
-export function createUsuario(data) {
+export async function createUsuario(data) {
+  const institucionId = getInstitucionIdFromStore()
+  
+  // Si hay conexión a Supabase, crear directamente ahí
+  if (institucionId) {
+    try {
+      console.log('📤 Creando usuario en Supabase...', data.email)
+      
+      const { data: nuevoUsuario, error } = await supabase
+        .from('usuarios')
+        .insert({
+          institucion_id: institucionId,
+          nombre: data.nombre,
+          email: data.email.toLowerCase().trim(),
+          rol: data.rol_id || 'encargado',
+          activo: data.activo !== undefined ? data.activo : true,
+          email_verificado: true // Usuarios creados por keymaster ya están verificados
+        })
+        .select()
+        .single()
+      
+      if (error) {
+        console.error('❌ Error creando usuario en Supabase:', error)
+        throw error
+      }
+      
+      console.log('✅ Usuario creado en Supabase:', nuevoUsuario.id)
+      
+      // Formatear para el store local
+      const usuarioParaStore = {
+        id: nuevoUsuario.id, // UUID de Supabase (importante!)
+        nombre: nuevoUsuario.nombre,
+        email: nuevoUsuario.email,
+        rol_id: nuevoUsuario.rol,
+        activo: nuevoUsuario.activo,
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(nuevoUsuario.nombre)}&background=7c3aed&color=fff`,
+        created_at: nuevoUsuario.created_at
+      }
+      
+      // Agregar al store local
+      store.usuarios.push(usuarioParaStore)
+      saveStore()
+      
+      return usuarioParaStore
+      
+    } catch (error) {
+      console.error('❌ Error creando usuario:', error)
+      throw error
+    }
+  }
+  
+  // Fallback: crear solo localmente (modo demo sin Supabase)
   const nuevoUsuario = {
     id: `user-${Date.now()}`,
     ...data,
@@ -244,38 +295,75 @@ export function createUsuario(data) {
   store.usuarios.push(nuevoUsuario)
   saveStore()
   
-  // ========== SYNC CON SUPABASE ==========
-  const institucionId = getInstitucionIdFromStore()
-  if (institucionId) {
-    syncCrearUsuario(institucionId, nuevoUsuario)
-  }
-  // ========================================
-  
   return nuevoUsuario
 }
 
-export function updateUsuario(id, updates) {
+export async function updateUsuario(id, updates) {
   const index = store.usuarios.findIndex(u => u.id === id)
   if (index === -1) return null
+  
+  // Si el ID es UUID de Supabase, actualizar en la BD
+  if (id && id.includes('-') && !id.startsWith('user-')) {
+    try {
+      const supabaseUpdates = {}
+      if (updates.nombre !== undefined) supabaseUpdates.nombre = updates.nombre
+      if (updates.email !== undefined) supabaseUpdates.email = updates.email
+      if (updates.rol_id !== undefined) supabaseUpdates.rol = updates.rol_id
+      if (updates.activo !== undefined) supabaseUpdates.activo = updates.activo
+      supabaseUpdates.updated_at = new Date().toISOString()
+      
+      const { error } = await supabase
+        .from('usuarios')
+        .update(supabaseUpdates)
+        .eq('id', id)
+      
+      if (error) {
+        console.error('❌ Error actualizando usuario en Supabase:', error)
+        throw error
+      }
+      
+      console.log('✅ Usuario actualizado en Supabase:', id)
+    } catch (error) {
+      console.error('Error:', error)
+      throw error
+    }
+  }
+  
+  // Actualizar localmente
   store.usuarios[index] = { ...store.usuarios[index], ...updates }
   saveStore()
-  
-  // ========== SYNC CON SUPABASE ==========
-  syncActualizarUsuario(id, updates)
-  // ========================================
   
   return store.usuarios[index]
 }
 
-export function toggleUsuarioActivo(id) {
+export async function toggleUsuarioActivo(id) {
   const usuario = store.usuarios.find(u => u.id === id)
   if (!usuario) return null
-  usuario.activo = !usuario.activo
-  saveStore()
   
-  // ========== SYNC CON SUPABASE ==========
-  syncActualizarUsuario(id, { activo: usuario.activo })
-  // ========================================
+  const nuevoEstado = !usuario.activo
+  
+  // Si el ID es UUID de Supabase, actualizar en la BD
+  if (id && id.includes('-') && !id.startsWith('user-')) {
+    try {
+      const { error } = await supabase
+        .from('usuarios')
+        .update({ activo: nuevoEstado, updated_at: new Date().toISOString() })
+        .eq('id', id)
+      
+      if (error) {
+        console.error('❌ Error actualizando estado en Supabase:', error)
+        throw error
+      }
+      
+      console.log('✅ Estado actualizado en Supabase:', id, nuevoEstado)
+    } catch (error) {
+      console.error('Error:', error)
+      throw error
+    }
+  }
+  
+  usuario.activo = nuevoEstado
+  saveStore()
   
   return usuario
 }

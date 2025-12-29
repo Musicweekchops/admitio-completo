@@ -4111,44 +4111,76 @@ export default function Dashboard() {
       setLocalShowUserModal(true)
     }
     
-    const handleSaveUser = () => {
+    const handleSaveUser = async () => {
       if (!userFormData.nombre || !userFormData.email) {
         alert('Nombre y email son requeridos')
         return
       }
       
-      if (localEditingUser) {
-        // Actualizar
-        const updates = {
-          nombre: userFormData.nombre,
-          email: userFormData.email,
-          rol_id: userFormData.rol_id,
-          activo: userFormData.activo
+      try {
+        if (localEditingUser) {
+          // Actualizar usuario existente
+          const updates = {
+            nombre: userFormData.nombre,
+            email: userFormData.email,
+            rol_id: userFormData.rol_id,
+            activo: userFormData.activo
+          }
+          if (userFormData.password) {
+            updates.password = userFormData.password
+          }
+          await store.updateUsuario(localEditingUser.id, updates)
+          setNotification({ type: 'success', message: 'Usuario actualizado' })
+        } else {
+          // Crear nuevo usuario
+          const nuevoUsuario = await store.createUsuario({
+            nombre: userFormData.nombre,
+            email: userFormData.email,
+            rol_id: userFormData.rol_id,
+            activo: userFormData.activo
+          })
+          
+          console.log('✅ Usuario creado:', nuevoUsuario)
+          setNotification({ type: 'success', message: 'Usuario creado exitosamente' })
+          
+          // Actualizar contador de uso del plan si existe
+          if (actualizarUso) actualizarUso('usuarios', 1)
         }
-        if (userFormData.password) {
-          updates.password = userFormData.password
+        
+        setLocalShowUserModal(false)
+        
+        // Recargar usuarios desde Supabase para tener datos frescos
+        if (reloadFromSupabase) {
+          await reloadFromSupabase()
         }
-        store.updateUsuario(localEditingUser.id, updates)
-        setNotification({ type: 'success', message: 'Usuario actualizado' })
-      } else {
-        // Crear
-        if (!userFormData.password) {
-          alert('La contraseña es requerida para nuevos usuarios')
-          return
+        refreshUsuarios()
+        
+      } catch (error) {
+        console.error('Error guardando usuario:', error)
+        
+        // Mostrar mensaje de error específico
+        let errorMsg = 'Error al guardar usuario'
+        if (error.message?.includes('duplicate') || error.code === '23505') {
+          errorMsg = 'Ya existe un usuario con ese email'
+        } else if (error.message) {
+          errorMsg = error.message
         }
-        store.createUsuario(userFormData)
-        setNotification({ type: 'success', message: 'Usuario creado' })
+        
+        setNotification({ type: 'error', message: errorMsg })
       }
       
-      setLocalShowUserModal(false)
-      refreshUsuarios()
-      setTimeout(() => setNotification(null), 2000)
+      setTimeout(() => setNotification(null), 3000)
     }
     
-    const handleToggleActivo = (userId) => {
-      store.toggleUsuarioActivo(userId)
-      refreshUsuarios()
-      setNotification({ type: 'info', message: 'Estado actualizado' })
+    const handleToggleActivo = async (userId) => {
+      try {
+        await store.toggleUsuarioActivo(userId)
+        refreshUsuarios()
+        setNotification({ type: 'info', message: 'Estado actualizado' })
+      } catch (error) {
+        console.error('Error:', error)
+        setNotification({ type: 'error', message: 'Error al actualizar estado' })
+      }
       setTimeout(() => setNotification(null), 2000)
     }
     
