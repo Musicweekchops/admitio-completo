@@ -327,24 +327,6 @@ export async function createUsuario(data) {
   saveStore()
   
   return nuevoUsuario
-} {
-      console.error('❌ Error creando usuario:', error)
-      throw error
-    }
-  }
-  
-  // Fallback: crear solo localmente (modo demo sin Supabase)
-  const nuevoUsuario = {
-    id: `user-${Date.now()}`,
-    ...data,
-    activo: data.activo !== undefined ? data.activo : true,
-    config: { notificaciones_email: true, notificaciones_popup: true },
-    created_at: new Date().toISOString()
-  }
-  store.usuarios.push(nuevoUsuario)
-  saveStore()
-  
-  return nuevoUsuario
 }
 
 export async function updateUsuario(id, updates) {
