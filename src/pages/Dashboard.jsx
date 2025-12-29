@@ -4128,6 +4128,12 @@ export default function Dashboard() {
         return
       }
       
+      // Validar contraseña para usuarios nuevos
+      if (!localEditingUser && (!userFormData.password || userFormData.password.length < 6)) {
+        alert('La contraseña es requerida y debe tener al menos 6 caracteres')
+        return
+      }
+      
       try {
         if (localEditingUser) {
           // Actualizar usuario existente
@@ -4143,16 +4149,20 @@ export default function Dashboard() {
           await store.updateUsuario(localEditingUser.id, updates)
           setNotification({ type: 'success', message: 'Usuario actualizado' })
         } else {
-          // Crear nuevo usuario
+          // Crear nuevo usuario - incluir contraseña
           const nuevoUsuario = await store.createUsuario({
             nombre: userFormData.nombre,
             email: userFormData.email,
+            password: userFormData.password, // Importante: pasar la contraseña
             rol_id: userFormData.rol_id,
             activo: userFormData.activo
           })
           
           console.log('✅ Usuario creado:', nuevoUsuario)
-          setNotification({ type: 'success', message: 'Usuario creado exitosamente' })
+          setNotification({ 
+            type: 'success', 
+            message: 'Usuario creado. Se envió email de verificación.' 
+          })
           
           // Actualizar contador de uso del plan si existe
           if (actualizarUso) actualizarUso('usuarios', 1)
@@ -4173,6 +4183,8 @@ export default function Dashboard() {
         let errorMsg = 'Error al guardar usuario'
         if (error.message?.includes('duplicate') || error.code === '23505') {
           errorMsg = 'Ya existe un usuario con ese email'
+        } else if (error.message?.includes('already registered')) {
+          errorMsg = 'Este email ya está registrado en el sistema'
         } else if (error.message) {
           errorMsg = error.message
         }
@@ -4180,7 +4192,7 @@ export default function Dashboard() {
         setNotification({ type: 'error', message: errorMsg })
       }
       
-      setTimeout(() => setNotification(null), 3000)
+      setTimeout(() => setNotification(null), 4000)
     }
     
     const handleToggleActivo = async (userId) => {
