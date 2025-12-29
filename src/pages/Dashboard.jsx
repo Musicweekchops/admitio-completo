@@ -2319,146 +2319,43 @@ export default function Dashboard() {
           {/* Info principal */}
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-              {/* Header con nombre editable */}
+              {/* Header con nombre */}
               <div className="flex items-start justify-between mb-6">
-                <div className="flex-1">
-                  {isMyLock ? (
-                    <EditableField
-                      label="Nombre"
-                      value={c.nombre}
-                      onSave={async (newValue) => {
-                        const result = await store.updateConsultaAsync(c.id, { nombre: newValue }, user.id)
-                        if (result.success) {
-                          setSelectedConsulta(store.getConsultaById(c.id))
-                          loadData()
-                        }
-                        return result
-                      }}
-                      inputClassName="text-2xl font-bold"
-                    />
-                  ) : (
-                    <div className="flex items-center gap-3">
-                      <h2 className="text-2xl font-bold text-slate-800">{c.nombre}</h2>
-                      {c.tipo_alumno === 'antiguo' && (
-                        <span className="px-2 py-1 bg-violet-100 text-violet-700 text-sm rounded-full">Alumno Antiguo</span>
-                      )}
-                    </div>
-                  )}
-                  <p className="text-slate-500 mt-1">{c.carrera?.nombre || c.carrera_nombre || 'Sin carrera'}</p>
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-2xl font-bold text-slate-800">{c.nombre}</h2>
+                    {c.tipo_alumno === 'antiguo' && (
+                      <span className="px-2 py-1 bg-violet-100 text-violet-700 text-sm rounded-full">Alumno Antiguo</span>
+                    )}
+                  </div>
+                  <p className="text-slate-500">{c.carrera?.nombre || c.carrera_nombre || 'Sin carrera'}</p>
                 </div>
                 <span className={`px-3 py-1 rounded-full text-sm ${ESTADOS[c.estado]?.bg} ${ESTADOS[c.estado]?.text}`}>
                   {ESTADOS[c.estado]?.label}
                 </span>
               </div>
 
-              {/* Campos editables cuando está en modo edición */}
-              {isMyLock ? (
-                <div className="space-y-4 mb-6 p-4 bg-violet-50/50 rounded-xl border border-violet-100">
-                  <p className="text-sm font-medium text-violet-700 flex items-center gap-2 mb-3">
-                    <Icon name="Edit" size={16} />
-                    Modo edición activo - Haz clic en cualquier campo para editar
-                  </p>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <EditableField
-                      label="Email"
-                      value={c.email}
-                      type="email"
-                      icon="Mail"
-                      onSave={async (newValue) => {
-                        const result = await store.updateConsultaAsync(c.id, { email: newValue }, user.id)
-                        if (result.success) {
-                          setSelectedConsulta(store.getConsultaById(c.id))
-                          loadData()
-                        }
-                        return result
-                      }}
-                    />
-                    
-                    <EditableField
-                      label="Teléfono"
-                      value={c.telefono}
-                      type="tel"
-                      icon="Phone"
-                      onSave={async (newValue) => {
-                        const result = await store.updateConsultaAsync(c.id, { telefono: newValue }, user.id)
-                        if (result.success) {
-                          setSelectedConsulta(store.getConsultaById(c.id))
-                          loadData()
-                        }
-                        return result
-                      }}
-                    />
-                    
-                    <EditableSelectField
-                      label="Carrera"
-                      value={c.carrera_id}
-                      icon="Music"
-                      options={store.getCarreras().map(ca => ({ value: ca.id, label: ca.nombre }))}
-                      onSave={async (newValue) => {
-                        const carrera = store.getCarreras().find(ca => ca.id === newValue)
-                        const result = await store.updateConsultaAsync(c.id, { 
-                          carrera_id: newValue,
-                          carrera_nombre: carrera?.nombre || null
-                        }, user.id)
-                        if (result.success) {
-                          setSelectedConsulta(store.getConsultaById(c.id))
-                          loadData()
-                        }
-                        return result
-                      }}
-                    />
-                    
-                    <EditableSelectField
-                      label="Medio de contacto"
-                      value={c.medio_id}
-                      icon="Globe"
-                      options={MEDIOS.map(m => ({ value: m.id, label: m.nombre }))}
-                      onSave={async (newValue) => {
-                        const result = await store.updateConsultaAsync(c.id, { medio_id: newValue }, user.id)
-                        if (result.success) {
-                          setSelectedConsulta(store.getConsultaById(c.id))
-                          loadData()
-                        }
-                        return result
-                      }}
-                    />
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 mt-2 pt-3 border-t border-violet-100">
-                    <InfoCard icon="Calendar" label="Fecha ingreso" value={formatDate(c.created_at)} iconColor="text-slate-400" />
-                    <InfoCard 
-                      icon={c.origen_entrada === 'secretaria' ? 'UserPlus' : c.origen_entrada === 'formulario' ? 'FileCode' : 'Edit'} 
-                      label="Ingresado por" 
-                      value={c.origen_entrada === 'secretaria' ? `Secretaría (${c.creado_por_nombre || ''})` : 
-                             c.origen_entrada === 'formulario' ? 'Formulario Web' : 
-                             c.creado_por_nombre || 'Manual'} 
-                      iconColor={c.origen_entrada === 'secretaria' ? 'text-violet-500' : 'text-slate-400'} 
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  <InfoCard icon="Mail" label="Email" value={c.email} iconColor="text-blue-500" copiable leadId={c.id} />
-                  <InfoCard icon="Phone" label="Teléfono" value={c.telefono} iconColor="text-green-500" copiable leadId={c.id} />
-                  <InfoCard icon={c.medio?.icono || 'Globe'} label="Medio" value={c.medio?.nombre} iconColor={c.medio?.color} />
-                  <InfoCard icon="Calendar" label="Fecha ingreso" value={formatDate(c.created_at)} iconColor="text-slate-400" />
-                  <InfoCard 
-                    icon={c.origen_entrada === 'secretaria' ? 'UserPlus' : c.origen_entrada === 'formulario' ? 'FileCode' : 'Edit'} 
-                    label="Ingresado por" 
-                    value={c.origen_entrada === 'secretaria' ? `Secretaría (${c.creado_por_nombre || ''})` : 
-                           c.origen_entrada === 'formulario' ? 'Formulario Web' : 
-                           c.creado_por_nombre || 'Manual'} 
-                    iconColor={c.origen_entrada === 'secretaria' ? 'text-violet-500' : 'text-slate-400'} 
-                  />
-                  <InfoCard 
-                    icon="Music" 
-                    label="Tipo alumno" 
-                    value={c.tipo_alumno === 'nuevo' ? 'Alumno Nuevo' : 'Alumno Antiguo'} 
-                    iconColor={c.tipo_alumno === 'nuevo' ? 'text-blue-500' : 'text-violet-500'} 
-                  />
-                </div>
-              )}
+              {/* Info cards - Vista original */}
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <InfoCard icon="Mail" label="Email" value={c.email} iconColor="text-blue-500" copiable leadId={c.id} />
+                <InfoCard icon="Phone" label="Teléfono" value={c.telefono} iconColor="text-green-500" copiable leadId={c.id} />
+                <InfoCard icon={c.medio?.icono || 'Globe'} label="Medio" value={c.medio?.nombre} iconColor={c.medio?.color} />
+                <InfoCard icon="Calendar" label="Fecha ingreso" value={formatDate(c.created_at)} iconColor="text-slate-400" />
+                <InfoCard 
+                  icon={c.origen_entrada === 'secretaria' ? 'UserPlus' : c.origen_entrada === 'formulario' ? 'FileCode' : 'Edit'} 
+                  label="Ingresado por" 
+                  value={c.origen_entrada === 'secretaria' ? `Secretaría (${c.creado_por_nombre || ''})` : 
+                         c.origen_entrada === 'formulario' ? 'Formulario Web' : 
+                         c.creado_por_nombre || 'Manual'} 
+                  iconColor={c.origen_entrada === 'secretaria' ? 'text-violet-500' : 'text-slate-400'} 
+                />
+                <InfoCard 
+                  icon="Music" 
+                  label="Tipo alumno" 
+                  value={c.tipo_alumno === 'nuevo' ? 'Alumno Nuevo' : 'Alumno Antiguo'} 
+                  iconColor={c.tipo_alumno === 'nuevo' ? 'text-blue-500' : 'text-violet-500'} 
+                />
+              </div>
               
               {/* Carreras de interés (si tiene más de una) */}
               {c.carreras_interes && c.carreras_interes.length > 1 && (
@@ -2540,68 +2437,39 @@ export default function Dashboard() {
 
           {/* Acciones */}
           <div className="space-y-6">
-            {/* Cambiar Estado - SIEMPRE disponible para quien tiene permiso, excepto si otro usuario lo bloquea */}
+            {/* Cambiar Estado - Diseño original, sin requerir lock */}
             {canEdit && !c.matriculado && !c.descartado && (
-              <div className={`bg-white rounded-xl p-6 shadow-sm border ${isLocked && !isMyLock ? 'border-amber-200 opacity-70' : 'border-slate-100'}`}>
-                <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                  <Icon name="GitBranch" size={18} className="text-violet-500" />
-                  Cambiar Estado
-                </h3>
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+                <h3 className="font-semibold text-slate-800 mb-4">Cambiar Estado</h3>
                 <div className="space-y-2">
-                  {Object.values(ESTADOS).filter(e => e.id !== c.estado && !e.cerrado).map(estado => (
+                  {Object.values(ESTADOS).filter(e => e.id !== c.estado).map(estado => (
                     <button key={estado.id}
-                            onClick={() => !(isLocked && !isMyLock) && handleUpdateEstado(c.id, estado.id)}
+                            onClick={() => handleUpdateEstado(c.id, estado.id)}
                             disabled={isLocked && !isMyLock}
                             className={`w-full px-4 py-3 rounded-lg text-left transition-colors ${estado.bg} ${estado.text} ${isLocked && !isMyLock ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80 cursor-pointer'}`}>
-                      <span className="flex items-center gap-2">
-                        <Icon name="ArrowRight" size={14} />
-                        {estado.label}
-                      </span>
+                      {estado.label}
                     </button>
                   ))}
-                  
-                  {/* Botones de cierre (matriculado/descartado) con confirmación visual */}
-                  <div className="border-t border-slate-200 pt-3 mt-3 space-y-2">
-                    <p className="text-xs text-slate-500 mb-2">Cerrar lead:</p>
-                    <button 
-                      onClick={() => !(isLocked && !isMyLock) && handleUpdateEstado(c.id, 'matriculado')}
-                      disabled={isLocked && !isMyLock}
-                      className={`w-full px-4 py-3 rounded-lg text-left transition-colors bg-emerald-100 text-emerald-700 ${isLocked && !isMyLock ? 'opacity-50 cursor-not-allowed' : 'hover:bg-emerald-200 cursor-pointer'}`}>
-                      <span className="flex items-center gap-2">
-                        <Icon name="CheckCircle" size={16} />
-                        Matriculado ✓
-                      </span>
-                    </button>
-                    <button 
-                      onClick={() => !(isLocked && !isMyLock) && handleUpdateEstado(c.id, 'descartado')}
-                      disabled={isLocked && !isMyLock}
-                      className={`w-full px-4 py-3 rounded-lg text-left transition-colors bg-red-100 text-red-700 ${isLocked && !isMyLock ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-200 cursor-pointer'}`}>
-                      <span className="flex items-center gap-2">
-                        <Icon name="XCircle" size={16} />
-                        Descartado
-                      </span>
-                    </button>
-                  </div>
                 </div>
                 {isLocked && !isMyLock && (
                   <p className="text-xs text-amber-600 mt-3 flex items-center gap-1">
-                    <Icon name="Lock" size={12} /> {lockedByName} está editando este lead
+                    <Icon name="Lock" size={12} /> {lockedByName} está editando
                   </p>
                 )}
               </div>
             )}
 
-            {/* Tipo de Alumno - También sin requerir lock */}
+            {/* Tipo de Alumno */}
             {canEdit && !c.matriculado && !c.descartado && (
-              <div className={`bg-white rounded-xl p-6 shadow-sm border ${isLocked && !isMyLock ? 'border-amber-200 opacity-70' : 'border-slate-100'}`}>
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
                 <h3 className="font-semibold text-slate-800 mb-4">Tipo de Alumno</h3>
                 <div className="flex gap-2">
-                  <button onClick={() => !(isLocked && !isMyLock) && handleTipoAlumnoChange(c.id, 'nuevo')}
+                  <button onClick={() => handleTipoAlumnoChange(c.id, 'nuevo')}
                           disabled={isLocked && !isMyLock}
                           className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'nuevo' ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300' : 'bg-slate-100 text-slate-600'} ${isLocked && !isMyLock ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-200 cursor-pointer'}`}>
                     Nuevo
                   </button>
-                  <button onClick={() => !(isLocked && !isMyLock) && handleTipoAlumnoChange(c.id, 'antiguo')}
+                  <button onClick={() => handleTipoAlumnoChange(c.id, 'antiguo')}
                           disabled={isLocked && !isMyLock}
                           className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'antiguo' ? 'bg-violet-100 text-violet-700 ring-2 ring-violet-300' : 'bg-slate-100 text-slate-600'} ${isLocked && !isMyLock ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-200 cursor-pointer'}`}>
                     Antiguo
