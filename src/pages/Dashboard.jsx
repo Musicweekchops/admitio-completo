@@ -2442,20 +2442,43 @@ export default function Dashboard() {
               <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
                 <h3 className="font-semibold text-slate-800 mb-4">Cambiar Estado</h3>
                 <div className="space-y-2">
-                  {Object.values(ESTADOS).filter(e => e.id !== c.estado).map(estado => (
-                    <button key={estado.id}
-                            onClick={() => handleUpdateEstado(c.id, estado.id)}
-                            disabled={isLocked && !isMyLock}
-                            className={`w-full px-4 py-3 rounded-lg text-left transition-colors ${estado.bg} ${estado.text} ${isLocked && !isMyLock ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80 cursor-pointer'}`}>
-                      {estado.label}
-                    </button>
-                  ))}
+                  {Object.values(ESTADOS).filter(e => e.id !== c.estado).map(estado => {
+                    // Colores más saturados para mejor visibilidad
+                    const colorMap = {
+                      nueva: 'bg-blue-200 text-blue-800 hover:bg-blue-300',
+                      contactado: 'bg-amber-200 text-amber-800 hover:bg-amber-300',
+                      seguimiento: 'bg-purple-200 text-purple-800 hover:bg-purple-300',
+                      examen_admision: 'bg-cyan-200 text-cyan-800 hover:bg-cyan-300',
+                      matriculado: 'bg-emerald-200 text-emerald-800 hover:bg-emerald-300',
+                      descartado: 'bg-red-200 text-red-800 hover:bg-red-300'
+                    }
+                    const colorClass = colorMap[estado.id] || `${estado.bg} ${estado.text}`
+                    
+                    return (
+                      <button key={estado.id}
+                              onClick={() => handleUpdateEstado(c.id, estado.id)}
+                              disabled={isLocked && !isMyLock}
+                              className={`w-full px-4 py-3 rounded-lg text-left transition-colors font-medium ${colorClass} ${isLocked && !isMyLock ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                        {estado.label}
+                      </button>
+                    )
+                  })}
                 </div>
                 {isLocked && !isMyLock && (
                   <p className="text-xs text-amber-600 mt-3 flex items-center gap-1">
                     <Icon name="Lock" size={12} /> {lockedByName} está editando
                   </p>
                 )}
+              </div>
+            )}
+            
+            {/* Debug: mostrar si canEdit es false */}
+            {!canEdit && !c.matriculado && !c.descartado && (
+              <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
+                <p className="text-amber-700 text-sm">
+                  <Icon name="AlertTriangle" size={14} className="inline mr-1" />
+                  No tienes permisos para editar leads
+                </p>
               </div>
             )}
 
