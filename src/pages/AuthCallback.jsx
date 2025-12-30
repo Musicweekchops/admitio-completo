@@ -1,25 +1,19 @@
 // ============================================
 // ADMITIO - Página de Auth Callback
 // src/pages/AuthCallback.jsx
-// ============================================
-// Esta página maneja los redirects de:
-// - Verificación de email
-// - Reset de contraseña
-// - Magic links
+// Maneja tokens en hash fragment (#access_token=...)
 // ============================================
 
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { GraduationCap, CheckCircle, XCircle, Loader, AlertTriangle } from 'lucide-react';
 
 const AuthCallback = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  
-  const [estado, setEstado] = useState('procesando'); // procesando, exito, error
-  const [mensaje, setMensaje] = useState('');
-  const [tipo, setTipo] = useState(''); // signup, recovery, invite
+  const [estado, setEstado] = useState('procesando');
+  const [mensaje, setMensaje] = useState('Verificando tu cuenta...');
+  const [tipo, setTipo] = useState('');
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
@@ -33,25 +27,48 @@ const AuthCallback = () => {
 
   const procesarCallback = async () => {
     try {
-      // Supabase maneja automáticamente el token en la URL
-      // Solo necesitamos verificar la sesión
-      
+      // Supabase maneja automáticamente el hash fragment
+      // Solo necesitamos obtener la sesión
       const { data: { session }, error } = await supabase.auth.getSession();
-      
+
       if (error) {
-        console.error('Error en callback:', error);
-        throw error;
+        console.error('Error obteniendo sesión:', error);
+        throw new Error(error.message);
       }
 
-      // Detectar el tipo de callback por los parámetros de URL
-      const type = searchParams.get('type');
-      const errorCode = searchParams.get('error');
-      const errorDescription = searchParams.get('error_description');
+      // Detectar tipo desde la URL (puede estar en hash o query)
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const queryParams = new URLSearchParams(window.location.search);
+      
+      const type = hashParams.get('type') || queryParams.get('type');
+      const errorCode = hashParams.get('error') || queryParams.get('error');
+      const errorDesc = hashParams.get('error_description') || queryParams.get('error_description');
 
       // Si hay error en la URL
       if (errorCode) {
-        throw new Error(errorDescription || 'Error en la verificación');
+        throw new Error(errorDesc || 'Error en la verificación');
       }
+
+      // Si no hay sesión
+      if (!session?.user) {
+        // Esperar un momento y reintentar (a veces tarda)
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const { data: { session: retrySession } } = await supabase.auth.getSession();
+        
+        if (!retrySession?.user) {
+          throw new Error('No se pudo obtener la sesión. El enlace puede haber expirado.');
+        }
+      }
+
+      // Obtener sesión actualizada
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      
+      if (!currentSession?.user) {
+        throw new Error('No se pudo verificar la sesión');
+      }
+
+      const user = currentSession.user;
+      console.log('✅ Usuario verificado:', user.email);
 
       // Determinar tipo de callback
       if (type === 'recovery') {
@@ -59,47 +76,9 @@ const AuthCallback = () => {
         setEstado('exito');
         setMensaje('Ahora puedes cambiar tu contraseña');
         
-        // Redirigir a página de cambio de contraseña después de 2 segundos
         setTimeout(() => {
           navigate('/cambiar-password?type=recovery', { replace: true });
         }, 2000);
-        return;
-      }
-
-      if (type === 'signup' || type === 'email') {
-        setTipo('signup');
-        
-        if (session?.user) {
-          // Verificar que el usuario exista en nuestra tabla
-          const { data: userData, error: userError } = await supabase
-            .from('usuarios')
-            .select('id, nombre, email_verificado')
-            .eq('auth_id', session.user.id)
-            .single();
-
-          if (userError && userError.code !== 'PGRST116') {
-            throw userError;
-          }
-
-          // Actualizar email_verificado en nuestra tabla
-          if (userData && !userData.email_verificado) {
-            await supabase
-              .from('usuarios')
-              .update({ email_verificado: true })
-              .eq('auth_id', session.user.id);
-          }
-
-          setEstado('exito');
-          setMensaje('¡Tu cuenta ha sido verificada correctamente!');
-          
-          // Redirigir al dashboard después de 2 segundos
-          setTimeout(() => {
-            navigate('/dashboard', { replace: true });
-          }, 2000);
-        } else {
-          // No hay sesión, puede que el token haya expirado
-          throw new Error('El enlace ha expirado o ya fue utilizado');
-        }
         return;
       }
 
@@ -114,21 +93,33 @@ const AuthCallback = () => {
         return;
       }
 
-      // Si hay sesión pero no sabemos el tipo, verificar
-      if (session?.user) {
-        setTipo('signup');
-        setEstado('exito');
-        setMensaje('Sesión iniciada correctamente');
-        
-        setTimeout(() => {
-          navigate('/dashboard', { replace: true });
-        }, 2000);
-      } else {
-        throw new Error('No se pudo procesar la verificación');
+      // Signup o email verification
+      setTipo('signup');
+
+      // Actualizar email_verificado en nuestra tabla usuarios
+      const { error: updateError } = await supabase
+        .from('usuarios')
+        .update({ email_verificado: true })
+        .eq('auth_id', user.id);
+
+      if (updateError) {
+        console.warn('No se pudo actualizar email_verificado:', updateError);
+        // No es crítico, continuamos
       }
 
+      setEstado('exito');
+      setMensaje('¡Tu cuenta ha sido verificada correctamente!');
+
+      // Limpiar el hash de la URL
+      window.history.replaceState(null, '', window.location.pathname);
+
+      // Redirigir al dashboard
+      setTimeout(() => {
+        navigate('/dashboard', { replace: true });
+      }, 2000);
+
     } catch (error) {
-      console.error('Error procesando callback:', error);
+      console.error('Error en callback:', error);
       setEstado('error');
       setMensaje(error.message || 'Error al verificar tu cuenta');
     }
@@ -139,18 +130,19 @@ const AuthCallback = () => {
   };
 
   const handleReenviarEmail = async () => {
-    // Obtener email del localStorage si existe
     const savedEmail = localStorage.getItem('admitio_pending_email');
     
     if (savedEmail && supabase) {
       try {
         const { error } = await supabase.auth.resend({
           type: 'signup',
-          email: savedEmail
+          email: savedEmail,
+          options: {
+            emailRedirectTo: `${window.location.origin}/auth/callback`
+          }
         });
         
         if (error) throw error;
-        
         alert('Email de verificación reenviado. Revisa tu bandeja de entrada.');
       } catch (err) {
         alert('Error al reenviar: ' + err.message);
@@ -180,9 +172,7 @@ const AuthCallback = () => {
             <h2 className="text-xl font-bold text-gray-900 mb-2">
               Verificando...
             </h2>
-            <p className="text-gray-600">
-              Por favor espera un momento
-            </p>
+            <p className="text-gray-600">{mensaje}</p>
           </div>
         )}
 
@@ -215,7 +205,6 @@ const AuthCallback = () => {
             </h2>
             <p className="text-gray-600 mb-6">{mensaje}</p>
 
-            {/* Sugerencias */}
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 text-left">
               <div className="flex gap-2">
                 <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
