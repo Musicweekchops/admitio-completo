@@ -8,179 +8,6 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { useLockLead } from '../hooks/useLockLead'
 import { ESTADOS, CARRERAS, MEDIOS, TIPOS_ALUMNO } from '../data/mockData'
 
-// Componente para campo editable inline
-const EditableField = ({ label, value, onSave, type = 'text', icon, inputClassName = '' }) => {
-  const [isEditing, setIsEditing] = useState(false)
-  const [editValue, setEditValue] = useState(value || '')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState(null)
-  
-  useEffect(() => {
-    setEditValue(value || '')
-  }, [value])
-  
-  const handleSave = async () => {
-    if (editValue === value) {
-      setIsEditing(false)
-      return
-    }
-    
-    setSaving(true)
-    setError(null)
-    
-    try {
-      const result = await onSave(editValue)
-      if (result.success) {
-        setIsEditing(false)
-      } else {
-        setError(result.error || 'Error al guardar')
-      }
-    } catch (err) {
-      setError('Error de conexión')
-    } finally {
-      setSaving(false)
-    }
-  }
-  
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      handleSave()
-    }
-    if (e.key === 'Escape') {
-      setEditValue(value || '')
-      setIsEditing(false)
-      setError(null)
-    }
-  }
-  
-  if (isEditing) {
-    return (
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
-          {icon && <Icon name={icon} size={12} />}
-          {label}
-        </label>
-        <div className="flex gap-2">
-          <input
-            type={type}
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onBlur={handleSave}
-            autoFocus
-            disabled={saving}
-            className={`flex-1 px-3 py-2 border border-violet-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 ${inputClassName} ${saving ? 'bg-slate-100' : 'bg-white'}`}
-          />
-          {saving && (
-            <div className="flex items-center px-2">
-              <Icon name="Loader" size={16} className="animate-spin text-violet-500" />
-            </div>
-          )}
-        </div>
-        {error && <p className="text-xs text-red-500">{error}</p>}
-      </div>
-    )
-  }
-  
-  return (
-    <div 
-      onClick={() => setIsEditing(true)}
-      className="cursor-pointer group hover:bg-violet-50 rounded-lg p-2 -m-2 transition-colors"
-    >
-      <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
-        {icon && <Icon name={icon} size={12} />}
-        {label}
-        <Icon name="Pencil" size={10} className="opacity-0 group-hover:opacity-100 text-violet-400 ml-1" />
-      </label>
-      <p className={`text-slate-800 ${inputClassName || 'text-sm'}`}>
-        {value || <span className="text-slate-400 italic">Sin datos</span>}
-      </p>
-    </div>
-  )
-}
-
-// Componente para select editable inline
-const EditableSelectField = ({ label, value, options, onSave, icon }) => {
-  const [isEditing, setIsEditing] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState(null)
-  
-  const currentOption = options.find(o => o.value === value)
-  
-  const handleChange = async (e) => {
-    const newValue = e.target.value
-    if (newValue === value) {
-      setIsEditing(false)
-      return
-    }
-    
-    setSaving(true)
-    setError(null)
-    
-    try {
-      const result = await onSave(newValue)
-      if (result.success) {
-        setIsEditing(false)
-      } else {
-        setError(result.error || 'Error al guardar')
-      }
-    } catch (err) {
-      setError('Error de conexión')
-    } finally {
-      setSaving(false)
-    }
-  }
-  
-  if (isEditing) {
-    return (
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
-          {icon && <Icon name={icon} size={12} />}
-          {label}
-        </label>
-        <div className="flex gap-2">
-          <select
-            value={value || ''}
-            onChange={handleChange}
-            onBlur={() => !saving && setIsEditing(false)}
-            autoFocus
-            disabled={saving}
-            className={`flex-1 px-3 py-2 border border-violet-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 ${saving ? 'bg-slate-100' : 'bg-white'}`}
-          >
-            <option value="">Seleccionar...</option>
-            {options.map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-          {saving && (
-            <div className="flex items-center px-2">
-              <Icon name="Loader" size={16} className="animate-spin text-violet-500" />
-            </div>
-          )}
-        </div>
-        {error && <p className="text-xs text-red-500">{error}</p>}
-      </div>
-    )
-  }
-  
-  return (
-    <div 
-      onClick={() => setIsEditing(true)}
-      className="cursor-pointer group hover:bg-violet-50 rounded-lg p-2 -m-2 transition-colors"
-    >
-      <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
-        {icon && <Icon name={icon} size={12} />}
-        {label}
-        <Icon name="Pencil" size={10} className="opacity-0 group-hover:opacity-100 text-violet-400 ml-1" />
-      </label>
-      <p className="text-sm text-slate-800">
-        {currentOption?.label || <span className="text-slate-400 italic">Sin seleccionar</span>}
-      </p>
-    </div>
-  )
-}
-
 // Componente separado para el textarea de notas (evita re-renders)
 const NotasTextarea = ({ consulta, userId, onSaved, disabled = false, lockedByName = null }) => {
   const [notas, setNotas] = useState(consulta?.notas || '')
@@ -300,7 +127,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
     crearLeadNuevo()
   }
   
-  const crearLeadNuevo = async () => {
+  const crearLeadNuevo = () => {
     // Verificar límite del plan
     if (puedeCrearLead && !puedeCrearLead()) {
       setShowLimiteAlert(true)
@@ -309,31 +136,26 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
     
     setSubmitting(true)
     
-    try {
-      const carreraSeleccionada = carrerasDisponibles.find(c => String(c.id) === String(formData.carrera_id))
-      
-      const newConsulta = await store.createConsulta({
-        ...formData,
-        carrera_id: formData.carrera_id || null,
-        carrera_nombre: carreraSeleccionada?.nombre || null,
-        asignado_a: formData.asignado_a || null
-      }, userId, userRol)
-      
-      // Actualizar contador de uso
-      if (actualizarUso) actualizarUso('leads', 1)
-      
-      setSubmitting(false)
-      setSuccess(true)
-      
-      setTimeout(() => {
-        resetForm()
-        onClose()
-        if (onCreated) onCreated(newConsulta)
-      }, 1500)
-    } catch (error) {
-      console.error('Error creando lead:', error)
-      setSubmitting(false)
-    }
+    const carreraSeleccionada = carrerasDisponibles.find(c => String(c.id) === String(formData.carrera_id))
+    
+    const newConsulta = store.createConsulta({
+      ...formData,
+      carrera_id: formData.carrera_id || null,  // Mantener como string (UUID)
+      carrera_nombre: carreraSeleccionada?.nombre || null,  // Guardar nombre también
+      asignado_a: formData.asignado_a || null
+    }, userId, userRol)
+    
+    // Actualizar contador de uso
+    if (actualizarUso) actualizarUso('leads', 1)
+    
+    setSubmitting(false)
+    setSuccess(true)
+    
+    setTimeout(() => {
+      resetForm()
+      onClose()
+      if (onCreated) onCreated(newConsulta)
+    }, 1500)
   }
   
   const agregarCarreraAExistente = () => {
@@ -862,56 +684,46 @@ export default function Dashboard() {
 
   // Supabase Realtime - Solo escucha cambios, no hace polling
   useEffect(() => {
-    // No conectar si no hay usuario autenticado
-    if (!isSupabaseConfigured() || !user?.institucion_id || !user?.id) {
-      return
-    }
+    if (!isSupabaseConfigured() || !user?.institucion_id) return
 
     console.log('🔌 Conectando Supabase Realtime...')
     
-    let channel = null
-    
-    try {
-      channel = supabase
-        .channel(`db-changes-${user.institucion_id}`)
-        .on('postgres_changes', 
-          { event: '*', schema: 'public', table: 'leads', filter: `institucion_id=eq.${user.institucion_id}` },
-          async (payload) => {
-            console.log('📡 Cambio en leads:', payload.eventType)
-            if (user?.institucion_id) { // Verificar que aún hay usuario
-              await reloadFromSupabase()
-              loadData()
-              setLastUpdate(new Date())
-            }
+    const channel = supabase
+      .channel('db-changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'leads', filter: `institucion_id=eq.${user.institucion_id}` },
+        async (payload) => {
+          console.log('📡 Cambio en leads:', payload.eventType)
+          // Solo actualizar si NO hay ficha abierta (evita parpadeo del botón editar)
+          if (!selectedConsulta) {
+            await reloadFromSupabase()
+            loadData()
+            setLastUpdate(new Date())
           }
-        )
-        .on('postgres_changes',
-          { event: '*', schema: 'public', table: 'usuarios', filter: `institucion_id=eq.${user.institucion_id}` },
-          async (payload) => {
-            console.log('📡 Cambio en usuarios:', payload.eventType)
-            if (user?.institucion_id) {
-              await reloadFromSupabase()
-              loadData()
-            }
+        }
+      )
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'usuarios', filter: `institucion_id=eq.${user.institucion_id}` },
+        async (payload) => {
+          console.log('📡 Cambio en usuarios:', payload.eventType)
+          if (!selectedConsulta) {
+            await reloadFromSupabase()
+            loadData()
           }
-        )
-        .subscribe((status) => {
-          console.log('📡 Realtime status:', status)
-          if (status === 'SUBSCRIBED') {
-            console.log('✅ Realtime conectado')
-          }
-        })
-    } catch (e) {
-      console.warn('Error conectando Realtime:', e)
-    }
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Realtime status:', status)
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Realtime conectado - recibirás cambios automáticamente')
+        }
+      })
 
     return () => {
-      if (channel) {
-        console.log('🔌 Desconectando Realtime...')
-        supabase.removeChannel(channel)
-      }
+      console.log('🔌 Desconectando Realtime...')
+      supabase.removeChannel(channel)
     }
-  }, [user?.institucion_id, user?.id]) // Re-suscribir si cambia usuario o institución
+  }, [user?.institucion_id, selectedConsulta])
   // ========================================
 
   // Cargar importaciones pendientes (solo Enterprise)
@@ -1003,18 +815,7 @@ export default function Dashboard() {
       }
     }, 500)
     
-    // Escuchar evento de actualización del store (cuando AuthContext carga datos de Supabase)
-    const handleStoreUpdate = () => {
-      console.log('📊 Dashboard: Store actualizado, recargando datos...')
-      store.reloadStore()
-      loadData()
-    }
-    window.addEventListener('admitio-store-updated', handleStoreUpdate)
-    
-    return () => {
-      clearTimeout(timer)
-      window.removeEventListener('admitio-store-updated', handleStoreUpdate)
-    }
+    return () => clearTimeout(timer)
   }, [user])
 
   // Helper para abrir modal de nuevo lead con validación de límite
@@ -1051,27 +852,12 @@ export default function Dashboard() {
     return matchCarrera && matchEstado && matchTipo && matchSearch
   })
 
-  async function handleUpdateEstado(id, nuevoEstado) {
-    // Usar versión async que espera confirmación de Supabase
-    const result = await store.updateConsultaAsync(id, { estado: nuevoEstado }, user.id)
-    
-    if (!result.success) {
-      setNotification({ 
-        type: 'error', 
-        message: `Error al cambiar estado: ${result.error || 'Error de conexión'}` 
-      })
-      setTimeout(() => setNotification(null), 4000)
-      return
-    }
-    
+  function handleUpdateEstado(id, nuevoEstado) {
+    store.updateConsulta(id, { estado: nuevoEstado }, user.id)
     loadData()
     if (selectedConsulta?.id === id) {
       setSelectedConsulta(store.getConsultaById(id))
     }
-    
-    // Feedback de éxito
-    setNotification({ type: 'success', message: 'Estado actualizado' })
-    setTimeout(() => setNotification(null), 2000)
   }
 
   function handleEnviarEmail(id) {
@@ -1087,15 +873,9 @@ export default function Dashboard() {
     }
   }
 
-  async function handleLogout() {
-    try {
-      // Primero cerrar sesión (limpia estado)
-      await signOut()
-    } catch (e) {
-      console.warn('Error en signOut:', e)
-    }
-    // Luego navegar
-    navigate('/login', { replace: true })
+  function handleLogout() {
+    signOut()
+    navigate('/login')
   }
   
   function navigateToEstado(estado) {
@@ -1949,15 +1729,8 @@ export default function Dashboard() {
   }, [])
   
   // Handler para cambiar estado
-  const handleEstadoChange = useCallback(async (id, nuevoEstado) => {
-    const result = await store.updateConsultaAsync(id, { estado: nuevoEstado }, user.id)
-    
-    if (!result.success) {
-      setNotification({ type: 'error', message: `Error: ${result.error || 'No se pudo guardar'}` })
-      setTimeout(() => setNotification(null), 4000)
-      return
-    }
-    
+  const handleEstadoChange = useCallback((id, nuevoEstado) => {
+    store.updateConsulta(id, { estado: nuevoEstado }, user.id)
     if (selectedConsulta?.id === id) {
       setSelectedConsulta(store.getConsultaById(id))
     }
@@ -1967,16 +1740,9 @@ export default function Dashboard() {
   }, [selectedConsulta?.id, user?.id])
   
   // Handler para reasignar
-  const handleReasignar = useCallback(async (id, nuevoEncargado) => {
+  const handleReasignar = useCallback((id, nuevoEncargado) => {
     const encargado = store.getUsuarios().find(u => u.id === nuevoEncargado)
-    const result = await store.updateConsultaAsync(id, { asignado_a: nuevoEncargado }, user.id)
-    
-    if (!result.success) {
-      setNotification({ type: 'error', message: `Error: ${result.error || 'No se pudo reasignar'}` })
-      setTimeout(() => setNotification(null), 4000)
-      return
-    }
-    
+    store.updateConsulta(id, { asignado_a: nuevoEncargado }, user.id)
     if (selectedConsulta?.id === id) {
       setSelectedConsulta(store.getConsultaById(id))
     }
@@ -1986,21 +1752,12 @@ export default function Dashboard() {
   }, [selectedConsulta?.id, user?.id])
   
   // Handler para cambiar tipo alumno
-  const handleTipoAlumnoChange = useCallback(async (id, tipo) => {
-    const result = await store.updateConsultaAsync(id, { tipo_alumno: tipo }, user.id)
-    
-    if (!result.success) {
-      setNotification({ type: 'error', message: `Error: ${result.error || 'No se pudo guardar'}` })
-      setTimeout(() => setNotification(null), 4000)
-      return
-    }
-    
+  const handleTipoAlumnoChange = useCallback((id, tipo) => {
+    store.updateConsulta(id, { tipo_alumno: tipo }, user.id)
     if (selectedConsulta?.id === id) {
       setSelectedConsulta(store.getConsultaById(id))
     }
     loadData()
-    setNotification({ type: 'success', message: `Tipo cambiado a "${tipo === 'nuevo' ? 'Alumno Nuevo' : 'Alumno Antiguo'}"` })
-    setTimeout(() => setNotification(null), 2000)
   }, [selectedConsulta?.id, user?.id])
 
   // ============================================
@@ -2319,7 +2076,6 @@ export default function Dashboard() {
           {/* Info principal */}
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-              {/* Header con nombre */}
               <div className="flex items-start justify-between mb-6">
                 <div>
                   <div className="flex items-center gap-3">
@@ -2335,7 +2091,6 @@ export default function Dashboard() {
                 </span>
               </div>
 
-              {/* Info cards - Vista original */}
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <InfoCard icon="Mail" label="Email" value={c.email} iconColor="text-blue-500" copiable leadId={c.id} />
                 <InfoCard icon="Phone" label="Teléfono" value={c.telefono} iconColor="text-green-500" copiable leadId={c.id} />
@@ -2437,64 +2192,39 @@ export default function Dashboard() {
 
           {/* Acciones */}
           <div className="space-y-6">
-            {/* Cambiar Estado - Diseño original, sin requerir lock */}
             {canEdit && !c.matriculado && !c.descartado && (
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+              <div className={`bg-white rounded-xl p-6 shadow-sm border ${isMyLock ? 'border-slate-100' : 'border-slate-200 opacity-60'}`}>
                 <h3 className="font-semibold text-slate-800 mb-4">Cambiar Estado</h3>
                 <div className="space-y-2">
-                  {Object.values(ESTADOS).filter(e => e.id !== c.estado).map(estado => {
-                    // Colores más saturados para mejor visibilidad
-                    const colorMap = {
-                      nueva: 'bg-blue-200 text-blue-800 hover:bg-blue-300',
-                      contactado: 'bg-amber-200 text-amber-800 hover:bg-amber-300',
-                      seguimiento: 'bg-purple-200 text-purple-800 hover:bg-purple-300',
-                      examen_admision: 'bg-cyan-200 text-cyan-800 hover:bg-cyan-300',
-                      matriculado: 'bg-emerald-200 text-emerald-800 hover:bg-emerald-300',
-                      descartado: 'bg-red-200 text-red-800 hover:bg-red-300'
-                    }
-                    const colorClass = colorMap[estado.id] || `${estado.bg} ${estado.text}`
-                    
-                    return (
-                      <button key={estado.id}
-                              onClick={() => handleUpdateEstado(c.id, estado.id)}
-                              disabled={isLocked && !isMyLock}
-                              className={`w-full px-4 py-3 rounded-lg text-left transition-colors font-medium ${colorClass} ${isLocked && !isMyLock ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
-                        {estado.label}
-                      </button>
-                    )
-                  })}
+                  {Object.values(ESTADOS).filter(e => e.id !== c.estado).map(estado => (
+                    <button key={estado.id}
+                            onClick={() => isMyLock && handleUpdateEstado(c.id, estado.id)}
+                            disabled={!isMyLock}
+                            className={`w-full px-4 py-3 rounded-lg text-left transition-colors ${estado.bg} ${estado.text} ${isMyLock ? 'hover:opacity-80 cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
+                      {estado.label}
+                    </button>
+                  ))}
                 </div>
-                {isLocked && !isMyLock && (
+                {!isMyLock && isLocked && (
                   <p className="text-xs text-amber-600 mt-3 flex items-center gap-1">
-                    <Icon name="Lock" size={12} /> {lockedByName} está editando
+                    <Icon name="Lock" size={12} /> Bloqueado por {lockedByName}
                   </p>
                 )}
               </div>
             )}
-            
-            {/* Debug: mostrar si canEdit es false */}
-            {!canEdit && !c.matriculado && !c.descartado && (
-              <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
-                <p className="text-amber-700 text-sm">
-                  <Icon name="AlertTriangle" size={14} className="inline mr-1" />
-                  No tienes permisos para editar leads
-                </p>
-              </div>
-            )}
 
-            {/* Tipo de Alumno */}
             {canEdit && !c.matriculado && !c.descartado && (
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+              <div className={`bg-white rounded-xl p-6 shadow-sm border ${isMyLock ? 'border-slate-100' : 'border-slate-200 opacity-60'}`}>
                 <h3 className="font-semibold text-slate-800 mb-4">Tipo de Alumno</h3>
                 <div className="flex gap-2">
-                  <button onClick={() => handleTipoAlumnoChange(c.id, 'nuevo')}
-                          disabled={isLocked && !isMyLock}
-                          className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'nuevo' ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300' : 'bg-slate-100 text-slate-600'} ${isLocked && !isMyLock ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-200 cursor-pointer'}`}>
+                  <button onClick={() => isMyLock && handleTipoAlumnoChange(c.id, 'nuevo')}
+                          disabled={!isMyLock}
+                          className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'nuevo' ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300' : 'bg-slate-100 text-slate-600'} ${isMyLock ? 'hover:bg-slate-200 cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
                     Nuevo
                   </button>
-                  <button onClick={() => handleTipoAlumnoChange(c.id, 'antiguo')}
-                          disabled={isLocked && !isMyLock}
-                          className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'antiguo' ? 'bg-violet-100 text-violet-700 ring-2 ring-violet-300' : 'bg-slate-100 text-slate-600'} ${isLocked && !isMyLock ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-200 cursor-pointer'}`}>
+                  <button onClick={() => isMyLock && handleTipoAlumnoChange(c.id, 'antiguo')}
+                          disabled={!isMyLock}
+                          className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'antiguo' ? 'bg-violet-100 text-violet-700 ring-2 ring-violet-300' : 'bg-slate-100 text-slate-600'} ${isMyLock ? 'hover:bg-slate-200 cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
                     Antiguo
                   </button>
                 </div>
@@ -4381,76 +4111,44 @@ export default function Dashboard() {
       setLocalShowUserModal(true)
     }
     
-    const handleSaveUser = async () => {
+    const handleSaveUser = () => {
       if (!userFormData.nombre || !userFormData.email) {
         alert('Nombre y email son requeridos')
         return
       }
       
-      try {
-        if (localEditingUser) {
-          // Actualizar usuario existente
-          const updates = {
-            nombre: userFormData.nombre,
-            email: userFormData.email,
-            rol_id: userFormData.rol_id,
-            activo: userFormData.activo
-          }
-          await store.updateUsuario(localEditingUser.id, updates)
-          setNotification({ type: 'success', message: 'Usuario actualizado' })
-        } else {
-          // Crear nuevo usuario
-          const nuevoUsuario = await store.createUsuario({
-            nombre: userFormData.nombre,
-            email: userFormData.email,
-            rol_id: userFormData.rol_id,
-            activo: userFormData.activo
-          })
-          
-          console.log('✅ Usuario creado:', nuevoUsuario)
-          setNotification({ 
-            type: 'success', 
-            message: 'Usuario creado. Debe usar "Olvidé mi contraseña" para activar su cuenta.' 
-          })
-          
-          // Actualizar contador de uso del plan si existe
-          if (actualizarUso) actualizarUso('usuarios', 1)
+      if (localEditingUser) {
+        // Actualizar
+        const updates = {
+          nombre: userFormData.nombre,
+          email: userFormData.email,
+          rol_id: userFormData.rol_id,
+          activo: userFormData.activo
         }
-        
-        setLocalShowUserModal(false)
-        
-        // Recargar usuarios desde Supabase para tener datos frescos
-        if (reloadFromSupabase) {
-          await reloadFromSupabase()
+        if (userFormData.password) {
+          updates.password = userFormData.password
         }
-        refreshUsuarios()
-        
-      } catch (error) {
-        console.error('Error guardando usuario:', error)
-        
-        // Mostrar mensaje de error específico
-        let errorMsg = 'Error al guardar usuario'
-        if (error.message?.includes('duplicate') || error.code === '23505') {
-          errorMsg = 'Ya existe un usuario con ese email'
-        } else if (error.message) {
-          errorMsg = error.message
+        store.updateUsuario(localEditingUser.id, updates)
+        setNotification({ type: 'success', message: 'Usuario actualizado' })
+      } else {
+        // Crear
+        if (!userFormData.password) {
+          alert('La contraseña es requerida para nuevos usuarios')
+          return
         }
-        
-        setNotification({ type: 'error', message: errorMsg })
+        store.createUsuario(userFormData)
+        setNotification({ type: 'success', message: 'Usuario creado' })
       }
       
-      setTimeout(() => setNotification(null), 4000)
+      setLocalShowUserModal(false)
+      refreshUsuarios()
+      setTimeout(() => setNotification(null), 2000)
     }
     
-    const handleToggleActivo = async (userId) => {
-      try {
-        await store.toggleUsuarioActivo(userId)
-        refreshUsuarios()
-        setNotification({ type: 'info', message: 'Estado actualizado' })
-      } catch (error) {
-        console.error('Error:', error)
-        setNotification({ type: 'error', message: 'Error al actualizar estado' })
-      }
+    const handleToggleActivo = (userId) => {
+      store.toggleUsuarioActivo(userId)
+      refreshUsuarios()
+      setNotification({ type: 'info', message: 'Estado actualizado' })
       setTimeout(() => setNotification(null), 2000)
     }
     
@@ -4665,11 +4363,19 @@ export default function Dashboard() {
                     className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                     placeholder="juan@projazz.cl"
                   />
-                  {!localEditingUser && (
-                    <p className="text-xs text-slate-400 mt-1">
-                      El usuario recibirá instrucciones para activar su cuenta
-                    </p>
-                  )}
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Contraseña {localEditingUser ? '(dejar vacío para mantener)' : '*'}
+                  </label>
+                  <input
+                    type="password"
+                    value={userFormData.password}
+                    onChange={e => setUserFormData({...userFormData, password: e.target.value})}
+                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                    placeholder="••••••••"
+                  />
                 </div>
                 
                 <div>
@@ -6265,7 +5971,7 @@ const handleImportCSV = async () => {
         asignarA: encargadoSeleccionado !== 'auto' ? encargadoSeleccionado : null
       }
       
-      const result = await store.importarLeadsCSV(csvData, user?.id, {}, opciones)
+      const result = store.importarLeadsCSV(csvData, user?.id, {}, opciones)
       
       setImportResult(result)
       setImporting(false)
@@ -7034,7 +6740,7 @@ const handleImportCSV = async () => {
             </button>
             
             <button
-              onClick={handleLogout}
+              onClick={() => signOut()}
               className="w-full mt-4 py-3 border border-slate-200 text-slate-600 rounded-xl font-medium hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
             >
               <Icon name="LogOut" size={20} />
