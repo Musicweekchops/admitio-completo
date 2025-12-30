@@ -22,10 +22,14 @@ import {
   CORREOS_ENVIADOS_INICIAL
 } from '../data/mockData'
 
+// Importar cliente Supabase
+import { supabase } from './supabase'
+
 // Importar funciones de sincronización con Supabase
 import { 
   syncCrearLead, 
-  syncActualizarLead, 
+  syncActualizarLead,
+  syncActualizarLeadDirecto,
   syncEliminarLead,
   syncCrearAccion,
   syncCrearUsuario,
@@ -126,6 +130,22 @@ function initStore() {
 }
 
 let store = initStore()
+
+// Escuchar evento de actualización desde AuthContext
+if (typeof window !== 'undefined') {
+  window.addEventListener('admitio-store-updated', (event) => {
+    console.log('🔄 Evento admitio-store-updated recibido, recargando store...')
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (stored) {
+      try {
+        store = JSON.parse(stored)
+        console.log(`✅ Store recargado: ${store.consultas?.length || 0} leads, ${store.usuarios?.length || 0} usuarios (Supabase: ${store._supabase_sync ? 'Sí' : 'No'})`)
+      } catch (e) {
+        console.warn('⚠️ Error al recargar store desde evento')
+      }
+    }
+  })
+}
 
 function saveStore() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(store))
@@ -230,7 +250,73 @@ export function getRolesDisponibles(requesterId = null) {
   })
 }
 
-export function createUsuario(data) {
+export async function createUsuario(data) {
+  const institucionId = getInstitucionIdFromStore()
+  
+  // Si hay conexión a Supabase, crear en tabla usuarios
+  if (institucionId) {
+    try {
+      const emailNormalizado = data.email.toLowerCase().trim()
+      
+      // Verificar si ya existe un usuario con ese email
+      const { data: existente } = await supabase
+        .from('usuarios')
+        .select('id')
+        .eq('email', emailNormalizado)
+        .maybeSingle()
+      
+      if (existente) {
+        throw new Error('Ya existe un usuario con ese email')
+      }
+      
+      console.log('📤 Creando usuario en Supabase...', emailNormalizado)
+      
+      // Crear registro en tabla usuarios (SIN auth_id)
+      // El usuario usará "Olvidé mi contraseña" para activar su cuenta
+      const { data: nuevoUsuario, error: dbError } = await supabase
+        .from('usuarios')
+        .insert({
+          institucion_id: institucionId,
+          nombre: data.nombre,
+          email: emailNormalizado,
+          rol: data.rol_id || 'encargado',
+          activo: true,
+          email_verificado: false
+        })
+        .select()
+        .single()
+      
+      if (dbError) {
+        console.error('❌ Error creando usuario:', dbError)
+        throw dbError
+      }
+      
+      console.log('✅ Usuario creado:', nuevoUsuario.id)
+      
+      // Formatear para el store local
+      const usuarioParaStore = {
+        id: nuevoUsuario.id,
+        nombre: nuevoUsuario.nombre,
+        email: nuevoUsuario.email,
+        rol_id: nuevoUsuario.rol,
+        activo: nuevoUsuario.activo,
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(nuevoUsuario.nombre)}&background=7c3aed&color=fff`,
+        created_at: nuevoUsuario.created_at
+      }
+      
+      // Agregar al store local
+      store.usuarios.push(usuarioParaStore)
+      saveStore()
+      
+      return usuarioParaStore
+      
+    } catch (error) {
+      console.error('❌ Error creando usuario:', error)
+      throw error
+    }
+  }
+  
+  // Fallback: crear solo localmente (modo demo)
   const nuevoUsuario = {
     id: `user-${Date.now()}`,
     ...data,
@@ -241,38 +327,75 @@ export function createUsuario(data) {
   store.usuarios.push(nuevoUsuario)
   saveStore()
   
-  // ========== SYNC CON SUPABASE ==========
-  const institucionId = getInstitucionIdFromStore()
-  if (institucionId) {
-    syncCrearUsuario(institucionId, nuevoUsuario)
-  }
-  // ========================================
-  
   return nuevoUsuario
 }
 
-export function updateUsuario(id, updates) {
+export async function updateUsuario(id, updates) {
   const index = store.usuarios.findIndex(u => u.id === id)
   if (index === -1) return null
+  
+  // Si el ID es UUID de Supabase, actualizar en la BD
+  if (id && id.includes('-') && !id.startsWith('user-')) {
+    try {
+      const supabaseUpdates = {}
+      if (updates.nombre !== undefined) supabaseUpdates.nombre = updates.nombre
+      if (updates.email !== undefined) supabaseUpdates.email = updates.email
+      if (updates.rol_id !== undefined) supabaseUpdates.rol = updates.rol_id
+      if (updates.activo !== undefined) supabaseUpdates.activo = updates.activo
+      supabaseUpdates.updated_at = new Date().toISOString()
+      
+      const { error } = await supabase
+        .from('usuarios')
+        .update(supabaseUpdates)
+        .eq('id', id)
+      
+      if (error) {
+        console.error('❌ Error actualizando usuario en Supabase:', error)
+        throw error
+      }
+      
+      console.log('✅ Usuario actualizado en Supabase:', id)
+    } catch (error) {
+      console.error('Error:', error)
+      throw error
+    }
+  }
+  
+  // Actualizar localmente
   store.usuarios[index] = { ...store.usuarios[index], ...updates }
   saveStore()
-  
-  // ========== SYNC CON SUPABASE ==========
-  syncActualizarUsuario(id, updates)
-  // ========================================
   
   return store.usuarios[index]
 }
 
-export function toggleUsuarioActivo(id) {
+export async function toggleUsuarioActivo(id) {
   const usuario = store.usuarios.find(u => u.id === id)
   if (!usuario) return null
-  usuario.activo = !usuario.activo
-  saveStore()
   
-  // ========== SYNC CON SUPABASE ==========
-  syncActualizarUsuario(id, { activo: usuario.activo })
-  // ========================================
+  const nuevoEstado = !usuario.activo
+  
+  // Si el ID es UUID de Supabase, actualizar en la BD
+  if (id && id.includes('-') && !id.startsWith('user-')) {
+    try {
+      const { error } = await supabase
+        .from('usuarios')
+        .update({ activo: nuevoEstado, updated_at: new Date().toISOString() })
+        .eq('id', id)
+      
+      if (error) {
+        console.error('❌ Error actualizando estado en Supabase:', error)
+        throw error
+      }
+      
+      console.log('✅ Estado actualizado en Supabase:', id, nuevoEstado)
+    } catch (error) {
+      console.error('Error:', error)
+      throw error
+    }
+  }
+  
+  usuario.activo = nuevoEstado
+  saveStore()
   
   return usuario
 }
@@ -385,16 +508,36 @@ export function marcarReporteLeido(reporteId) {
 }
 
 // Eliminar usuario (con opción de migrar primero)
-export function deleteUsuario(id) {
+export async function deleteUsuario(id) {
+  console.log('🗑️ Eliminando usuario de Supabase:', id)
+  
   // Verificar que no tenga leads asignados
   const leadsDelUsuario = store.consultas.filter(c => c.asignado_a === id)
   if (leadsDelUsuario.length > 0) {
     return { success: false, error: 'El usuario tiene leads asignados', leadsCount: leadsDelUsuario.length }
   }
   
-  store.usuarios = store.usuarios.filter(u => u.id !== id)
-  saveStore()
-  return { success: true }
+  try {
+    const { error } = await supabase
+      .from('usuarios')
+      .delete()
+      .eq('id', id)
+    
+    if (error) {
+      console.error('❌ Error eliminando usuario:', error)
+      return { success: false, error: error.message }
+    }
+    
+    console.log('✅ Usuario eliminado de Supabase')
+    
+    // Eliminar del store local
+    store.usuarios = store.usuarios.filter(u => u.id !== id)
+    
+    return { success: true }
+  } catch (err) {
+    console.error('❌ Error:', err)
+    return { success: false, error: err.message }
+  }
 }
 
 // ============================================
@@ -450,7 +593,7 @@ function enrichConsulta(c) {
   }
 }
 
-export function createConsulta(data, userId, userRol = null) {
+export async function createConsulta(data, userId, userRol = null) {
   // Determinar asignación
   let asignado_a = data.asignado_a
   let en_cola = false
@@ -475,10 +618,10 @@ export function createConsulta(data, userId, userRol = null) {
     carrera_nombre = carrera?.nombre || null
   }
   
-  const newConsulta = {
-    id: `c-${Date.now()}`,
+  // Preparar datos del lead
+  const leadData = {
     ...data,
-    carrera_nombre, // Asegurar que siempre tenga el nombre
+    carrera_nombre,
     estado: 'nueva',
     emails_enviados: 0,
     created_at: new Date().toISOString(),
@@ -491,11 +634,74 @@ export function createConsulta(data, userId, userRol = null) {
     asignado_a,
     en_cola,
     ultimo_whatsapp: null,
-    // Nuevo: Registro de quién creó el lead
     creado_por: userId,
     creado_por_nombre: creador?.nombre || 'Sistema',
     creado_por_rol: userRol || creador?.rol_id || 'sistema',
     origen_entrada: userRol === 'asistente' ? 'secretaria' : (data.origen_entrada || 'manual')
+  }
+  
+  // ========== CREAR EN SUPABASE PRIMERO ==========
+  const institucionId = getInstitucionIdFromStore()
+  let finalId = `c-${Date.now()}` // Fallback ID local
+  
+  if (institucionId) {
+    try {
+      // Preparar datos para Supabase
+      const insertData = {
+        institucion_id: institucionId,
+        nombre: leadData.nombre,
+        email: leadData.email || null,
+        telefono: leadData.telefono || null,
+        carrera_nombre: leadData.carrera_nombre || null,
+        medio: leadData.medio_id || 'otro',
+        estado: 'nueva',
+        prioridad: leadData.prioridad || 'media',
+        notas: leadData.notas || null
+      }
+      
+      // Solo incluir carrera_id si es UUID válido
+      if (leadData.carrera_id && typeof leadData.carrera_id === 'string' && 
+          leadData.carrera_id.includes('-') && leadData.carrera_id.length > 30) {
+        insertData.carrera_id = leadData.carrera_id
+      }
+      
+      // Solo incluir asignado_a si es UUID válido
+      if (asignado_a && typeof asignado_a === 'string' && 
+          asignado_a.includes('-') && asignado_a.length > 30) {
+        insertData.asignado_a = asignado_a
+      }
+      
+      // Solo incluir creado_por si es UUID válido
+      if (userId && typeof userId === 'string' && 
+          userId.includes('-') && userId.length > 30) {
+        insertData.creado_por = userId
+      }
+      
+      console.log('📤 Creando lead en Supabase...')
+      const { data: nuevoLead, error } = await supabase
+        .from('leads')
+        .insert(insertData)
+        .select()
+        .single()
+      
+      if (error) {
+        console.error('❌ Error creando lead en Supabase:', error)
+        // Continuar con ID local como fallback
+      } else {
+        // Usar el UUID de Supabase
+        finalId = nuevoLead.id
+        console.log('✅ Lead creado en Supabase con ID:', finalId)
+      }
+    } catch (err) {
+      console.error('❌ Error en Supabase:', err)
+      // Continuar con ID local
+    }
+  }
+  // ================================================
+  
+  const newConsulta = {
+    id: finalId, // UUID de Supabase o fallback local
+    ...leadData
   }
   
   store.consultas.push(newConsulta)
@@ -514,25 +720,17 @@ export function createConsulta(data, userId, userRol = null) {
       prioridad: 0,
       created_at: new Date().toISOString()
     })
-    // Crear notificación para KeyMaster
     crearNotificacion('keymaster', 'cola_llena', `Nuevo lead en cola: ${data.nombre}`, newConsulta.id)
   } else if (asignado_a) {
-    // Notificar al encargado
     crearNotificacion(asignado_a, 'nuevo_lead', `Nuevo lead asignado: ${data.nombre}`, newConsulta.id)
   }
   
   saveStore()
   
-  // ========== SYNC CON SUPABASE ==========
-  const institucionId = getInstitucionIdFromStore()
-  if (institucionId) {
-    syncCrearLead(institucionId, newConsulta)
-  }
-  // ========================================
-  
   // Log para debugging
   const encargado = store.usuarios.find(u => u.id === asignado_a)
   console.log(`✅ Lead creado: ${data.nombre}`)
+  console.log(`   → ID: ${finalId}`)
   console.log(`   → Creado por: ${creador?.nombre || 'Sistema'} (${newConsulta.origen_entrada})`)
   console.log(`   → Asignado a: ${encargado?.nombre || 'En cola'}`)
   console.log(`   → Total leads: ${store.consultas.length}`)
@@ -810,30 +1008,112 @@ export function updateConsulta(id, updates, userId) {
     syncUpdates.carreras_interes = newConsulta.carreras_interes
   }
   
-  syncActualizarLead(id, syncUpdates)
+  syncActualizarLeadDirecto(id, syncUpdates)
   // ========================================
   
   return newConsulta
 }
 
-export function deleteConsulta(id) {
-  store.consultas = store.consultas.filter(c => c.id !== id)
-  store.actividad = store.actividad.filter(a => a.lead_id !== id)
-  store.recordatorios = store.recordatorios.filter(r => r.lead_id !== id)
-  store.cola_leads = store.cola_leads.filter(c => c.lead_id !== id)
+// Versión async que espera confirmación de Supabase (para operaciones críticas)
+export async function updateConsultaAsync(id, updates, userId) {
+  const index = store.consultas.findIndex(c => c.id === id)
+  if (index === -1) return { success: false, error: 'Lead no encontrado' }
+  
+  const oldConsulta = store.consultas[index]
+  const newConsulta = { ...oldConsulta, ...updates }
+  
+  // Detectar cambio de estado
+  if (updates.estado && oldConsulta.estado !== newConsulta.estado) {
+    addActividad(id, userId, 'cambio_estado', `Estado: ${oldConsulta.estado} → ${newConsulta.estado}`)
+    
+    // Primer contacto
+    if (!oldConsulta.fecha_primer_contacto && newConsulta.estado !== 'nueva') {
+      newConsulta.fecha_primer_contacto = new Date().toISOString()
+    }
+    
+    // Cierre
+    if (newConsulta.estado === 'matriculado') {
+      newConsulta.fecha_cierre = new Date().toISOString()
+      newConsulta.matriculado = true
+      addActividad(id, userId, 'matriculado', '🎉 Lead matriculado exitosamente')
+      cancelarRecordatorios(id)
+    }
+    if (newConsulta.estado === 'descartado') {
+      newConsulta.fecha_cierre = new Date().toISOString()
+      newConsulta.descartado = true
+      addActividad(id, userId, 'descartado', `Lead descartado: ${updates.motivo_descarte || 'Sin motivo especificado'}`)
+      cancelarRecordatorios(id)
+    }
+  }
+  
+  // Actualizar store local
+  store.consultas[index] = newConsulta
   saveStore()
   
-  // ========== SYNC CON SUPABASE ==========
-  syncEliminarLead(id)
-  // ========================================
+  // Calcular campos para sync
+  const syncUpdates = { ...updates }
+  if (newConsulta.matriculado !== oldConsulta.matriculado) syncUpdates.matriculado = newConsulta.matriculado
+  if (newConsulta.descartado !== oldConsulta.descartado) syncUpdates.descartado = newConsulta.descartado
+  if (newConsulta.fecha_cierre !== oldConsulta.fecha_cierre) syncUpdates.fecha_cierre = newConsulta.fecha_cierre
+  if (newConsulta.fecha_primer_contacto !== oldConsulta.fecha_primer_contacto) syncUpdates.fecha_primer_contacto = newConsulta.fecha_primer_contacto
+  
+  // Sincronizar con Supabase y ESPERAR resultado
+  const syncResult = await syncActualizarLeadDirecto(id, syncUpdates)
+  
+  if (!syncResult.success) {
+    console.error('❌ Error sincronizando cambio:', syncResult.error)
+    return { success: false, error: syncResult.error, lead: newConsulta }
+  }
+  
+  console.log('✅ Cambio sincronizado correctamente')
+  return { success: true, lead: newConsulta }
+}
+
+export async function deleteConsulta(id) {
+  console.log('🗑️ Eliminando lead:', id)
+  
+  // Si es ID local (no UUID), solo eliminar localmente
+  if (!id || !id.includes('-') || id.startsWith('c-')) {
+    console.log('⚠️ Lead con ID local, eliminando solo localmente')
+    store.consultas = store.consultas.filter(c => c.id !== id)
+    store.actividad = store.actividad.filter(a => a.lead_id !== id)
+    store.recordatorios = store.recordatorios.filter(r => r.lead_id !== id)
+    store.cola_leads = store.cola_leads.filter(c => c.lead_id !== id)
+    return { success: true }
+  }
+  
+  try {
+    const { error } = await supabase
+      .from('leads')
+      .delete()
+      .eq('id', id)
+    
+    if (error) {
+      console.error('❌ Error eliminando lead:', error)
+      return { success: false, error: error.message }
+    }
+    
+    console.log('✅ Lead eliminado de Supabase')
+    
+    // Eliminar del store local
+    store.consultas = store.consultas.filter(c => c.id !== id)
+    store.actividad = store.actividad.filter(a => a.lead_id !== id)
+    store.recordatorios = store.recordatorios.filter(r => r.lead_id !== id)
+    store.cola_leads = store.cola_leads.filter(c => c.lead_id !== id)
+    
+    return { success: true }
+  } catch (err) {
+    console.error('❌ Error:', err)
+    return { success: false, error: err.message }
+  }
 }
 
 // Reactivar un lead descartado
-export function reactivarLead(id, userId) {
+export async function reactivarLead(id, userId) {
   const lead = store.consultas.find(c => c.id === id)
   if (!lead || !lead.descartado) return null
   
-  const nuevoLead = createConsulta({
+  const nuevoLead = await createConsulta({
     nombre: lead.nombre,
     email: lead.email,
     telefono: lead.telefono,
@@ -1326,12 +1606,36 @@ export function updateFormulario(id, updates) {
   return store.formularios[index]
 }
 
-export function deleteFormulario(id) {
-  store.formularios = store.formularios.filter(f => f.id !== id)
-  saveStore()
+export async function deleteFormulario(id) {
+  console.log('🗑️ Eliminando formulario:', id)
   
-  // Sincronizar con Supabase
-  syncEliminarFormulario(id)
+  // Si es ID local, solo eliminar localmente
+  if (!id || !id.includes('-')) {
+    store.formularios = store.formularios.filter(f => f.id !== id)
+    return { success: true }
+  }
+  
+  try {
+    const { error } = await supabase
+      .from('formularios')
+      .delete()
+      .eq('id', id)
+    
+    if (error) {
+      console.error('❌ Error eliminando formulario:', error)
+      return { success: false, error: error.message }
+    }
+    
+    console.log('✅ Formulario eliminado de Supabase')
+    
+    // Eliminar del store local
+    store.formularios = store.formularios.filter(f => f.id !== id)
+    
+    return { success: true }
+  } catch (err) {
+    console.error('❌ Error:', err)
+    return { success: false, error: err.message }
+  }
 }
 
 export function generarEmbedCode(formId) {
@@ -1767,40 +2071,85 @@ export function getCarreraById(id) {
   return store.carreras.find(c => c.id === id)
 }
 
-export function createCarrera(data) {
-  const nueva = {
-    id: `carrera-${Date.now()}`, // ID temporal, Supabase generará UUID
-    nombre: data.nombre,
-    color: data.color || 'bg-violet-500',
-    activa: true,
-    created_at: new Date().toISOString()
-  }
-  store.carreras.push(nueva)
-  saveStore()
+export async function createCarrera(data) {
+  console.log('🎓 Creando carrera en Supabase:', data)
   
-  // Sincronizar con Supabase
   const institucionId = getInstitucionIdFromStore()
-  if (institucionId) {
-    syncCrearCarrera(institucionId, nueva)
+  console.log('📍 Institución ID:', institucionId)
+  
+  if (!institucionId) {
+    console.error('❌ No se puede crear carrera: institucionId es null')
+    return { error: 'No hay institución configurada' }
   }
   
-  return nueva
+  try {
+    const { data: nueva, error } = await supabase
+      .from('carreras')
+      .insert({
+        institucion_id: institucionId,
+        nombre: data.nombre,
+        color: data.color || 'bg-violet-500',
+        activa: true
+      })
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('❌ Error creando carrera en Supabase:', error)
+      return { error: error.message }
+    }
+    
+    console.log('✅ Carrera creada en Supabase:', nueva)
+    
+    // Agregar al store local para que se refleje inmediatamente
+    store.carreras.push(nueva)
+    
+    return nueva
+  } catch (err) {
+    console.error('❌ Error:', err)
+    return { error: err.message }
+  }
 }
 
-export function updateCarrera(id, updates) {
-  const index = store.carreras.findIndex(c => c.id === id)
-  if (index === -1) return null
+export async function updateCarrera(id, updates) {
+  console.log('🎓 Actualizando carrera en Supabase:', id, updates)
   
-  store.carreras[index] = { ...store.carreras[index], ...updates }
-  saveStore()
-  
-  // Sincronizar con Supabase
-  syncActualizarCarrera(id, updates)
-  
-  return store.carreras[index]
+  try {
+    const supabaseUpdates = {}
+    if (updates.nombre !== undefined) supabaseUpdates.nombre = updates.nombre
+    if (updates.color !== undefined) supabaseUpdates.color = updates.color
+    if (updates.activa !== undefined) supabaseUpdates.activa = updates.activa
+    
+    const { data, error } = await supabase
+      .from('carreras')
+      .update(supabaseUpdates)
+      .eq('id', id)
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('❌ Error actualizando carrera:', error)
+      return { error: error.message }
+    }
+    
+    console.log('✅ Carrera actualizada en Supabase:', data)
+    
+    // Actualizar en store local
+    const index = store.carreras.findIndex(c => c.id === id)
+    if (index !== -1) {
+      store.carreras[index] = { ...store.carreras[index], ...data }
+    }
+    
+    return data
+  } catch (err) {
+    console.error('❌ Error:', err)
+    return { error: err.message }
+  }
 }
 
-export function deleteCarrera(id) {
+export async function deleteCarrera(id) {
+  console.log('🗑️ Eliminando carrera de Supabase:', id)
+  
   // Verificar si hay leads usando esta carrera
   const leadsConCarrera = store.consultas.filter(c => c.carrera_id === id)
   if (leadsConCarrera.length > 0) {
@@ -1808,34 +2157,66 @@ export function deleteCarrera(id) {
     return { error: 'TIENE_LEADS', count: leadsConCarrera.length }
   }
   
-  store.carreras = store.carreras.filter(c => c.id !== id)
-  saveStore()
-  
-  // Sincronizar con Supabase
-  syncEliminarCarrera(id)
-  
-  return { success: true }
+  try {
+    const { error } = await supabase
+      .from('carreras')
+      .delete()
+      .eq('id', id)
+    
+    if (error) {
+      console.error('❌ Error eliminando carrera:', error)
+      return { error: error.message }
+    }
+    
+    console.log('✅ Carrera eliminada de Supabase')
+    
+    // Eliminar del store local
+    store.carreras = store.carreras.filter(c => c.id !== id)
+    
+    return { success: true }
+  } catch (err) {
+    console.error('❌ Error:', err)
+    return { error: err.message }
+  }
 }
 
-export function importarCarreras(carrerasData) {
-  const nuevas = carrerasData.map((c, idx) => ({
-    id: `carrera-imp-${Date.now()}-${idx}`,
-    nombre: c.nombre,
-    color: c.color || 'bg-violet-500',
-    activa: true,
-    created_at: new Date().toISOString()
-  }))
+export async function importarCarreras(carrerasData) {
+  console.log('📥 Importando carreras a Supabase:', carrerasData.length)
   
-  store.carreras.push(...nuevas)
-  saveStore()
-  
-  // Sincronizar con Supabase
   const institucionId = getInstitucionIdFromStore()
-  if (institucionId) {
-    syncImportarCarreras(institucionId, nuevas)
+  if (!institucionId) {
+    console.error('❌ No se puede importar: institucionId es null')
+    return { error: 'No hay institución configurada' }
   }
   
-  return nuevas
+  try {
+    const insertData = carrerasData.map(c => ({
+      institucion_id: institucionId,
+      nombre: c.nombre,
+      color: c.color || 'bg-violet-500',
+      activa: true
+    }))
+    
+    const { data, error } = await supabase
+      .from('carreras')
+      .insert(insertData)
+      .select()
+    
+    if (error) {
+      console.error('❌ Error importando carreras:', error)
+      return { error: error.message }
+    }
+    
+    console.log('✅ Carreras importadas a Supabase:', data.length)
+    
+    // Agregar al store local
+    store.carreras.push(...data)
+    
+    return data
+  } catch (err) {
+    console.error('❌ Error:', err)
+    return { error: err.message }
+  }
 }
 
 export function getMedios() {
@@ -2163,8 +2544,11 @@ function parseCSVLine(line) {
 }
 
 // Función principal: Importar leads desde CSV
-export function importarLeadsCSV(csvData, userId, mapeoColumnas = {}) {
+export async function importarLeadsCSV(csvData, userId, mapeoColumnas = {}, opciones = {}) {
   console.log('📥 Iniciando importación de CSV...')
+  
+  // Opciones de importación
+  const { asignarA = null } = opciones // ID del encargado al que asignar todos los leads
   
   // Normalizar saltos de línea y filtrar vacías
   const lineas = csvData
@@ -2202,10 +2586,15 @@ export function importarLeadsCSV(csvData, userId, mapeoColumnas = {}) {
     email: mapeoColumnas.email ?? findColumn(['email', 'correo', 'mail']),
     telefono: mapeoColumnas.telefono ?? findColumn(['telefono', 'celular', 'fono', 'movil', 'phone', 'tel']),
     carrera: mapeoColumnas.carrera ?? findColumn(['carrera', 'instrumento', 'curso', 'programa', 'interes']),
+    medio: mapeoColumnas.medio ?? findColumn(['medio', 'fuente', 'origen', 'canal', 'source']),
     notas: mapeoColumnas.notas ?? findColumn(['nota', 'comentario', 'observacion', 'detalle', 'mensaje'])
   }
   
   console.log('🗺️ Mapeo de columnas:', mapeo)
+  
+  // DEBUG: Mostrar carreras disponibles
+  const carrerasActivas = store.carreras.filter(c => c.activa !== false)
+  console.log('🎸 Carreras disponibles para matching:', carrerasActivas.map(c => ({ id: c.id, nombre: c.nombre, activa: c.activa })))
   
   // Validar que al menos tengamos nombre
   if (mapeo.nombre === -1) {
@@ -2237,6 +2626,7 @@ export function importarLeadsCSV(csvData, userId, mapeoColumnas = {}) {
       const email = getValue(mapeo.email)
       const telefono = getValue(mapeo.telefono)
       const carreraTexto = getValue(mapeo.carrera)
+      const medioTexto = getValue(mapeo.medio)
       const notas = getValue(mapeo.notas)
       
       // Validar nombre
@@ -2274,28 +2664,71 @@ export function importarLeadsCSV(csvData, userId, mapeoColumnas = {}) {
         }
       }
       
-      // Buscar carrera que coincida
-      let carrera_id = store.carreras[0]?.id // Default a primera carrera
+      // Buscar carrera que coincida con matching inteligente
+      let carrera_id = null // NO usar default, dejar null si no encuentra
       if (carreraTexto) {
         const carreraTextoNorm = carreraTexto.toLowerCase()
-        const carreraEncontrada = store.carreras.find(c => 
-          c.nombre.toLowerCase().includes(carreraTextoNorm) ||
-          carreraTextoNorm.includes(c.nombre.toLowerCase())
-        )
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Quitar acentos
+          .trim()
+        
+        // Extraer palabra base (primer palabra): "guitarra electrica" -> "guitarra"
+        const palabraBase = carreraTextoNorm.split(/\s+/)[0]
+        
+        // Filtrar solo carreras activas
+        const carrerasActivas = store.carreras.filter(c => c.activa !== false)
+        
+        // Ordenar por longitud de nombre (más cortos primero = más genéricos)
+        const carrerasOrdenadas = [...carrerasActivas].sort((a, b) => a.nombre.length - b.nombre.length)
+        
+        // 1. Primero: coincidencia EXACTA (ignorando case y acentos)
+        let carreraEncontrada = carrerasOrdenadas.find(c => {
+          const nombreNorm = c.nombre.toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .trim()
+          return nombreNorm === carreraTextoNorm
+        })
+        
+        // 2. Si no hay exacta, buscar por palabra base al INICIO del nombre
+        // "guitarra" matchea con "Guitarra" pero NO con "Bajo Guitarra"
+        if (!carreraEncontrada) {
+          carreraEncontrada = carrerasOrdenadas.find(c => {
+            const nombreNorm = c.nombre.toLowerCase()
+              .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            const primeraPalabra = nombreNorm.split(/\s+/)[0]
+            return primeraPalabra === palabraBase
+          })
+        }
+        
+        // 3. Si aún no hay, buscar que el nombre EMPIECE con el texto buscado
+        if (!carreraEncontrada) {
+          carreraEncontrada = carrerasOrdenadas.find(c => {
+            const nombreNorm = c.nombre.toLowerCase()
+              .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            return nombreNorm.startsWith(palabraBase)
+          })
+        }
+        
         if (carreraEncontrada) {
           carrera_id = carreraEncontrada.id
+          console.log(`🎸 Carrera mapeada: "${carreraTexto}" → "${carreraEncontrada.nombre}"`)
+        } else {
+          console.warn(`⚠️ Carrera no encontrada: "${carreraTexto}"`)
+          resultados.errores.push(`Línea ${i + 1}: Carrera "${carreraTexto}" no existe en el sistema`)
         }
       }
       
-      // Buscar medio "otro" o usar el primero
-      let medio_id = store.medios.find(m => 
-        m.id === 'otro' || 
-        m.nombre.toLowerCase() === 'otro' ||
-        m.nombre.toLowerCase().includes('import')
-      )?.id || store.medios[0]?.id
+      // Si no se encontró carrera, saltar este lead (no usar default)
+      if (!carrera_id) {
+        console.warn(`⚠️ Línea ${i + 1}: Sin carrera válida, omitiendo`)
+        continue
+      }
+      
+      // Medio: guardar texto directo del CSV
+      const medio_id = medioTexto || 'importacion'
+      console.log(`📱 Medio: "${medio_id}"`)
       
       // Crear el lead
-      const nuevoLead = createConsulta({
+      const nuevoLead = await createConsulta({
         nombre,
         email: email || '',
         telefono: telefono || '',
@@ -2303,7 +2736,8 @@ export function importarLeadsCSV(csvData, userId, mapeoColumnas = {}) {
         medio_id,
         tipo_alumno: 'nuevo',
         notas: notas || 'Importado desde CSV',
-        origen_entrada: 'importacion'
+        origen_entrada: 'importacion',
+        asignado_a: asignarA || null // Asignar al encargado seleccionado
       }, userId, 'keymaster')
       
       resultados.importados++

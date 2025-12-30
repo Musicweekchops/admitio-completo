@@ -8,6 +8,179 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { useLockLead } from '../hooks/useLockLead'
 import { ESTADOS, CARRERAS, MEDIOS, TIPOS_ALUMNO } from '../data/mockData'
 
+// Componente para campo editable inline
+const EditableField = ({ label, value, onSave, type = 'text', icon, inputClassName = '' }) => {
+  const [isEditing, setIsEditing] = useState(false)
+  const [editValue, setEditValue] = useState(value || '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+  
+  useEffect(() => {
+    setEditValue(value || '')
+  }, [value])
+  
+  const handleSave = async () => {
+    if (editValue === value) {
+      setIsEditing(false)
+      return
+    }
+    
+    setSaving(true)
+    setError(null)
+    
+    try {
+      const result = await onSave(editValue)
+      if (result.success) {
+        setIsEditing(false)
+      } else {
+        setError(result.error || 'Error al guardar')
+      }
+    } catch (err) {
+      setError('Error de conexión')
+    } finally {
+      setSaving(false)
+    }
+  }
+  
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleSave()
+    }
+    if (e.key === 'Escape') {
+      setEditValue(value || '')
+      setIsEditing(false)
+      setError(null)
+    }
+  }
+  
+  if (isEditing) {
+    return (
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+          {icon && <Icon name={icon} size={12} />}
+          {label}
+        </label>
+        <div className="flex gap-2">
+          <input
+            type={type}
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={handleSave}
+            autoFocus
+            disabled={saving}
+            className={`flex-1 px-3 py-2 border border-violet-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 ${inputClassName} ${saving ? 'bg-slate-100' : 'bg-white'}`}
+          />
+          {saving && (
+            <div className="flex items-center px-2">
+              <Icon name="Loader" size={16} className="animate-spin text-violet-500" />
+            </div>
+          )}
+        </div>
+        {error && <p className="text-xs text-red-500">{error}</p>}
+      </div>
+    )
+  }
+  
+  return (
+    <div 
+      onClick={() => setIsEditing(true)}
+      className="cursor-pointer group hover:bg-violet-50 rounded-lg p-2 -m-2 transition-colors"
+    >
+      <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+        {icon && <Icon name={icon} size={12} />}
+        {label}
+        <Icon name="Pencil" size={10} className="opacity-0 group-hover:opacity-100 text-violet-400 ml-1" />
+      </label>
+      <p className={`text-slate-800 ${inputClassName || 'text-sm'}`}>
+        {value || <span className="text-slate-400 italic">Sin datos</span>}
+      </p>
+    </div>
+  )
+}
+
+// Componente para select editable inline
+const EditableSelectField = ({ label, value, options, onSave, icon }) => {
+  const [isEditing, setIsEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+  
+  const currentOption = options.find(o => o.value === value)
+  
+  const handleChange = async (e) => {
+    const newValue = e.target.value
+    if (newValue === value) {
+      setIsEditing(false)
+      return
+    }
+    
+    setSaving(true)
+    setError(null)
+    
+    try {
+      const result = await onSave(newValue)
+      if (result.success) {
+        setIsEditing(false)
+      } else {
+        setError(result.error || 'Error al guardar')
+      }
+    } catch (err) {
+      setError('Error de conexión')
+    } finally {
+      setSaving(false)
+    }
+  }
+  
+  if (isEditing) {
+    return (
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+          {icon && <Icon name={icon} size={12} />}
+          {label}
+        </label>
+        <div className="flex gap-2">
+          <select
+            value={value || ''}
+            onChange={handleChange}
+            onBlur={() => !saving && setIsEditing(false)}
+            autoFocus
+            disabled={saving}
+            className={`flex-1 px-3 py-2 border border-violet-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 ${saving ? 'bg-slate-100' : 'bg-white'}`}
+          >
+            <option value="">Seleccionar...</option>
+            {options.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          {saving && (
+            <div className="flex items-center px-2">
+              <Icon name="Loader" size={16} className="animate-spin text-violet-500" />
+            </div>
+          )}
+        </div>
+        {error && <p className="text-xs text-red-500">{error}</p>}
+      </div>
+    )
+  }
+  
+  return (
+    <div 
+      onClick={() => setIsEditing(true)}
+      className="cursor-pointer group hover:bg-violet-50 rounded-lg p-2 -m-2 transition-colors"
+    >
+      <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+        {icon && <Icon name={icon} size={12} />}
+        {label}
+        <Icon name="Pencil" size={10} className="opacity-0 group-hover:opacity-100 text-violet-400 ml-1" />
+      </label>
+      <p className="text-sm text-slate-800">
+        {currentOption?.label || <span className="text-slate-400 italic">Sin seleccionar</span>}
+      </p>
+    </div>
+  )
+}
+
 // Componente separado para el textarea de notas (evita re-renders)
 const NotasTextarea = ({ consulta, userId, onSaved, disabled = false, lockedByName = null }) => {
   const [notas, setNotas] = useState(consulta?.notas || '')
@@ -127,7 +300,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
     crearLeadNuevo()
   }
   
-  const crearLeadNuevo = () => {
+  const crearLeadNuevo = async () => {
     // Verificar límite del plan
     if (puedeCrearLead && !puedeCrearLead()) {
       setShowLimiteAlert(true)
@@ -136,26 +309,31 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
     
     setSubmitting(true)
     
-    const carreraSeleccionada = carrerasDisponibles.find(c => String(c.id) === String(formData.carrera_id))
-    
-    const newConsulta = store.createConsulta({
-      ...formData,
-      carrera_id: formData.carrera_id || null,  // Mantener como string (UUID)
-      carrera_nombre: carreraSeleccionada?.nombre || null,  // Guardar nombre también
-      asignado_a: formData.asignado_a || null
-    }, userId, userRol)
-    
-    // Actualizar contador de uso
-    if (actualizarUso) actualizarUso('leads', 1)
-    
-    setSubmitting(false)
-    setSuccess(true)
-    
-    setTimeout(() => {
-      resetForm()
-      onClose()
-      if (onCreated) onCreated(newConsulta)
-    }, 1500)
+    try {
+      const carreraSeleccionada = carrerasDisponibles.find(c => String(c.id) === String(formData.carrera_id))
+      
+      const newConsulta = await store.createConsulta({
+        ...formData,
+        carrera_id: formData.carrera_id || null,
+        carrera_nombre: carreraSeleccionada?.nombre || null,
+        asignado_a: formData.asignado_a || null
+      }, userId, userRol)
+      
+      // Actualizar contador de uso
+      if (actualizarUso) actualizarUso('leads', 1)
+      
+      setSubmitting(false)
+      setSuccess(true)
+      
+      setTimeout(() => {
+        resetForm()
+        onClose()
+        if (onCreated) onCreated(newConsulta)
+      }, 1500)
+    } catch (error) {
+      console.error('Error creando lead:', error)
+      setSubmitting(false)
+    }
   }
   
   const agregarCarreraAExistente = () => {
@@ -666,11 +844,6 @@ export default function Dashboard() {
     }
   }
 
-  // Cargar datos inicial
-  useEffect(() => {
-    loadData()
-  }, [user])
-
   // ========== ACTUALIZACIÓN MANUAL + REALTIME ==========
   // Estilo Trello: Realtime para cambios, botón para forzar actualización
   
@@ -689,46 +862,56 @@ export default function Dashboard() {
 
   // Supabase Realtime - Solo escucha cambios, no hace polling
   useEffect(() => {
-    if (!isSupabaseConfigured() || !user?.institucion_id) return
+    // No conectar si no hay usuario autenticado
+    if (!isSupabaseConfigured() || !user?.institucion_id || !user?.id) {
+      return
+    }
 
     console.log('🔌 Conectando Supabase Realtime...')
     
-    const channel = supabase
-      .channel('db-changes')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'leads', filter: `institucion_id=eq.${user.institucion_id}` },
-        async (payload) => {
-          console.log('📡 Cambio en leads:', payload.eventType)
-          // Solo actualizar si NO hay ficha abierta (evita parpadeo del botón editar)
-          if (!selectedConsulta) {
-            await reloadFromSupabase()
-            loadData()
-            setLastUpdate(new Date())
+    let channel = null
+    
+    try {
+      channel = supabase
+        .channel(`db-changes-${user.institucion_id}`)
+        .on('postgres_changes', 
+          { event: '*', schema: 'public', table: 'leads', filter: `institucion_id=eq.${user.institucion_id}` },
+          async (payload) => {
+            console.log('📡 Cambio en leads:', payload.eventType)
+            if (user?.institucion_id) { // Verificar que aún hay usuario
+              await reloadFromSupabase()
+              loadData()
+              setLastUpdate(new Date())
+            }
           }
-        }
-      )
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'usuarios', filter: `institucion_id=eq.${user.institucion_id}` },
-        async (payload) => {
-          console.log('📡 Cambio en usuarios:', payload.eventType)
-          if (!selectedConsulta) {
-            await reloadFromSupabase()
-            loadData()
+        )
+        .on('postgres_changes',
+          { event: '*', schema: 'public', table: 'usuarios', filter: `institucion_id=eq.${user.institucion_id}` },
+          async (payload) => {
+            console.log('📡 Cambio en usuarios:', payload.eventType)
+            if (user?.institucion_id) {
+              await reloadFromSupabase()
+              loadData()
+            }
           }
-        }
-      )
-      .subscribe((status) => {
-        console.log('📡 Realtime status:', status)
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ Realtime conectado - recibirás cambios automáticamente')
-        }
-      })
+        )
+        .subscribe((status) => {
+          console.log('📡 Realtime status:', status)
+          if (status === 'SUBSCRIBED') {
+            console.log('✅ Realtime conectado')
+          }
+        })
+    } catch (e) {
+      console.warn('Error conectando Realtime:', e)
+    }
 
     return () => {
-      console.log('🔌 Desconectando Realtime...')
-      supabase.removeChannel(channel)
+      if (channel) {
+        console.log('🔌 Desconectando Realtime...')
+        supabase.removeChannel(channel)
+      }
     }
-  }, [user?.institucion_id, selectedConsulta])
+  }, [user?.institucion_id, user?.id]) // Re-suscribir si cambia usuario o institución
   // ========================================
 
   // Cargar importaciones pendientes (solo Enterprise)
@@ -778,18 +961,61 @@ export default function Dashboard() {
   }, [planInfo?.plan, user?.institucion_id])
 
   function loadData() {
-    const data = store.getConsultas(user?.id, user?.rol_id)
+    console.log('📊 loadData() - Rol:', user?.rol_id, 'isRector:', isRector)
+    
+    // Para Rector: cargar TODOS los leads de la institución (para reportes)
+    // Para otros roles: usar filtro normal
+    let data
+    if (isRector) {
+      data = store.getConsultasParaReportes()
+      console.log('📊 Rector - Leads cargados:', data.length)
+      console.log('📊 Rector - Usuarios:', store.getTodosLosUsuarios()?.length || 0)
+      console.log('📊 Rector - Encargados:', store.getEncargadosActivos()?.length || 0)
+    } else {
+      data = store.getConsultas(user?.id, user?.rol_id)
+    }
+    
     setConsultas(data)
     
     if (isEncargado) {
       setMetricas(store.getMetricasEncargado(user.id))
       setLeadsHoy(store.getLeadsContactarHoy(user.id, user.rol_id))
-    } else if (isKeyMaster) {
+    } else if (isKeyMaster || isRector) {
+      // Rector también ve los leads a contactar hoy (para tener contexto)
       setLeadsHoy(store.getLeadsContactarHoy())
     }
     setMetricasGlobales(store.getMetricasGlobales())
     setFormularios(store.getFormularios())
   }
+
+  // Cargar datos inicial - con retry para asegurar que el store esté listo
+  useEffect(() => {
+    loadData()
+    
+    // Retry después de 500ms por si el store aún no tenía datos
+    const timer = setTimeout(() => {
+      if (isRector || isKeyMaster) {
+        const storeLeads = store.getConsultasParaReportes()
+        if (storeLeads.length > 0) {
+          console.log('📊 Retry - Recargando con', storeLeads.length, 'leads')
+          loadData()
+        }
+      }
+    }, 500)
+    
+    // Escuchar evento de actualización del store (cuando AuthContext carga datos de Supabase)
+    const handleStoreUpdate = () => {
+      console.log('📊 Dashboard: Store actualizado, recargando datos...')
+      store.reloadStore()
+      loadData()
+    }
+    window.addEventListener('admitio-store-updated', handleStoreUpdate)
+    
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('admitio-store-updated', handleStoreUpdate)
+    }
+  }, [user])
 
   // Helper para abrir modal de nuevo lead con validación de límite
   const handleNuevoLead = () => {
@@ -825,12 +1051,27 @@ export default function Dashboard() {
     return matchCarrera && matchEstado && matchTipo && matchSearch
   })
 
-  function handleUpdateEstado(id, nuevoEstado) {
-    store.updateConsulta(id, { estado: nuevoEstado }, user.id)
+  async function handleUpdateEstado(id, nuevoEstado) {
+    // Usar versión async que espera confirmación de Supabase
+    const result = await store.updateConsultaAsync(id, { estado: nuevoEstado }, user.id)
+    
+    if (!result.success) {
+      setNotification({ 
+        type: 'error', 
+        message: `Error al cambiar estado: ${result.error || 'Error de conexión'}` 
+      })
+      setTimeout(() => setNotification(null), 4000)
+      return
+    }
+    
     loadData()
     if (selectedConsulta?.id === id) {
       setSelectedConsulta(store.getConsultaById(id))
     }
+    
+    // Feedback de éxito
+    setNotification({ type: 'success', message: 'Estado actualizado' })
+    setTimeout(() => setNotification(null), 2000)
   }
 
   function handleEnviarEmail(id) {
@@ -846,9 +1087,15 @@ export default function Dashboard() {
     }
   }
 
-  function handleLogout() {
-    signOut()
-    navigate('/login')
+  async function handleLogout() {
+    try {
+      // Primero cerrar sesión (limpia estado)
+      await signOut()
+    } catch (e) {
+      console.warn('Error en signOut:', e)
+    }
+    // Luego navegar
+    navigate('/login', { replace: true })
   }
   
   function navigateToEstado(estado) {
@@ -1702,8 +1949,15 @@ export default function Dashboard() {
   }, [])
   
   // Handler para cambiar estado
-  const handleEstadoChange = useCallback((id, nuevoEstado) => {
-    store.updateConsulta(id, { estado: nuevoEstado }, user.id)
+  const handleEstadoChange = useCallback(async (id, nuevoEstado) => {
+    const result = await store.updateConsultaAsync(id, { estado: nuevoEstado }, user.id)
+    
+    if (!result.success) {
+      setNotification({ type: 'error', message: `Error: ${result.error || 'No se pudo guardar'}` })
+      setTimeout(() => setNotification(null), 4000)
+      return
+    }
+    
     if (selectedConsulta?.id === id) {
       setSelectedConsulta(store.getConsultaById(id))
     }
@@ -1713,9 +1967,16 @@ export default function Dashboard() {
   }, [selectedConsulta?.id, user?.id])
   
   // Handler para reasignar
-  const handleReasignar = useCallback((id, nuevoEncargado) => {
+  const handleReasignar = useCallback(async (id, nuevoEncargado) => {
     const encargado = store.getUsuarios().find(u => u.id === nuevoEncargado)
-    store.updateConsulta(id, { asignado_a: nuevoEncargado }, user.id)
+    const result = await store.updateConsultaAsync(id, { asignado_a: nuevoEncargado }, user.id)
+    
+    if (!result.success) {
+      setNotification({ type: 'error', message: `Error: ${result.error || 'No se pudo reasignar'}` })
+      setTimeout(() => setNotification(null), 4000)
+      return
+    }
+    
     if (selectedConsulta?.id === id) {
       setSelectedConsulta(store.getConsultaById(id))
     }
@@ -1725,12 +1986,21 @@ export default function Dashboard() {
   }, [selectedConsulta?.id, user?.id])
   
   // Handler para cambiar tipo alumno
-  const handleTipoAlumnoChange = useCallback((id, tipo) => {
-    store.updateConsulta(id, { tipo_alumno: tipo }, user.id)
+  const handleTipoAlumnoChange = useCallback(async (id, tipo) => {
+    const result = await store.updateConsultaAsync(id, { tipo_alumno: tipo }, user.id)
+    
+    if (!result.success) {
+      setNotification({ type: 'error', message: `Error: ${result.error || 'No se pudo guardar'}` })
+      setTimeout(() => setNotification(null), 4000)
+      return
+    }
+    
     if (selectedConsulta?.id === id) {
       setSelectedConsulta(store.getConsultaById(id))
     }
     loadData()
+    setNotification({ type: 'success', message: `Tipo cambiado a "${tipo === 'nuevo' ? 'Alumno Nuevo' : 'Alumno Antiguo'}"` })
+    setTimeout(() => setNotification(null), 2000)
   }, [selectedConsulta?.id, user?.id])
 
   // ============================================
@@ -2049,6 +2319,7 @@ export default function Dashboard() {
           {/* Info principal */}
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+              {/* Header con nombre */}
               <div className="flex items-start justify-between mb-6">
                 <div>
                   <div className="flex items-center gap-3">
@@ -2064,6 +2335,7 @@ export default function Dashboard() {
                 </span>
               </div>
 
+              {/* Info cards - Vista original */}
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <InfoCard icon="Mail" label="Email" value={c.email} iconColor="text-blue-500" copiable leadId={c.id} />
                 <InfoCard icon="Phone" label="Teléfono" value={c.telefono} iconColor="text-green-500" copiable leadId={c.id} />
@@ -2165,39 +2437,64 @@ export default function Dashboard() {
 
           {/* Acciones */}
           <div className="space-y-6">
+            {/* Cambiar Estado - Diseño original, sin requerir lock */}
             {canEdit && !c.matriculado && !c.descartado && (
-              <div className={`bg-white rounded-xl p-6 shadow-sm border ${isMyLock ? 'border-slate-100' : 'border-slate-200 opacity-60'}`}>
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
                 <h3 className="font-semibold text-slate-800 mb-4">Cambiar Estado</h3>
                 <div className="space-y-2">
-                  {Object.values(ESTADOS).filter(e => e.id !== c.estado).map(estado => (
-                    <button key={estado.id}
-                            onClick={() => isMyLock && handleUpdateEstado(c.id, estado.id)}
-                            disabled={!isMyLock}
-                            className={`w-full px-4 py-3 rounded-lg text-left transition-colors ${estado.bg} ${estado.text} ${isMyLock ? 'hover:opacity-80 cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
-                      {estado.label}
-                    </button>
-                  ))}
+                  {Object.values(ESTADOS).filter(e => e.id !== c.estado).map(estado => {
+                    // Colores más saturados para mejor visibilidad
+                    const colorMap = {
+                      nueva: 'bg-blue-200 text-blue-800 hover:bg-blue-300',
+                      contactado: 'bg-amber-200 text-amber-800 hover:bg-amber-300',
+                      seguimiento: 'bg-purple-200 text-purple-800 hover:bg-purple-300',
+                      examen_admision: 'bg-cyan-200 text-cyan-800 hover:bg-cyan-300',
+                      matriculado: 'bg-emerald-200 text-emerald-800 hover:bg-emerald-300',
+                      descartado: 'bg-red-200 text-red-800 hover:bg-red-300'
+                    }
+                    const colorClass = colorMap[estado.id] || `${estado.bg} ${estado.text}`
+                    
+                    return (
+                      <button key={estado.id}
+                              onClick={() => handleUpdateEstado(c.id, estado.id)}
+                              disabled={isLocked && !isMyLock}
+                              className={`w-full px-4 py-3 rounded-lg text-left transition-colors font-medium ${colorClass} ${isLocked && !isMyLock ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                        {estado.label}
+                      </button>
+                    )
+                  })}
                 </div>
-                {!isMyLock && isLocked && (
+                {isLocked && !isMyLock && (
                   <p className="text-xs text-amber-600 mt-3 flex items-center gap-1">
-                    <Icon name="Lock" size={12} /> Bloqueado por {lockedByName}
+                    <Icon name="Lock" size={12} /> {lockedByName} está editando
                   </p>
                 )}
               </div>
             )}
+            
+            {/* Debug: mostrar si canEdit es false */}
+            {!canEdit && !c.matriculado && !c.descartado && (
+              <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
+                <p className="text-amber-700 text-sm">
+                  <Icon name="AlertTriangle" size={14} className="inline mr-1" />
+                  No tienes permisos para editar leads
+                </p>
+              </div>
+            )}
 
+            {/* Tipo de Alumno */}
             {canEdit && !c.matriculado && !c.descartado && (
-              <div className={`bg-white rounded-xl p-6 shadow-sm border ${isMyLock ? 'border-slate-100' : 'border-slate-200 opacity-60'}`}>
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
                 <h3 className="font-semibold text-slate-800 mb-4">Tipo de Alumno</h3>
                 <div className="flex gap-2">
-                  <button onClick={() => isMyLock && handleTipoAlumnoChange(c.id, 'nuevo')}
-                          disabled={!isMyLock}
-                          className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'nuevo' ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300' : 'bg-slate-100 text-slate-600'} ${isMyLock ? 'hover:bg-slate-200 cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
+                  <button onClick={() => handleTipoAlumnoChange(c.id, 'nuevo')}
+                          disabled={isLocked && !isMyLock}
+                          className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'nuevo' ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300' : 'bg-slate-100 text-slate-600'} ${isLocked && !isMyLock ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-200 cursor-pointer'}`}>
                     Nuevo
                   </button>
-                  <button onClick={() => isMyLock && handleTipoAlumnoChange(c.id, 'antiguo')}
-                          disabled={!isMyLock}
-                          className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'antiguo' ? 'bg-violet-100 text-violet-700 ring-2 ring-violet-300' : 'bg-slate-100 text-slate-600'} ${isMyLock ? 'hover:bg-slate-200 cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
+                  <button onClick={() => handleTipoAlumnoChange(c.id, 'antiguo')}
+                          disabled={isLocked && !isMyLock}
+                          className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'antiguo' ? 'bg-violet-100 text-violet-700 ring-2 ring-violet-300' : 'bg-slate-100 text-slate-600'} ${isLocked && !isMyLock ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-200 cursor-pointer'}`}>
                     Antiguo
                   </button>
                 </div>
@@ -2370,9 +2667,12 @@ export default function Dashboard() {
       // Para otros: usar las consultas ya filtradas del dashboard
       let leads = isRector ? store.getConsultasParaReportes() : [...consultas]
       
+      console.log('📊 leadsReporte useMemo - isRector:', isRector, 'leads iniciales:', leads.length, 'consultas estado:', consultas.length)
+      
       // Si no hay consultas en el dashboard pero hay en el store, cargar del store
       if (leads.length === 0 && !isRector) {
         leads = store.getConsultasParaReportes()
+        console.log('📊 leadsReporte - Fallback a store:', leads.length)
       }
       
       // Filtrar por rol si es encargado (solo aplica si no es rector)
@@ -2642,25 +2942,37 @@ export default function Dashboard() {
     // Estado para modal de generación PDF
     const [generandoPDF, setGenerandoPDF] = useState(false)
     
-    // Función para generar PDF (sin dependencias externas - usa jsPDF)
+    // Función para cargar jsPDF desde CDN
+    const cargarJsPDF = () => {
+      return new Promise((resolve, reject) => {
+        // Si ya está cargado, usar el existente
+        if (window.jspdf) {
+          resolve(window.jspdf.jsPDF)
+          return
+        }
+        
+        // Cargar desde CDN
+        const script = document.createElement('script')
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
+        script.onload = () => {
+          if (window.jspdf) {
+            resolve(window.jspdf.jsPDF)
+          } else {
+            reject(new Error('jsPDF no se cargó correctamente'))
+          }
+        }
+        script.onerror = () => reject(new Error('Error cargando jsPDF desde CDN'))
+        document.head.appendChild(script)
+      })
+    }
+    
+    // Función para generar PDF (carga jsPDF desde CDN)
     const descargarPDF = async () => {
       setGenerandoPDF(true)
       
       try {
-        // Importar jsPDF dinámicamente
-        let jsPDF
-        try {
-          const module = await import('jspdf')
-          jsPDF = module.jsPDF
-        } catch (importError) {
-          // Si no está instalado, mostrar mensaje
-          setNotification({ 
-            type: 'error', 
-            message: 'Para exportar PDF, ejecuta: npm install jspdf' 
-          })
-          setGenerandoPDF(false)
-          return
-        }
+        // Cargar jsPDF desde CDN
+        const jsPDF = await cargarJsPDF()
         
         const pdf = new jsPDF('p', 'mm', 'a4')
         const pageWidth = pdf.internal.pageSize.getWidth()
@@ -3000,7 +3312,7 @@ export default function Dashboard() {
         console.error('Error generando PDF:', error)
         setNotification({ 
           type: 'error', 
-          message: 'Error al generar PDF. Instala jspdf: npm install jspdf' 
+          message: 'Error al generar PDF. Verifica tu conexión a internet.' 
         })
       }
       
@@ -3299,8 +3611,60 @@ export default function Dashboard() {
     
     const hayFiltrosActivos = filtroEstados.length > 0 || filtroCarreras.length > 0 || filtroMedios.length > 0 || filtroEncargados.length > 0 || filtroTipoAlumno !== 'todos'
     
+    // Estado de carga
+    const [cargandoDatos, setCargandoDatos] = useState(false)
+    
+    // Función para recargar datos (especialmente para Rector)
+    const recargarDatosReporte = async () => {
+      setCargandoDatos(true)
+      try {
+        await reloadFromSupabase()
+        // Forzar recarga del store
+        store.reloadStore()
+        // Actualizar estado local
+        loadData()
+      } catch (e) {
+        console.error('Error recargando:', e)
+      }
+      setCargandoDatos(false)
+    }
+    
     return (
       <div className="space-y-6">
+        {/* Banner de bienvenida para Rector */}
+        {isRector && leadsReporte.length === 0 && (
+          <div className="bg-gradient-to-r from-violet-500 to-purple-600 rounded-xl p-6 text-white">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-white/20 rounded-xl">
+                <Icon name="BarChart2" size={28} />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-xl font-bold mb-2">Bienvenido al Panel de Reportes</h2>
+                <p className="text-violet-100 mb-4">
+                  Aquí podrás ver el rendimiento de admisiones, métricas de conversión y el progreso de cada encargado.
+                </p>
+                <button
+                  onClick={recargarDatosReporte}
+                  disabled={cargandoDatos}
+                  className="px-4 py-2 bg-white text-violet-600 rounded-lg font-medium hover:bg-violet-50 transition-colors flex items-center gap-2"
+                >
+                  {cargandoDatos ? (
+                    <>
+                      <Icon name="Loader2" size={18} className="animate-spin" />
+                      Cargando datos...
+                    </>
+                  ) : (
+                    <>
+                      <Icon name="RefreshCw" size={18} />
+                      Cargar datos de la institución
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
         {/* Header con selectores de período */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -3651,63 +4015,148 @@ export default function Dashboard() {
             {/* Tab: Encargados */}
             {activeTab === 'encargados' && (isKeyMaster || user?.rol_id === 'superadmin' || isRector) && (
               <div className="space-y-4">
-                <h3 className="font-semibold text-slate-800">Rendimiento por Encargado</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-slate-800">Rendimiento por Encargado</h3>
+                  <span className="text-sm text-slate-500">
+                    {Object.keys(estadisticas?.porEncargado || {}).filter(k => k !== 'sin_asignar').length} encargados activos
+                  </span>
+                </div>
+                
+                {/* Resumen rápido */}
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  <div className="bg-violet-50 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-violet-600">
+                      {Object.values(estadisticas?.porEncargado || {}).reduce((sum, e) => sum + e.total, 0)}
+                    </p>
+                    <p className="text-xs text-violet-600">Total asignados</p>
+                  </div>
+                  <div className="bg-emerald-50 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-emerald-600">
+                      {Object.values(estadisticas?.porEncargado || {}).reduce((sum, e) => sum + e.matriculados, 0)}
+                    </p>
+                    <p className="text-xs text-emerald-600">Matrículas totales</p>
+                  </div>
+                  <div className="bg-amber-50 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-amber-600">
+                      {(() => {
+                        const tasas = Object.values(estadisticas?.porEncargado || {}).filter(e => e.total > 0).map(e => e.tasa || 0)
+                        return tasas.length > 0 ? Math.round(tasas.reduce((a, b) => a + b, 0) / tasas.length) : 0
+                      })()}%
+                    </p>
+                    <p className="text-xs text-amber-600">Conversión promedio</p>
+                  </div>
+                </div>
+                
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr className="text-left text-sm text-slate-500 border-b border-slate-100">
                         <th className="pb-3 font-medium">Encargado</th>
-                        <th className="pb-3 text-center font-medium">Total</th>
-                        <th className="pb-3 text-center font-medium">Matriculados</th>
+                        <th className="pb-3 text-center font-medium">Leads</th>
+                        <th className="pb-3 text-center font-medium">Activos</th>
+                        <th className="pb-3 text-center font-medium">Matrículas</th>
                         <th className="pb-3 text-center font-medium">Conversión</th>
-                        <th className="pb-3 text-right font-medium">Tendencia</th>
+                        <th className="pb-3 text-right font-medium">Performance</th>
                       </tr>
                     </thead>
                     <tbody>
                       {Object.entries(estadisticas?.porEncargado || {})
-                        .filter(([_, v]) => v.total > 0)
+                        .filter(([id, _]) => id !== 'sin_asignar')
                         .sort((a, b) => (b[1].tasa || 0) - (a[1].tasa || 0))
-                        .map(([id, data]) => (
-                          <tr key={id} className="border-b border-slate-50 hover:bg-slate-50">
-                            <td className="py-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-violet-100 rounded-full flex items-center justify-center">
-                                  <span className="text-violet-600 font-medium text-sm">
-                                    {data.nombre?.charAt(0) || '?'}
-                                  </span>
+                        .map(([id, data]) => {
+                          // Calcular activos (no matriculados ni descartados)
+                          const activos = leadsReporte.filter(l => 
+                            l.asignado_a === id && !l.matriculado && !l.descartado
+                          ).length
+                          
+                          return (
+                            <tr key={id} className="border-b border-slate-50 hover:bg-slate-50">
+                              <td className="py-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-purple-600 rounded-full flex items-center justify-center">
+                                    <span className="text-white font-medium">
+                                      {data.nombre?.charAt(0)?.toUpperCase() || '?'}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="font-medium text-slate-800 block">{data.nombre || 'Sin nombre'}</span>
+                                    <span className="text-xs text-slate-400">Encargado</span>
+                                  </div>
                                 </div>
-                                <span className="font-medium text-slate-800">{data.nombre}</span>
+                              </td>
+                              <td className="py-4 text-center text-slate-600 font-medium">{data.total}</td>
+                              <td className="py-4 text-center">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                  activos > 5 ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                                }`}>
+                                  {activos}
+                                </span>
+                              </td>
+                              <td className="py-4 text-center text-emerald-600 font-bold">{data.matriculados}</td>
+                              <td className="py-4 text-center">
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-bold ${
+                                  (data.tasa || 0) >= 25 ? 'bg-emerald-100 text-emerald-700' :
+                                  (data.tasa || 0) >= 15 ? 'bg-amber-100 text-amber-700' :
+                                  (data.tasa || 0) > 0 ? 'bg-orange-100 text-orange-700' :
+                                  'bg-slate-100 text-slate-500'
+                                }`}>
+                                  {data.tasa || 0}%
+                                </span>
+                              </td>
+                              <td className="py-4 text-right">
+                                <div className="flex items-center gap-2 justify-end">
+                                  <div className="w-24 h-3 bg-slate-100 rounded-full overflow-hidden">
+                                    <div 
+                                      className={`h-full rounded-full transition-all ${
+                                        (data.tasa || 0) >= 25 ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' :
+                                        (data.tasa || 0) >= 15 ? 'bg-gradient-to-r from-amber-400 to-amber-500' :
+                                        'bg-gradient-to-r from-slate-300 to-slate-400'
+                                      }`}
+                                      style={{ width: `${Math.min(100, (data.tasa || 0) * 2)}%` }}
+                                    />
+                                  </div>
+                                  {(data.tasa || 0) >= 25 && <Icon name="TrendingUp" size={16} className="text-emerald-500" />}
+                                  {(data.tasa || 0) > 0 && (data.tasa || 0) < 15 && <Icon name="TrendingDown" size={16} className="text-orange-500" />}
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      
+                      {/* Fila de Sin Asignar si hay leads sin asignar */}
+                      {estadisticas?.porEncargado?.['sin_asignar']?.total > 0 && (
+                        <tr className="border-b border-slate-50 bg-amber-50/50">
+                          <td className="py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-amber-200 rounded-full flex items-center justify-center">
+                                <Icon name="AlertCircle" size={20} className="text-amber-600" />
                               </div>
-                            </td>
-                            <td className="py-4 text-center text-slate-600">{data.total}</td>
-                            <td className="py-4 text-center text-emerald-600 font-medium">{data.matriculados}</td>
-                            <td className="py-4 text-center">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium ${
-                                (data.tasa || 0) >= 25 ? 'bg-emerald-100 text-emerald-700' :
-                                (data.tasa || 0) >= 15 ? 'bg-amber-100 text-amber-700' :
-                                'bg-slate-100 text-slate-600'
-                              }`}>
-                                {data.tasa || 0}%
-                              </span>
-                            </td>
-                            <td className="py-4 text-right">
-                              <div className="w-16 h-2 bg-slate-100 rounded-full overflow-hidden ml-auto">
-                                <div 
-                                  className={`h-full rounded-full ${
-                                    (data.tasa || 0) >= 25 ? 'bg-emerald-500' :
-                                    (data.tasa || 0) >= 15 ? 'bg-amber-500' :
-                                    'bg-slate-400'
-                                  }`}
-                                  style={{ width: `${Math.min(100, (data.tasa || 0) * 2)}%` }}
-                                />
+                              <div>
+                                <span className="font-medium text-amber-800 block">Sin Asignar</span>
+                                <span className="text-xs text-amber-600">Requiere atención</span>
                               </div>
-                            </td>
-                          </tr>
-                        ))}
+                            </div>
+                          </td>
+                          <td className="py-4 text-center text-amber-700 font-medium">
+                            {estadisticas.porEncargado['sin_asignar'].total}
+                          </td>
+                          <td className="py-4 text-center text-amber-600">-</td>
+                          <td className="py-4 text-center text-amber-600">-</td>
+                          <td className="py-4 text-center text-amber-600">-</td>
+                          <td className="py-4 text-right">
+                            <span className="text-xs text-amber-600">Asignar leads</span>
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
-                  {Object.keys(estadisticas?.porEncargado || {}).length === 0 && (
-                    <p className="text-center text-slate-400 py-8">Sin datos de encargados</p>
+                  
+                  {Object.keys(estadisticas?.porEncargado || {}).filter(k => k !== 'sin_asignar').length === 0 && (
+                    <div className="text-center py-12">
+                      <Icon name="Users" size={48} className="text-slate-300 mx-auto mb-4" />
+                      <p className="text-slate-500 font-medium">No hay encargados con leads asignados</p>
+                      <p className="text-slate-400 text-sm mt-1">Los leads deben ser asignados a encargados para ver métricas</p>
+                    </div>
                   )}
                 </div>
               </div>
@@ -3764,10 +4213,18 @@ export default function Dashboard() {
     const [editingForm, setEditingForm] = useState(null)
     const [localShowModal, setLocalShowModal] = useState(false)
     
-    const handleDeleteForm = (formId) => {
+    const handleDeleteForm = async (formId) => {
       if (confirm('¿Eliminar formulario?')) {
-        store.deleteFormulario(formId)
-        loadData()
+        const result = await store.deleteFormulario(formId)
+        if (result?.error) {
+          setNotification({ type: 'error', message: result.error })
+          setTimeout(() => setNotification(null), 3000)
+        } else {
+          setNotification({ type: 'success', message: 'Formulario eliminado' })
+          setTimeout(() => setNotification(null), 3000)
+          await reloadFromSupabase()
+          loadData()
+        }
       }
     }
     
@@ -3924,44 +4381,76 @@ export default function Dashboard() {
       setLocalShowUserModal(true)
     }
     
-    const handleSaveUser = () => {
+    const handleSaveUser = async () => {
       if (!userFormData.nombre || !userFormData.email) {
         alert('Nombre y email son requeridos')
         return
       }
       
-      if (localEditingUser) {
-        // Actualizar
-        const updates = {
-          nombre: userFormData.nombre,
-          email: userFormData.email,
-          rol_id: userFormData.rol_id,
-          activo: userFormData.activo
+      try {
+        if (localEditingUser) {
+          // Actualizar usuario existente
+          const updates = {
+            nombre: userFormData.nombre,
+            email: userFormData.email,
+            rol_id: userFormData.rol_id,
+            activo: userFormData.activo
+          }
+          await store.updateUsuario(localEditingUser.id, updates)
+          setNotification({ type: 'success', message: 'Usuario actualizado' })
+        } else {
+          // Crear nuevo usuario
+          const nuevoUsuario = await store.createUsuario({
+            nombre: userFormData.nombre,
+            email: userFormData.email,
+            rol_id: userFormData.rol_id,
+            activo: userFormData.activo
+          })
+          
+          console.log('✅ Usuario creado:', nuevoUsuario)
+          setNotification({ 
+            type: 'success', 
+            message: 'Usuario creado. Debe usar "Olvidé mi contraseña" para activar su cuenta.' 
+          })
+          
+          // Actualizar contador de uso del plan si existe
+          if (actualizarUso) actualizarUso('usuarios', 1)
         }
-        if (userFormData.password) {
-          updates.password = userFormData.password
+        
+        setLocalShowUserModal(false)
+        
+        // Recargar usuarios desde Supabase para tener datos frescos
+        if (reloadFromSupabase) {
+          await reloadFromSupabase()
         }
-        store.updateUsuario(localEditingUser.id, updates)
-        setNotification({ type: 'success', message: 'Usuario actualizado' })
-      } else {
-        // Crear
-        if (!userFormData.password) {
-          alert('La contraseña es requerida para nuevos usuarios')
-          return
+        refreshUsuarios()
+        
+      } catch (error) {
+        console.error('Error guardando usuario:', error)
+        
+        // Mostrar mensaje de error específico
+        let errorMsg = 'Error al guardar usuario'
+        if (error.message?.includes('duplicate') || error.code === '23505') {
+          errorMsg = 'Ya existe un usuario con ese email'
+        } else if (error.message) {
+          errorMsg = error.message
         }
-        store.createUsuario(userFormData)
-        setNotification({ type: 'success', message: 'Usuario creado' })
+        
+        setNotification({ type: 'error', message: errorMsg })
       }
       
-      setLocalShowUserModal(false)
-      refreshUsuarios()
-      setTimeout(() => setNotification(null), 2000)
+      setTimeout(() => setNotification(null), 4000)
     }
     
-    const handleToggleActivo = (userId) => {
-      store.toggleUsuarioActivo(userId)
-      refreshUsuarios()
-      setNotification({ type: 'info', message: 'Estado actualizado' })
+    const handleToggleActivo = async (userId) => {
+      try {
+        await store.toggleUsuarioActivo(userId)
+        refreshUsuarios()
+        setNotification({ type: 'info', message: 'Estado actualizado' })
+      } catch (error) {
+        console.error('Error:', error)
+        setNotification({ type: 'error', message: 'Error al actualizar estado' })
+      }
       setTimeout(() => setNotification(null), 2000)
     }
     
@@ -3971,8 +4460,8 @@ export default function Dashboard() {
       setMigrateToUser('')
     }
     
-    const handleDeleteUser = () => {
-      const { user, leadsCount } = localShowDeleteModal
+    const handleDeleteUser = async () => {
+      const { user: targetUser, leadsCount } = localShowDeleteModal
       
       // Si tiene leads y no seleccionó migración
       if (leadsCount > 0 && !migrateToUser) {
@@ -3992,9 +4481,11 @@ export default function Dashboard() {
       }
       
       // Eliminar usuario
-      const result = store.deleteUsuario(user.id)
+      const result = await store.deleteUsuario(targetUser.id)
       if (result.success) {
-        setNotification({ type: 'success', message: 'Usuario eliminado' })
+        setNotification({ type: 'success', message: 'Usuario eliminado correctamente' })
+        // Recargar desde Supabase
+        await reloadFromSupabase()
       } else {
         setNotification({ type: 'error', message: result.error })
       }
@@ -4174,19 +4665,11 @@ export default function Dashboard() {
                     className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                     placeholder="juan@projazz.cl"
                   />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Contraseña {localEditingUser ? '(dejar vacío para mantener)' : '*'}
-                  </label>
-                  <input
-                    type="password"
-                    value={userFormData.password}
-                    onChange={e => setUserFormData({...userFormData, password: e.target.value})}
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                    placeholder="••••••••"
-                  />
+                  {!localEditingUser && (
+                    <p className="text-xs text-slate-400 mt-1">
+                      El usuario recibirá instrucciones para activar su cuenta
+                    </p>
+                  )}
                 </div>
                 
                 <div>
@@ -5282,24 +5765,41 @@ function getSupabaseAnonKey() {
       { id: 'bg-teal-500', nombre: 'Teal', hex: '#14b8a6' },
     ]
     
-    const handleCreate = (data) => {
-      store.createCarrera(data)
-      setShowModal(false)
-      loadData()
+    const handleCreate = async (data) => {
+      const result = await store.createCarrera(data)
+      if (result?.error) {
+        setDeleteError(result.error)
+        setTimeout(() => setDeleteError(null), 5000)
+      } else {
+        setShowModal(false)
+        // Recargar desde Supabase
+        await reloadFromSupabase()
+        loadData()
+      }
     }
     
-    const handleUpdate = (id, data) => {
-      store.updateCarrera(id, data)
-      setEditingPrograma(null)
-      loadData()
+    const handleUpdate = async (id, data) => {
+      const result = await store.updateCarrera(id, data)
+      if (result?.error) {
+        setDeleteError(result.error)
+        setTimeout(() => setDeleteError(null), 5000)
+      } else {
+        setEditingPrograma(null)
+        await reloadFromSupabase()
+        loadData()
+      }
     }
     
-    const handleDelete = (id) => {
-      const result = store.deleteCarrera(id)
+    const handleDelete = async (id) => {
+      const result = await store.deleteCarrera(id)
       if (result.error === 'TIENE_LEADS') {
         setDeleteError(`No se puede eliminar: tiene ${result.count} leads asociados. Reasigna los leads primero.`)
         setTimeout(() => setDeleteError(null), 5000)
+      } else if (result.error) {
+        setDeleteError(result.error)
+        setTimeout(() => setDeleteError(null), 5000)
       } else {
+        await reloadFromSupabase()
         loadData()
       }
     }
@@ -5342,13 +5842,18 @@ function getSupabaseAnonKey() {
       reader.readAsText(file)
     }
     
-    const handleImport = () => {
+    const handleImport = async () => {
       if (!importData || importData.length === 0) return
       
-      store.importarCarreras(importData)
-      setShowImportModal(false)
-      setImportData(null)
-      loadData()
+      const result = await store.importarCarreras(importData)
+      if (result?.error) {
+        setImportError(result.error)
+      } else {
+        setShowImportModal(false)
+        setImportData(null)
+        await reloadFromSupabase()
+        loadData()
+      }
     }
     
     const handleExport = () => {
@@ -5465,7 +5970,7 @@ function getSupabaseAnonKey() {
                 Exportar
               </button>
               <button
-                onClick={handleNuevoLead}
+                onClick={() => setShowModal(true)}
                 className="px-4 py-2 bg-white hover:bg-white/90 text-violet-600 rounded-lg font-medium flex items-center gap-2"
               >
                 <Icon name="Plus" size={18} />
@@ -5515,7 +6020,7 @@ function getSupabaseAnonKey() {
               </p>
               {!searchTerm && (
                 <button
-                  onClick={handleNuevoLead}
+                  onClick={() => setShowModal(true)}
                   className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium"
                 >
                   Crear primer programa
@@ -5729,6 +6234,10 @@ const ImportarView = () => {
   const [historialImportaciones, setHistorialImportaciones] = useState([])
   const [estadisticasImport, setEstadisticasImport] = useState(null)
   const [selectedImportacion, setSelectedImportacion] = useState(null)
+  const [encargadoSeleccionado, setEncargadoSeleccionado] = useState('auto') // 'auto' = asignación automática
+  
+  // Obtener lista de encargados activos
+  const encargadosActivos = store.getEncargadosActivos() || []
   
   // Cargar historial al montar
   useEffect(() => {
@@ -5748,22 +6257,43 @@ const handleImportCSV = async () => {
     
     const reader = new FileReader()
     
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const csvData = e.target.result
-      const result = store.importarLeadsCSV(csvData, user?.id)
+      
+      // Pasar opciones con el encargado seleccionado
+      const opciones = {
+        asignarA: encargadoSeleccionado !== 'auto' ? encargadoSeleccionado : null
+      }
+      
+      const result = await store.importarLeadsCSV(csvData, user?.id, {}, opciones)
       
       setImportResult(result)
       setImporting(false)
       
       if (result.success && result.importados > 0) {
+        // Obtener nombre del encargado si se seleccionó uno específico
+        const encargadoNombre = encargadoSeleccionado !== 'auto' 
+          ? encargadosActivos.find(e => e.id === encargadoSeleccionado)?.nombre 
+          : null
+        
         // Notificación de éxito
         setNotification({ 
           type: 'success', 
-          message: `✅ ${result.importados} leads importados correctamente${result.duplicados > 0 ? ` (${result.duplicados} duplicados omitidos)` : ''}` 
+          message: `✅ ${result.importados} leads importados${encargadoNombre ? ` y asignados a ${encargadoNombre}` : ''}${result.duplicados > 0 ? ` (${result.duplicados} duplicados omitidos)` : ''}` 
         })
         setTimeout(() => setNotification(null), 5000)
         cargarHistorial()
+        
+        // IMPORTANTE: Recargar desde Supabase para ver los nuevos leads
+        try {
+          await reloadFromSupabase()
+        } catch (err) {
+          console.error('Error recargando:', err)
+        }
         loadData()
+        
+        // Cerrar modal de importación
+        if (typeof setShowImportModal === 'function') setShowImportModal(false)
       }
     }
     
@@ -5866,6 +6396,37 @@ const handleImportCSV = async () => {
             <Icon name="Download" size={14} />
             Descargar plantilla de ejemplo
           </button>
+        </div>
+        
+        {/* Selector de encargado para asignación */}
+        <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 mb-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-violet-100 rounded-lg">
+              <Icon name="UserPlus" size={20} className="text-violet-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm text-violet-800 font-medium mb-2">Asignar leads a:</p>
+              <select
+                value={encargadoSeleccionado}
+                onChange={(e) => setEncargadoSeleccionado(e.target.value)}
+                className="w-full px-4 py-2.5 border border-violet-300 rounded-lg text-slate-700 bg-white focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
+              >
+                <option value="auto">🔄 Asignación automática (round-robin)</option>
+                <option value="" disabled>──────────────────</option>
+                {encargadosActivos.map(enc => (
+                  <option key={enc.id} value={enc.id}>
+                    👤 {enc.nombre}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-violet-600 mt-2">
+                {encargadoSeleccionado === 'auto' 
+                  ? 'Los leads se distribuirán automáticamente entre los encargados activos'
+                  : `Todos los leads se asignarán a ${encargadosActivos.find(e => e.id === encargadoSeleccionado)?.nombre || 'el encargado seleccionado'}`
+                }
+              </p>
+            </div>
+          </div>
         </div>
         
         <div className="flex items-center gap-4">
@@ -6473,7 +7034,7 @@ const handleImportCSV = async () => {
             </button>
             
             <button
-              onClick={() => signOut()}
+              onClick={handleLogout}
               className="w-full mt-4 py-3 border border-slate-200 text-slate-600 rounded-xl font-medium hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
             >
               <Icon name="LogOut" size={20} />
