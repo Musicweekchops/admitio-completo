@@ -1,152 +1,100 @@
-import React, { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './context/AuthContext'
+import Landing from './pages/Landing'
+import Login from './pages/Login'
+import Signup from './pages/Signup'
+import Dashboard from './pages/Dashboard'
 
-// Pages
-import Landing from './pages/Landing';
-import Login from './pages/Login';
-import Signup from './pages/Signup';
-import Dashboard from './pages/Dashboard';
-import CambiarPassword from './pages/CambiarPassword';
-import AuthCallback from './pages/AuthCallback';
-import Backoffice from './pages/backoffice/Backoffice';
-
-// Componente para detectar tokens en el hash y redirigir
-const HashTokenHandler = ({ children }) => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [checking, setChecking] = useState(true);
-
-  useEffect(() => {
-    // Verificar si hay un token de Supabase en el hash
-    const hash = window.location.hash;
-    
-    if (hash && (hash.includes('access_token') || hash.includes('error'))) {
-      console.log('🔑 Token detectado en hash, redirigiendo a /auth/callback');
-      // Redirigir a auth/callback manteniendo el hash
-      navigate('/auth/callback' + hash, { replace: true });
-      return;
-    }
-    
-    setChecking(false);
-  }, [navigate]);
-
-  if (checking && window.location.hash.includes('access_token')) {
+// Componente para rutas protegidas
+function ProtectedRoute({ children }) {
+  const { isAuthenticated, loading } = useAuth()
+  
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="w-10 h-10 border-4 border-violet-600 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-violet-200 border-t-violet-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-500">Cargando...</p>
+        </div>
       </div>
-    );
+    )
   }
-
-  return children;
-};
-
-// Loading spinner
-const LoadingSpinner = () => (
-  <div className="min-h-screen flex items-center justify-center bg-gray-50">
-    <div className="w-10 h-10 border-4 border-violet-600 border-t-transparent rounded-full animate-spin" />
-  </div>
-);
-
-// Ruta protegida para usuarios autenticados
-const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
-
-  if (loading) {
-    return <LoadingSpinner />;
-  }
-
+  
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" replace />
   }
+  
+  return children
+}
 
-  return children;
-};
-
-// Ruta pública (redirige si ya está autenticado)
-const PublicRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
-
+// Componente para rutas públicas (redirigir si ya está logueado)
+function PublicRoute({ children }) {
+  const { isAuthenticated, loading } = useAuth()
+  
   if (loading) {
-    return <LoadingSpinner />;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-violet-200 border-t-violet-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-500">Cargando...</p>
+        </div>
+      </div>
+    )
   }
-
+  
   if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/app" replace />
   }
+  
+  return children
+}
 
-  return children;
-};
-
-// App Routes
-const AppRoutes = () => {
+function AppRoutes() {
   return (
-    <HashTokenHandler>
-      <Routes>
-        {/* Rutas públicas */}
-        <Route path="/" element={<Landing />} />
-        <Route
-          path="/login"
-          element={
-            <PublicRoute>
-              <Login />
-            </PublicRoute>
-          }
-        />
-        <Route
-          path="/signup"
-          element={
-            <PublicRoute>
-              <Signup />
-            </PublicRoute>
-          }
-        />
-        
-        {/* Auth Callback - Para Supabase Auth */}
-        <Route path="/auth/callback" element={<AuthCallback />} />
+    <Routes>
+      {/* Rutas públicas */}
+      <Route path="/" element={<Landing />} />
+      <Route 
+        path="/login" 
+        element={
+          <PublicRoute>
+            <Login />
+          </PublicRoute>
+        } 
+      />
+      <Route 
+        path="/signup" 
+        element={
+          <PublicRoute>
+            <Signup />
+          </PublicRoute>
+        } 
+      />
+      
+      {/* Ruta protegida - Dashboard */}
+      <Route 
+        path="/app" 
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        } 
+      />
+      
+      {/* Redirect cualquier otra ruta */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
+}
 
-        {/* Cambiar contraseña */}
-        <Route path="/cambiar-password" element={<CambiarPassword />} />
-        <Route path="/reset-password" element={<CambiarPassword />} />
-
-        {/* Dashboard */}
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dashboard/*"
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Backoffice - Panel de administración de Admitio */}
-        <Route path="/backoffice" element={<Backoffice />} />
-
-        {/* 404 - Redirigir a home */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </HashTokenHandler>
-  );
-};
-
-// Main App
-const App = () => {
+function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <AppRoutes />
       </AuthProvider>
     </BrowserRouter>
-  );
-};
+  )
+}
 
-export default App;
+export default App
