@@ -666,6 +666,11 @@ export default function Dashboard() {
     }
   }
 
+  // Cargar datos inicial
+  useEffect(() => {
+    loadData()
+  }, [user])
+
   // ========== ACTUALIZACIÓN MANUAL + REALTIME ==========
   // Estilo Trello: Realtime para cambios, botón para forzar actualización
   
@@ -773,50 +778,18 @@ export default function Dashboard() {
   }, [planInfo?.plan, user?.institucion_id])
 
   function loadData() {
-    console.log('📊 loadData() - Rol:', user?.rol_id, 'isRector:', isRector)
-    
-    // Para Rector: cargar TODOS los leads de la institución (para reportes)
-    // Para otros roles: usar filtro normal
-    let data
-    if (isRector) {
-      data = store.getConsultasParaReportes()
-      console.log('📊 Rector - Leads cargados:', data.length)
-      console.log('📊 Rector - Usuarios:', store.getTodosLosUsuarios()?.length || 0)
-      console.log('📊 Rector - Encargados:', store.getEncargadosActivos()?.length || 0)
-    } else {
-      data = store.getConsultas(user?.id, user?.rol_id)
-    }
-    
+    const data = store.getConsultas(user?.id, user?.rol_id)
     setConsultas(data)
     
     if (isEncargado) {
       setMetricas(store.getMetricasEncargado(user.id))
       setLeadsHoy(store.getLeadsContactarHoy(user.id, user.rol_id))
-    } else if (isKeyMaster || isRector) {
-      // Rector también ve los leads a contactar hoy (para tener contexto)
+    } else if (isKeyMaster) {
       setLeadsHoy(store.getLeadsContactarHoy())
     }
     setMetricasGlobales(store.getMetricasGlobales())
     setFormularios(store.getFormularios())
   }
-
-  // Cargar datos inicial - con retry para asegurar que el store esté listo
-  useEffect(() => {
-    loadData()
-    
-    // Retry después de 500ms por si el store aún no tenía datos
-    const timer = setTimeout(() => {
-      if (isRector || isKeyMaster) {
-        const storeLeads = store.getConsultasParaReportes()
-        if (storeLeads.length > 0) {
-          console.log('📊 Retry - Recargando con', storeLeads.length, 'leads')
-          loadData()
-        }
-      }
-    }, 500)
-    
-    return () => clearTimeout(timer)
-  }, [user])
 
   // Helper para abrir modal de nuevo lead con validación de límite
   const handleNuevoLead = () => {
@@ -2397,12 +2370,9 @@ export default function Dashboard() {
       // Para otros: usar las consultas ya filtradas del dashboard
       let leads = isRector ? store.getConsultasParaReportes() : [...consultas]
       
-      console.log('📊 leadsReporte useMemo - isRector:', isRector, 'leads iniciales:', leads.length, 'consultas estado:', consultas.length)
-      
       // Si no hay consultas en el dashboard pero hay en el store, cargar del store
       if (leads.length === 0 && !isRector) {
         leads = store.getConsultasParaReportes()
-        console.log('📊 leadsReporte - Fallback a store:', leads.length)
       }
       
       // Filtrar por rol si es encargado (solo aplica si no es rector)
@@ -2672,37 +2642,25 @@ export default function Dashboard() {
     // Estado para modal de generación PDF
     const [generandoPDF, setGenerandoPDF] = useState(false)
     
-    // Función para cargar jsPDF desde CDN
-    const cargarJsPDF = () => {
-      return new Promise((resolve, reject) => {
-        // Si ya está cargado, usar el existente
-        if (window.jspdf) {
-          resolve(window.jspdf.jsPDF)
-          return
-        }
-        
-        // Cargar desde CDN
-        const script = document.createElement('script')
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
-        script.onload = () => {
-          if (window.jspdf) {
-            resolve(window.jspdf.jsPDF)
-          } else {
-            reject(new Error('jsPDF no se cargó correctamente'))
-          }
-        }
-        script.onerror = () => reject(new Error('Error cargando jsPDF desde CDN'))
-        document.head.appendChild(script)
-      })
-    }
-    
-    // Función para generar PDF (carga jsPDF desde CDN)
+    // Función para generar PDF (sin dependencias externas - usa jsPDF)
     const descargarPDF = async () => {
       setGenerandoPDF(true)
       
       try {
-        // Cargar jsPDF desde CDN
-        const jsPDF = await cargarJsPDF()
+        // Importar jsPDF dinámicamente
+        let jsPDF
+        try {
+          const module = await import('jspdf')
+          jsPDF = module.jsPDF
+        } catch (importError) {
+          // Si no está instalado, mostrar mensaje
+          setNotification({ 
+            type: 'error', 
+            message: 'Para exportar PDF, ejecuta: npm install jspdf' 
+          })
+          setGenerandoPDF(false)
+          return
+        }
         
         const pdf = new jsPDF('p', 'mm', 'a4')
         const pageWidth = pdf.internal.pageSize.getWidth()
@@ -3042,7 +3000,7 @@ export default function Dashboard() {
         console.error('Error generando PDF:', error)
         setNotification({ 
           type: 'error', 
-          message: 'Error al generar PDF. Verifica tu conexión a internet.' 
+          message: 'Error al generar PDF. Instala jspdf: npm install jspdf' 
         })
       }
       
@@ -3341,60 +3299,8 @@ export default function Dashboard() {
     
     const hayFiltrosActivos = filtroEstados.length > 0 || filtroCarreras.length > 0 || filtroMedios.length > 0 || filtroEncargados.length > 0 || filtroTipoAlumno !== 'todos'
     
-    // Estado de carga
-    const [cargandoDatos, setCargandoDatos] = useState(false)
-    
-    // Función para recargar datos (especialmente para Rector)
-    const recargarDatosReporte = async () => {
-      setCargandoDatos(true)
-      try {
-        await reloadFromSupabase()
-        // Forzar recarga del store
-        store.reloadStore()
-        // Actualizar estado local
-        loadData()
-      } catch (e) {
-        console.error('Error recargando:', e)
-      }
-      setCargandoDatos(false)
-    }
-    
     return (
       <div className="space-y-6">
-        {/* Banner de bienvenida para Rector */}
-        {isRector && leadsReporte.length === 0 && (
-          <div className="bg-gradient-to-r from-violet-500 to-purple-600 rounded-xl p-6 text-white">
-            <div className="flex items-start gap-4">
-              <div className="p-3 bg-white/20 rounded-xl">
-                <Icon name="BarChart2" size={28} />
-              </div>
-              <div className="flex-1">
-                <h2 className="text-xl font-bold mb-2">Bienvenido al Panel de Reportes</h2>
-                <p className="text-violet-100 mb-4">
-                  Aquí podrás ver el rendimiento de admisiones, métricas de conversión y el progreso de cada encargado.
-                </p>
-                <button
-                  onClick={recargarDatosReporte}
-                  disabled={cargandoDatos}
-                  className="px-4 py-2 bg-white text-violet-600 rounded-lg font-medium hover:bg-violet-50 transition-colors flex items-center gap-2"
-                >
-                  {cargandoDatos ? (
-                    <>
-                      <Icon name="Loader2" size={18} className="animate-spin" />
-                      Cargando datos...
-                    </>
-                  ) : (
-                    <>
-                      <Icon name="RefreshCw" size={18} />
-                      Cargar datos de la institución
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-        
         {/* Header con selectores de período */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -3745,148 +3651,63 @@ export default function Dashboard() {
             {/* Tab: Encargados */}
             {activeTab === 'encargados' && (isKeyMaster || user?.rol_id === 'superadmin' || isRector) && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-slate-800">Rendimiento por Encargado</h3>
-                  <span className="text-sm text-slate-500">
-                    {Object.keys(estadisticas?.porEncargado || {}).filter(k => k !== 'sin_asignar').length} encargados activos
-                  </span>
-                </div>
-                
-                {/* Resumen rápido */}
-                <div className="grid grid-cols-3 gap-4 mb-4">
-                  <div className="bg-violet-50 rounded-lg p-3 text-center">
-                    <p className="text-2xl font-bold text-violet-600">
-                      {Object.values(estadisticas?.porEncargado || {}).reduce((sum, e) => sum + e.total, 0)}
-                    </p>
-                    <p className="text-xs text-violet-600">Total asignados</p>
-                  </div>
-                  <div className="bg-emerald-50 rounded-lg p-3 text-center">
-                    <p className="text-2xl font-bold text-emerald-600">
-                      {Object.values(estadisticas?.porEncargado || {}).reduce((sum, e) => sum + e.matriculados, 0)}
-                    </p>
-                    <p className="text-xs text-emerald-600">Matrículas totales</p>
-                  </div>
-                  <div className="bg-amber-50 rounded-lg p-3 text-center">
-                    <p className="text-2xl font-bold text-amber-600">
-                      {(() => {
-                        const tasas = Object.values(estadisticas?.porEncargado || {}).filter(e => e.total > 0).map(e => e.tasa || 0)
-                        return tasas.length > 0 ? Math.round(tasas.reduce((a, b) => a + b, 0) / tasas.length) : 0
-                      })()}%
-                    </p>
-                    <p className="text-xs text-amber-600">Conversión promedio</p>
-                  </div>
-                </div>
-                
+                <h3 className="font-semibold text-slate-800">Rendimiento por Encargado</h3>
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr className="text-left text-sm text-slate-500 border-b border-slate-100">
                         <th className="pb-3 font-medium">Encargado</th>
-                        <th className="pb-3 text-center font-medium">Leads</th>
-                        <th className="pb-3 text-center font-medium">Activos</th>
-                        <th className="pb-3 text-center font-medium">Matrículas</th>
+                        <th className="pb-3 text-center font-medium">Total</th>
+                        <th className="pb-3 text-center font-medium">Matriculados</th>
                         <th className="pb-3 text-center font-medium">Conversión</th>
-                        <th className="pb-3 text-right font-medium">Performance</th>
+                        <th className="pb-3 text-right font-medium">Tendencia</th>
                       </tr>
                     </thead>
                     <tbody>
                       {Object.entries(estadisticas?.porEncargado || {})
-                        .filter(([id, _]) => id !== 'sin_asignar')
+                        .filter(([_, v]) => v.total > 0)
                         .sort((a, b) => (b[1].tasa || 0) - (a[1].tasa || 0))
-                        .map(([id, data]) => {
-                          // Calcular activos (no matriculados ni descartados)
-                          const activos = leadsReporte.filter(l => 
-                            l.asignado_a === id && !l.matriculado && !l.descartado
-                          ).length
-                          
-                          return (
-                            <tr key={id} className="border-b border-slate-50 hover:bg-slate-50">
-                              <td className="py-4">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-purple-600 rounded-full flex items-center justify-center">
-                                    <span className="text-white font-medium">
-                                      {data.nombre?.charAt(0)?.toUpperCase() || '?'}
-                                    </span>
-                                  </div>
-                                  <div>
-                                    <span className="font-medium text-slate-800 block">{data.nombre || 'Sin nombre'}</span>
-                                    <span className="text-xs text-slate-400">Encargado</span>
-                                  </div>
+                        .map(([id, data]) => (
+                          <tr key={id} className="border-b border-slate-50 hover:bg-slate-50">
+                            <td className="py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 bg-violet-100 rounded-full flex items-center justify-center">
+                                  <span className="text-violet-600 font-medium text-sm">
+                                    {data.nombre?.charAt(0) || '?'}
+                                  </span>
                                 </div>
-                              </td>
-                              <td className="py-4 text-center text-slate-600 font-medium">{data.total}</td>
-                              <td className="py-4 text-center">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                  activos > 5 ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
-                                }`}>
-                                  {activos}
-                                </span>
-                              </td>
-                              <td className="py-4 text-center text-emerald-600 font-bold">{data.matriculados}</td>
-                              <td className="py-4 text-center">
-                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-bold ${
-                                  (data.tasa || 0) >= 25 ? 'bg-emerald-100 text-emerald-700' :
-                                  (data.tasa || 0) >= 15 ? 'bg-amber-100 text-amber-700' :
-                                  (data.tasa || 0) > 0 ? 'bg-orange-100 text-orange-700' :
-                                  'bg-slate-100 text-slate-500'
-                                }`}>
-                                  {data.tasa || 0}%
-                                </span>
-                              </td>
-                              <td className="py-4 text-right">
-                                <div className="flex items-center gap-2 justify-end">
-                                  <div className="w-24 h-3 bg-slate-100 rounded-full overflow-hidden">
-                                    <div 
-                                      className={`h-full rounded-full transition-all ${
-                                        (data.tasa || 0) >= 25 ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' :
-                                        (data.tasa || 0) >= 15 ? 'bg-gradient-to-r from-amber-400 to-amber-500' :
-                                        'bg-gradient-to-r from-slate-300 to-slate-400'
-                                      }`}
-                                      style={{ width: `${Math.min(100, (data.tasa || 0) * 2)}%` }}
-                                    />
-                                  </div>
-                                  {(data.tasa || 0) >= 25 && <Icon name="TrendingUp" size={16} className="text-emerald-500" />}
-                                  {(data.tasa || 0) > 0 && (data.tasa || 0) < 15 && <Icon name="TrendingDown" size={16} className="text-orange-500" />}
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      
-                      {/* Fila de Sin Asignar si hay leads sin asignar */}
-                      {estadisticas?.porEncargado?.['sin_asignar']?.total > 0 && (
-                        <tr className="border-b border-slate-50 bg-amber-50/50">
-                          <td className="py-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 bg-amber-200 rounded-full flex items-center justify-center">
-                                <Icon name="AlertCircle" size={20} className="text-amber-600" />
+                                <span className="font-medium text-slate-800">{data.nombre}</span>
                               </div>
-                              <div>
-                                <span className="font-medium text-amber-800 block">Sin Asignar</span>
-                                <span className="text-xs text-amber-600">Requiere atención</span>
+                            </td>
+                            <td className="py-4 text-center text-slate-600">{data.total}</td>
+                            <td className="py-4 text-center text-emerald-600 font-medium">{data.matriculados}</td>
+                            <td className="py-4 text-center">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium ${
+                                (data.tasa || 0) >= 25 ? 'bg-emerald-100 text-emerald-700' :
+                                (data.tasa || 0) >= 15 ? 'bg-amber-100 text-amber-700' :
+                                'bg-slate-100 text-slate-600'
+                              }`}>
+                                {data.tasa || 0}%
+                              </span>
+                            </td>
+                            <td className="py-4 text-right">
+                              <div className="w-16 h-2 bg-slate-100 rounded-full overflow-hidden ml-auto">
+                                <div 
+                                  className={`h-full rounded-full ${
+                                    (data.tasa || 0) >= 25 ? 'bg-emerald-500' :
+                                    (data.tasa || 0) >= 15 ? 'bg-amber-500' :
+                                    'bg-slate-400'
+                                  }`}
+                                  style={{ width: `${Math.min(100, (data.tasa || 0) * 2)}%` }}
+                                />
                               </div>
-                            </div>
-                          </td>
-                          <td className="py-4 text-center text-amber-700 font-medium">
-                            {estadisticas.porEncargado['sin_asignar'].total}
-                          </td>
-                          <td className="py-4 text-center text-amber-600">-</td>
-                          <td className="py-4 text-center text-amber-600">-</td>
-                          <td className="py-4 text-center text-amber-600">-</td>
-                          <td className="py-4 text-right">
-                            <span className="text-xs text-amber-600">Asignar leads</span>
-                          </td>
-                        </tr>
-                      )}
+                            </td>
+                          </tr>
+                        ))}
                     </tbody>
                   </table>
-                  
-                  {Object.keys(estadisticas?.porEncargado || {}).filter(k => k !== 'sin_asignar').length === 0 && (
-                    <div className="text-center py-12">
-                      <Icon name="Users" size={48} className="text-slate-300 mx-auto mb-4" />
-                      <p className="text-slate-500 font-medium">No hay encargados con leads asignados</p>
-                      <p className="text-slate-400 text-sm mt-1">Los leads deben ser asignados a encargados para ver métricas</p>
-                    </div>
+                  {Object.keys(estadisticas?.porEncargado || {}).length === 0 && (
+                    <p className="text-center text-slate-400 py-8">Sin datos de encargados</p>
                   )}
                 </div>
               </div>
@@ -3943,18 +3764,10 @@ export default function Dashboard() {
     const [editingForm, setEditingForm] = useState(null)
     const [localShowModal, setLocalShowModal] = useState(false)
     
-    const handleDeleteForm = async (formId) => {
+    const handleDeleteForm = (formId) => {
       if (confirm('¿Eliminar formulario?')) {
-        const result = await store.deleteFormulario(formId)
-        if (result?.error) {
-          setNotification({ type: 'error', message: result.error })
-          setTimeout(() => setNotification(null), 3000)
-        } else {
-          setNotification({ type: 'success', message: 'Formulario eliminado' })
-          setTimeout(() => setNotification(null), 3000)
-          await reloadFromSupabase()
-          loadData()
-        }
+        store.deleteFormulario(formId)
+        loadData()
       }
     }
     
@@ -4158,8 +3971,8 @@ export default function Dashboard() {
       setMigrateToUser('')
     }
     
-    const handleDeleteUser = async () => {
-      const { user: targetUser, leadsCount } = localShowDeleteModal
+    const handleDeleteUser = () => {
+      const { user, leadsCount } = localShowDeleteModal
       
       // Si tiene leads y no seleccionó migración
       if (leadsCount > 0 && !migrateToUser) {
@@ -4179,11 +3992,9 @@ export default function Dashboard() {
       }
       
       // Eliminar usuario
-      const result = await store.deleteUsuario(targetUser.id)
+      const result = store.deleteUsuario(user.id)
       if (result.success) {
-        setNotification({ type: 'success', message: 'Usuario eliminado correctamente' })
-        // Recargar desde Supabase
-        await reloadFromSupabase()
+        setNotification({ type: 'success', message: 'Usuario eliminado' })
       } else {
         setNotification({ type: 'error', message: result.error })
       }
@@ -5471,41 +5282,24 @@ function getSupabaseAnonKey() {
       { id: 'bg-teal-500', nombre: 'Teal', hex: '#14b8a6' },
     ]
     
-    const handleCreate = async (data) => {
-      const result = await store.createCarrera(data)
-      if (result?.error) {
-        setDeleteError(result.error)
-        setTimeout(() => setDeleteError(null), 5000)
-      } else {
-        setShowModal(false)
-        // Recargar desde Supabase
-        await reloadFromSupabase()
-        loadData()
-      }
+    const handleCreate = (data) => {
+      store.createCarrera(data)
+      setShowModal(false)
+      loadData()
     }
     
-    const handleUpdate = async (id, data) => {
-      const result = await store.updateCarrera(id, data)
-      if (result?.error) {
-        setDeleteError(result.error)
-        setTimeout(() => setDeleteError(null), 5000)
-      } else {
-        setEditingPrograma(null)
-        await reloadFromSupabase()
-        loadData()
-      }
+    const handleUpdate = (id, data) => {
+      store.updateCarrera(id, data)
+      setEditingPrograma(null)
+      loadData()
     }
     
-    const handleDelete = async (id) => {
-      const result = await store.deleteCarrera(id)
+    const handleDelete = (id) => {
+      const result = store.deleteCarrera(id)
       if (result.error === 'TIENE_LEADS') {
         setDeleteError(`No se puede eliminar: tiene ${result.count} leads asociados. Reasigna los leads primero.`)
         setTimeout(() => setDeleteError(null), 5000)
-      } else if (result.error) {
-        setDeleteError(result.error)
-        setTimeout(() => setDeleteError(null), 5000)
       } else {
-        await reloadFromSupabase()
         loadData()
       }
     }
@@ -5548,18 +5342,13 @@ function getSupabaseAnonKey() {
       reader.readAsText(file)
     }
     
-    const handleImport = async () => {
+    const handleImport = () => {
       if (!importData || importData.length === 0) return
       
-      const result = await store.importarCarreras(importData)
-      if (result?.error) {
-        setImportError(result.error)
-      } else {
-        setShowImportModal(false)
-        setImportData(null)
-        await reloadFromSupabase()
-        loadData()
-      }
+      store.importarCarreras(importData)
+      setShowImportModal(false)
+      setImportData(null)
+      loadData()
     }
     
     const handleExport = () => {
@@ -5676,7 +5465,7 @@ function getSupabaseAnonKey() {
                 Exportar
               </button>
               <button
-                onClick={() => setShowModal(true)}
+                onClick={handleNuevoLead}
                 className="px-4 py-2 bg-white hover:bg-white/90 text-violet-600 rounded-lg font-medium flex items-center gap-2"
               >
                 <Icon name="Plus" size={18} />
@@ -5726,7 +5515,7 @@ function getSupabaseAnonKey() {
               </p>
               {!searchTerm && (
                 <button
-                  onClick={() => setShowModal(true)}
+                  onClick={handleNuevoLead}
                   className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium"
                 >
                   Crear primer programa
@@ -5940,10 +5729,6 @@ const ImportarView = () => {
   const [historialImportaciones, setHistorialImportaciones] = useState([])
   const [estadisticasImport, setEstadisticasImport] = useState(null)
   const [selectedImportacion, setSelectedImportacion] = useState(null)
-  const [encargadoSeleccionado, setEncargadoSeleccionado] = useState('auto') // 'auto' = asignación automática
-  
-  // Obtener lista de encargados activos
-  const encargadosActivos = store.getEncargadosActivos() || []
   
   // Cargar historial al montar
   useEffect(() => {
@@ -5963,43 +5748,22 @@ const handleImportCSV = async () => {
     
     const reader = new FileReader()
     
-    reader.onload = async (e) => {
+    reader.onload = (e) => {
       const csvData = e.target.result
-      
-      // Pasar opciones con el encargado seleccionado
-      const opciones = {
-        asignarA: encargadoSeleccionado !== 'auto' ? encargadoSeleccionado : null
-      }
-      
-      const result = store.importarLeadsCSV(csvData, user?.id, {}, opciones)
+      const result = store.importarLeadsCSV(csvData, user?.id)
       
       setImportResult(result)
       setImporting(false)
       
       if (result.success && result.importados > 0) {
-        // Obtener nombre del encargado si se seleccionó uno específico
-        const encargadoNombre = encargadoSeleccionado !== 'auto' 
-          ? encargadosActivos.find(e => e.id === encargadoSeleccionado)?.nombre 
-          : null
-        
         // Notificación de éxito
         setNotification({ 
           type: 'success', 
-          message: `✅ ${result.importados} leads importados${encargadoNombre ? ` y asignados a ${encargadoNombre}` : ''}${result.duplicados > 0 ? ` (${result.duplicados} duplicados omitidos)` : ''}` 
+          message: `✅ ${result.importados} leads importados correctamente${result.duplicados > 0 ? ` (${result.duplicados} duplicados omitidos)` : ''}` 
         })
         setTimeout(() => setNotification(null), 5000)
         cargarHistorial()
-        
-        // IMPORTANTE: Recargar desde Supabase para ver los nuevos leads
-        try {
-          await reloadFromSupabase()
-        } catch (err) {
-          console.error('Error recargando:', err)
-        }
         loadData()
-        
-        // Cerrar modal de importación
-        if (typeof setShowImportModal === 'function') setShowImportModal(false)
       }
     }
     
@@ -6102,37 +5866,6 @@ const handleImportCSV = async () => {
             <Icon name="Download" size={14} />
             Descargar plantilla de ejemplo
           </button>
-        </div>
-        
-        {/* Selector de encargado para asignación */}
-        <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 mb-4">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-violet-100 rounded-lg">
-              <Icon name="UserPlus" size={20} className="text-violet-600" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm text-violet-800 font-medium mb-2">Asignar leads a:</p>
-              <select
-                value={encargadoSeleccionado}
-                onChange={(e) => setEncargadoSeleccionado(e.target.value)}
-                className="w-full px-4 py-2.5 border border-violet-300 rounded-lg text-slate-700 bg-white focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
-              >
-                <option value="auto">🔄 Asignación automática (round-robin)</option>
-                <option value="" disabled>──────────────────</option>
-                {encargadosActivos.map(enc => (
-                  <option key={enc.id} value={enc.id}>
-                    👤 {enc.nombre}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-violet-600 mt-2">
-                {encargadoSeleccionado === 'auto' 
-                  ? 'Los leads se distribuirán automáticamente entre los encargados activos'
-                  : `Todos los leads se asignarán a ${encargadosActivos.find(e => e.id === encargadoSeleccionado)?.nombre || 'el encargado seleccionado'}`
-                }
-              </p>
-            </div>
-          </div>
         </div>
         
         <div className="flex items-center gap-4">

@@ -255,10 +255,10 @@ const Logos = () => (
   <section className="py-16 bg-white border-y border-slate-100">
     <div className="max-w-6xl mx-auto px-4 text-center">
       <p className="text-sm text-slate-500 uppercase tracking-wider mb-8">
-        ¡PARA QUIÉN ESTÁ PENSADO?
+        Instituciones que confían en nosotros
       </p>
       <div className="flex justify-center items-center gap-12 flex-wrap opacity-60">
-        {['ESCUELAS DE MÚSICA', 'UNIVERSIDADES', 'ACADEMIAS', 'COLEGIOS', 'CLUB DEPORTIVO'].map((name, i) => (
+        {['🎵 ProJazz', '🎸 Escuela de Rock', '🎹 Conservatorio Sur', '🎤 Academia Voz', '🥁 Drumbeat'].map((name, i) => (
           <span key={i} className="font-display text-xl font-semibold text-slate-400 hover:text-slate-600 transition-colors">
             {name}
           </span>
@@ -288,7 +288,7 @@ const HowItWorks = () => {
             Cómo Funciona
           </h2>
           <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-            En 4 simples pasos, transforma tu proceso de admisiones en una máquina de matriculas.
+            En 4 simples pasos, transforma tu proceso de admisiones en una máquina de conversión automatizada.
           </p>
         </div>
 
@@ -320,7 +320,7 @@ const Features = () => {
     { icon: '✅', title: 'Detección de Duplicados', desc: 'Algoritmo que detecta leads duplicados automáticamente para mantener tu base de datos limpia.', color: 'emerald' },
     { icon: '📝', title: 'Formularios Web', desc: 'Crea formularios personalizados y pégalos en tu sitio con un simple código.', color: 'amber' },
     { icon: '📧', title: 'Emails Automáticos', desc: 'Notificaciones a tu equipo cuando llegan nuevos leads. Nunca pierdas una oportunidad.', color: 'rose' },
-    { icon: '📥', title: 'Importación CSV', desc: 'Migra tus datos existentes con facilidad.', color: 'blue' },
+    { icon: '📥', title: 'Importación CSV', desc: 'Migra tus datos existentes con facilidad. Soporta Excel, CSV y más formatos.', color: 'blue' },
     { icon: '👥', title: 'Roles y Permisos', desc: 'KeyMaster, Encargados, Asistentes y más. Cada rol ve sólo lo que necesita.', color: 'teal' },
   ];
 
@@ -372,20 +372,20 @@ const Pricing = () => {
       name: 'Gratuito',
       tagline: 'Para empezar a probar',
       price: '$0',
-      features: ['1 usuario', '10 leads activos', '1 formulario activo', 'Dashboard',],
+      features: ['1 usuario', '10 leads activos', '1 formulario activo', 'Dashboard', ''],
       featured: false,
     },
     {
       name: 'Profesional',
       tagline: 'Para instituciones en crecimiento',
-      price: '$119.990/mes',
-      features: ['15 usuarios', '500 leads activos', '10 formularios web', '200 emails/mes', 'Reportes avanzados', '5GB almacenamiento'],
+      price: '$119.990',
+      features: ['15 usuarios', '1,500 leads activos', '10 formularios web', '10,000 emails/mes', 'Reportes avanzados', '5GB almacenamiento'],
       featured: true,
     },
     {
       name: 'Institución',
       tagline: 'Para grandes equipos',
-      price: '$249.990/mes',
+      price: '$249.990',
       features: ['50 usuarios', '5,000 leads activos', '30 formularios web', '30,000 emails/mes', 'Reportes avanzados', '20GB almacenamiento'],
       featured: false,
     },
@@ -455,7 +455,7 @@ const Pricing = () => {
                     : 'bg-white/10 text-white border border-white/20 hover:bg-white/20'
                 }`}
               >
-                {plan.price === '$0' ? 'Comenzar Gratis' : 'Contactar'}
+                {plan.price === '$0' ? 'Comenzar Gratis' : 'Probar 14 días gratis'}
               </Link>
             </div>
           ))}
