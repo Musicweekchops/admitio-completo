@@ -47,14 +47,6 @@ export function AuthProvider({ children }) {
   })
 
   useEffect(() => {
-    // Timeout de seguridad - nunca quedarse en loading más de 5 segundos
-    const safetyTimeout = setTimeout(() => {
-      if (loading) {
-        console.warn('⚠️ Timeout de carga - forzando fin de loading')
-        setLoading(false)
-      }
-    }, 5000)
-
     // Limpiar datos viejos de localStorage al iniciar
     const oldData = localStorage.getItem('admitio_data')
     if (oldData) {
@@ -72,26 +64,21 @@ export function AuthProvider({ children }) {
 
     checkSession()
 
-    let subscription = null
     if (isSupabaseConfigured()) {
-      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
         console.log('🔔 Auth event:', event)
         
-        // Solo procesar SIGNED_OUT - el resto lo maneja checkSession
-        if (event === 'SIGNED_OUT') {
+        if (event === 'SIGNED_IN' && session?.user) {
+          await loadUserFromAuth(session.user)
+        } else if (event === 'SIGNED_OUT') {
           setUser(null)
           setInstitucion(null)
           localStorage.removeItem('admitio_user')
           localStorage.removeItem('admitio_data')
-          setLoading(false)
         }
       })
-      subscription = data.subscription
-    }
 
-    return () => {
-      clearTimeout(safetyTimeout)
-      if (subscription) subscription.unsubscribe()
+      return () => subscription.unsubscribe()
     }
   }, [])
 
@@ -120,47 +107,20 @@ export function AuthProvider({ children }) {
 
   async function loadUserFromAuth(authUser) {
     try {
-      console.log('🔍 Buscando usuario con auth_id:', authUser.id)
-      
-      // Primero buscar por auth_id
-      let { data: usuario, error } = await supabase
+      const { data: usuario, error } = await supabase
         .from('usuarios')
         .select('*, instituciones(id, nombre, tipo, pais, ciudad, region, sitio_web, plan)')
         .eq('auth_id', authUser.id)
         .eq('activo', true)
         .single()
 
-      // Si no encuentra por auth_id, buscar por email y actualizar auth_id
       if (error || !usuario) {
-        console.log('⚠️ No encontrado por auth_id, buscando por email:', authUser.email)
-        
-        const { data: usuarioPorEmail, error: errorEmail } = await supabase
-          .from('usuarios')
-          .select('*, instituciones(id, nombre, tipo, pais, ciudad, region, sitio_web, plan)')
-          .eq('email', authUser.email.toLowerCase())
-          .eq('activo', true)
-          .single()
-        
-        if (errorEmail || !usuarioPorEmail) {
-          console.log('❌ Usuario no encontrado en tabla usuarios')
-          setLoading(false)
-          return
-        }
-        
-        // Actualizar auth_id si no lo tiene
-        if (!usuarioPorEmail.auth_id) {
-          console.log('📝 Actualizando auth_id del usuario...')
-          await supabase
-            .from('usuarios')
-            .update({ auth_id: authUser.id })
-            .eq('id', usuarioPorEmail.id)
-        }
-        
-        usuario = usuarioPorEmail
+        console.log('⚠️ Usuario no encontrado en tabla usuarios')
+        setLoading(false)
+        return
       }
 
-      const rol = ROLES[usuario.rol] || ROLES.encargado // Default a encargado si no encuentra rol
-      console.log('👤 Rol encontrado:', usuario.rol, '→', rol)
+      const rol = ROLES[usuario.rol] || ROLES.asistente
 
       const enrichedUser = {
         id: usuario.id,
@@ -173,10 +133,8 @@ export function AuthProvider({ children }) {
         institucion_nombre: usuario.instituciones?.nombre || 'Mi Institución',
         email_verificado: authUser.email_confirmed_at != null,
         rol: rol,
-        permisos: rol.permisos || { editar: true, ver_propios: true } // Permisos mínimos por defecto
+        permisos: rol.permisos || {}
       }
-
-      console.log('✅ Usuario enriched:', enrichedUser.nombre, 'canEdit:', enrichedUser.permisos?.editar)
 
       setUser(enrichedUser)
       setInstitucion(usuario.instituciones)
@@ -184,7 +142,7 @@ export function AuthProvider({ children }) {
 
       await loadInstitucionData(usuario.institucion_id)
 
-      console.log('✅ Usuario cargado completamente:', enrichedUser.nombre)
+      console.log('✅ Usuario cargado:', enrichedUser.nombre)
     } catch (error) {
       console.error('Error cargando usuario:', error)
     } finally {
@@ -402,22 +360,14 @@ export function AuthProvider({ children }) {
 
   // ========== SIGN OUT ==========
   async function signOut() {
-    // Limpiar estado local primero
+    if (isSupabaseConfigured()) {
+      await supabase.auth.signOut()
+    }
     setUser(null)
     setInstitucion(null)
     localStorage.removeItem('admitio_user')
     localStorage.removeItem('admitio_data')
     localStorage.removeItem('admitio_pending_email')
-    setLoading(false)
-    
-    // Luego cerrar sesión en Supabase
-    if (isSupabaseConfigured()) {
-      try {
-        await supabase.auth.signOut()
-      } catch (e) {
-        console.warn('Error en signOut:', e)
-      }
-    }
     console.log('👋 Sesión cerrada')
   }
 
@@ -496,10 +446,9 @@ export function AuthProvider({ children }) {
 
       const { data: acciones } = await supabase
         .from('acciones_lead')
-        .select('*, leads!inner(institucion_id)')
-        .eq('leads.institucion_id', institucionId)
+        .select('*')
         .order('created_at', { ascending: false })
-        .limit(500)
+        .limit(100)
 
       const storeData = {
         consultas: (leads || []).map(lead => ({
@@ -550,7 +499,7 @@ export function AuthProvider({ children }) {
           id: a.id,
           tipo: a.tipo,
           descripcion: a.descripcion,
-          created_at: a.created_at, // Usar created_at consistentemente
+          fecha: a.created_at,
           usuario_id: a.usuario_id,
           lead_id: a.lead_id
         })),
@@ -566,26 +515,10 @@ export function AuthProvider({ children }) {
           { id: 'otro', nombre: 'Otro', icono: 'MoreHorizontal', color: 'text-gray-500' }
         ],
         recordatorios: [],
-        notificaciones: [],
-        importaciones: [],
-        cola_leads: [],
-        metricas_encargados: {},
-        plantillas: [],
-        config: { nombre: 'Mi Institución' },
-        // ========== CAMPOS CRÍTICOS PARA SUPABASE ==========
-        _supabase_sync: true,
-        _institucion_id: institucionId,
-        _last_sync: new Date().toISOString()
+        lastSync: new Date().toISOString()
       }
 
       localStorage.setItem('admitio_data', JSON.stringify(storeData))
-      localStorage.setItem('admitio_version', '2.7') // Asegurar versión correcta
-      
-      // Disparar evento para que el store se recargue
-      window.dispatchEvent(new CustomEvent('admitio-store-updated', { 
-        detail: { institucionId, source: 'auth' }
-      }))
-      
       console.log('📦 Datos cargados desde Supabase:', {
         leads: storeData.consultas.length,
         usuarios: storeData.usuarios.length,

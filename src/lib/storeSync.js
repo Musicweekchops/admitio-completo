@@ -710,99 +710,10 @@ export function getInstitucionIdFromStore() {
   return null;
 }
 
-// ========================================
-// SINCRONIZACIÓN DIRECTA (sin cola)
-// Para operaciones críticas que deben confirmar antes de continuar
-// ========================================
-
-export async function syncActualizarLeadDirecto(leadId, updates) {
-  // Si el leadId es local (no UUID), no podemos actualizar en Supabase
-  if (!leadId || !leadId.includes('-') || leadId.startsWith('c-')) {
-    console.log('⚠️ Lead con ID local, no se puede sincronizar:', leadId);
-    return { success: false, error: 'ID local no sincronizable' };
-  }
-  
-  const supabaseUpdates = {};
-  
-  // Campos básicos
-  if (updates.nombre !== undefined) supabaseUpdates.nombre = updates.nombre;
-  if (updates.email !== undefined) supabaseUpdates.email = updates.email;
-  if (updates.telefono !== undefined) supabaseUpdates.telefono = updates.telefono;
-  if (updates.estado !== undefined) supabaseUpdates.estado = updates.estado;
-  if (updates.prioridad !== undefined) supabaseUpdates.prioridad = updates.prioridad;
-  if (updates.notas !== undefined) supabaseUpdates.notas = updates.notas;
-  if (updates.carrera_id !== undefined) supabaseUpdates.carrera_id = updates.carrera_id;
-  if (updates.carrera_nombre !== undefined) supabaseUpdates.carrera_nombre = updates.carrera_nombre;
-  if (updates.carreras_interes !== undefined) supabaseUpdates.carreras_interes = updates.carreras_interes;
-  if (updates.fecha_primer_contacto !== undefined) supabaseUpdates.fecha_primer_contacto = updates.fecha_primer_contacto;
-  if (updates.fecha_cierre !== undefined) supabaseUpdates.fecha_cierre = updates.fecha_cierre;
-  
-  // Campos críticos - Estados finales
-  if (updates.matriculado !== undefined) supabaseUpdates.matriculado = updates.matriculado;
-  if (updates.descartado !== undefined) supabaseUpdates.descartado = updates.descartado;
-  if (updates.motivo_descarte !== undefined) supabaseUpdates.motivo_descarte = updates.motivo_descarte;
-  
-  // Tipo de alumno
-  if (updates.tipo_alumno !== undefined) supabaseUpdates.tipo_alumno = updates.tipo_alumno;
-  
-  // Nuevo interés
-  if (updates.nuevo_interes !== undefined) supabaseUpdates.nuevo_interes = updates.nuevo_interes;
-  if (updates.fecha_nuevo_interes !== undefined) supabaseUpdates.fecha_nuevo_interes = updates.fecha_nuevo_interes;
-  
-  // Medio de contacto
-  if (updates.medio_id !== undefined) supabaseUpdates.medio = updates.medio_id;
-  
-  // Emails enviados
-  if (updates.emails_enviados !== undefined) supabaseUpdates.emails_enviados = updates.emails_enviados;
-  
-  // Fecha próximo contacto
-  if (updates.fecha_proximo_contacto !== undefined) supabaseUpdates.fecha_proximo_contacto = updates.fecha_proximo_contacto;
-  
-  // Asignado_a - solo si es UUID válido
-  if (updates.asignado_a !== undefined) {
-    if (updates.asignado_a && typeof updates.asignado_a === 'string' && 
-        updates.asignado_a.includes('-') && updates.asignado_a.length > 30) {
-      supabaseUpdates.asignado_a = updates.asignado_a;
-    } else if (!updates.asignado_a) {
-      supabaseUpdates.asignado_a = null;
-    }
-  }
-  
-  supabaseUpdates.updated_at = new Date().toISOString();
-  
-  // Verificar que hay algo que actualizar
-  if (Object.keys(supabaseUpdates).length <= 1) {
-    console.log('⚠️ No hay campos para sincronizar');
-    return { success: true, noChanges: true };
-  }
-  
-  try {
-    console.log('📤 Sincronizando lead directamente:', leadId, Object.keys(supabaseUpdates));
-    
-    const { error } = await supabase
-      .from('leads')
-      .update(supabaseUpdates)
-      .eq('id', leadId);
-    
-    if (error) {
-      console.error('❌ Error sincronizando:', error);
-      return { success: false, error: error.message };
-    }
-    
-    console.log('✅ Lead sincronizado correctamente:', leadId);
-    return { success: true };
-    
-  } catch (err) {
-    console.error('❌ Error de conexión:', err);
-    return { success: false, error: err.message };
-  }
-}
-
 export default {
   cargarDatosInstitucion,
   syncCrearLead,
   syncActualizarLead,
-  syncActualizarLeadDirecto,
   syncEliminarLead,
   syncCrearAccion,
   syncCrearUsuario,
