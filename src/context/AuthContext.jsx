@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import { reloadStore } from '../lib/store'
 
 const AuthContext = createContext(null)
 
@@ -498,7 +499,9 @@ export function AuthProvider({ children }) {
           fecha_cierre: lead.fecha_cierre,
           matriculado: lead.matriculado || false,
           descartado: lead.descartado || false,
-          updated_at: lead.updated_at
+          updated_at: lead.updated_at,
+          tipo_alumno: lead.tipo_alumno || 'nuevo',
+          emails_enviados: lead.emails_enviados || 0
         })),
         usuarios: (usuarios || []).map(u => ({
           id: u.id,
@@ -528,7 +531,7 @@ export function AuthProvider({ children }) {
           id: a.id,
           tipo: a.tipo,
           descripcion: a.descripcion,
-          fecha: a.created_at,
+          created_at: a.created_at,
           usuario_id: a.usuario_id,
           lead_id: a.lead_id
         })),
@@ -543,11 +546,24 @@ export function AuthProvider({ children }) {
           { id: 'presencial', nombre: 'Presencial', icono: 'MapPin', color: 'text-emerald-500' },
           { id: 'otro', nombre: 'Otro', icono: 'MoreHorizontal', color: 'text-gray-500' }
         ],
+        // Campos adicionales requeridos por el store
         recordatorios: [],
+        cola_leads: [],
+        notificaciones: [],
+        importaciones: [],
+        correos_enviados: [],
+        plantillas: [],
+        metricas_encargados: {},
+        config: { nombre: 'Mi Institución' },
+        _supabase_sync: true,
         lastSync: new Date().toISOString()
       }
 
       localStorage.setItem('admitio_data', JSON.stringify(storeData))
+      
+      // CRÍTICO: Recargar el store en memoria con los nuevos datos
+      reloadStore()
+      
       console.log('📦 Datos cargados desde Supabase:', {
         leads: storeData.consultas.length,
         usuarios: storeData.usuarios.length,

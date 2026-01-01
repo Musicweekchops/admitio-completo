@@ -148,11 +148,29 @@ export function reloadStore() {
   const stored = localStorage.getItem(STORAGE_KEY)
   if (stored) {
     try {
-      store = JSON.parse(stored)
+      const data = JSON.parse(stored)
+      // Asegurar que todos los arrays existan
+      store = {
+        ...data,
+        consultas: data.consultas || [],
+        usuarios: data.usuarios || [],
+        carreras: data.carreras || [],
+        medios: data.medios || MEDIOS,
+        formularios: data.formularios || [],
+        actividad: data.actividad || [],
+        recordatorios: data.recordatorios || [],
+        cola_leads: data.cola_leads || [],
+        notificaciones: data.notificaciones || [],
+        importaciones: data.importaciones || [],
+        correos_enviados: data.correos_enviados || [],
+        plantillas: data.plantillas || [],
+        metricas_encargados: data.metricas_encargados || {},
+        config: data.config || { nombre: 'Mi Institución' }
+      }
       console.log(`🔄 Store recargado desde localStorage (${store.consultas?.length || 0} leads)`)
       return true
     } catch (e) {
-      console.warn('⚠️ Error al recargar store')
+      console.warn('⚠️ Error al recargar store:', e)
       return false
     }
   }
@@ -425,6 +443,12 @@ export async function deleteUsuario(id) {
 // CONSULTAS / LEADS
 // ============================================
 export function getConsultas(userId = null, rol = null, paraReportes = false) {
+  // Protección contra store.consultas undefined
+  if (!store.consultas || !Array.isArray(store.consultas)) {
+    console.warn('⚠️ store.consultas no es un array, retornando vacío')
+    return []
+  }
+  
   let consultas = [...store.consultas]
   
   // Filtrar por rol (excepto si es para reportes)
@@ -448,6 +472,10 @@ export function getConsultas(userId = null, rol = null, paraReportes = false) {
 
 // Función específica para reportes - todos los leads sin filtro de rol
 export function getConsultasParaReportes() {
+  if (!store.consultas || !Array.isArray(store.consultas)) {
+    console.warn('⚠️ store.consultas no es un array')
+    return []
+  }
   return store.consultas.map(c => enrichConsulta(c))
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
 }
@@ -467,10 +495,10 @@ export function getConsultaById(id) {
 function enrichConsulta(c) {
   return {
     ...c,
-    carrera: store.carreras.find(ca => ca.id === c.carrera_id),
-    medio: store.medios.find(m => m.id === c.medio_id),
-    encargado: store.usuarios.find(u => u.id === c.asignado_a),
-    recordatorios: store.recordatorios.filter(r => r.lead_id === c.id && !r.disparado)
+    carrera: (store.carreras || []).find(ca => ca.id === c.carrera_id),
+    medio: (store.medios || []).find(m => m.id === c.medio_id),
+    encargado: (store.usuarios || []).find(u => u.id === c.asignado_a),
+    recordatorios: (store.recordatorios || []).filter(r => r.lead_id === c.id && !r.disparado)
   }
 }
 
