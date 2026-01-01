@@ -107,20 +107,49 @@ export function AuthProvider({ children }) {
 
   async function loadUserFromAuth(authUser) {
     try {
-      const { data: usuario, error } = await supabase
+      console.log('🔍 Buscando usuario con auth_id:', authUser.id)
+      
+      // Primero buscar por auth_id
+      let { data: usuario, error } = await supabase
         .from('usuarios')
         .select('*, instituciones(id, nombre, tipo, pais, ciudad, region, sitio_web, plan)')
         .eq('auth_id', authUser.id)
         .eq('activo', true)
         .single()
 
+      // Si no encuentra por auth_id, buscar por email
       if (error || !usuario) {
-        console.log('⚠️ Usuario no encontrado en tabla usuarios')
-        setLoading(false)
-        return
+        console.log('⚠️ No encontrado por auth_id, buscando por email:', authUser.email)
+        
+        const { data: usuarioPorEmail, error: errorEmail } = await supabase
+          .from('usuarios')
+          .select('*, instituciones(id, nombre, tipo, pais, ciudad, region, sitio_web, plan)')
+          .eq('email', authUser.email.toLowerCase())
+          .eq('activo', true)
+          .single()
+        
+        if (errorEmail || !usuarioPorEmail) {
+          console.log('❌ Usuario no encontrado en tabla usuarios por email')
+          setLoading(false)
+          return
+        }
+        
+        // Actualizar auth_id si no lo tiene
+        if (!usuarioPorEmail.auth_id) {
+          console.log('📝 Actualizando auth_id del usuario...')
+          await supabase
+            .from('usuarios')
+            .update({ auth_id: authUser.id })
+            .eq('id', usuarioPorEmail.id)
+        }
+        
+        usuario = usuarioPorEmail
+        console.log('✅ Usuario encontrado por email:', usuario.nombre)
       }
 
-      const rol = ROLES[usuario.rol] || ROLES.asistente
+      // Obtener rol con permisos por defecto si no existe
+      const rol = ROLES[usuario.rol] || ROLES.encargado
+      console.log('👤 Rol:', usuario.rol, '- Permisos:', rol.permisos)
 
       const enrichedUser = {
         id: usuario.id,
@@ -133,7 +162,7 @@ export function AuthProvider({ children }) {
         institucion_nombre: usuario.instituciones?.nombre || 'Mi Institución',
         email_verificado: authUser.email_confirmed_at != null,
         rol: rol,
-        permisos: rol.permisos || {}
+        permisos: rol.permisos || { editar: true, ver_propios: true, crear_leads: true }
       }
 
       setUser(enrichedUser)
@@ -142,7 +171,7 @@ export function AuthProvider({ children }) {
 
       await loadInstitucionData(usuario.institucion_id)
 
-      console.log('✅ Usuario cargado:', enrichedUser.nombre)
+      console.log('✅ Usuario cargado:', enrichedUser.nombre, '- canEdit:', enrichedUser.permisos?.editar)
     } catch (error) {
       console.error('Error cargando usuario:', error)
     } finally {

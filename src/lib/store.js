@@ -28,7 +28,8 @@ import { supabase } from './supabase'
 // Importar funciones de sincronización con Supabase
 import { 
   syncCrearLead, 
-  syncActualizarLead, 
+  syncActualizarLead,
+  syncActualizarLeadDirecto, // NUEVO: Sync directo que espera respuesta
   syncEliminarLead,
   syncCrearAccion,
   syncCrearUsuario,
@@ -837,6 +838,95 @@ export function updateConsulta(id, updates, userId) {
   // ========================================
   
   return newConsulta
+}
+
+// ============================================
+// UPDATE CONSULTA ASYNC - Espera confirmación de Supabase
+// ============================================
+// Usar esta función para cambios críticos (estado, matriculado, descartado)
+export async function updateConsultaAsync(id, updates, userId) {
+  const index = store.consultas.findIndex(c => c.id === id)
+  if (index === -1) return { success: false, error: 'Lead no encontrado' }
+  
+  const oldConsulta = store.consultas[index]
+  const newConsulta = { ...oldConsulta, ...updates }
+  
+  // Detectar cambio de estado
+  if (updates.estado && oldConsulta.estado !== newConsulta.estado) {
+    addActividad(id, userId, 'cambio_estado', `Estado: ${oldConsulta.estado} → ${newConsulta.estado}`)
+    
+    // Primer contacto
+    if (!oldConsulta.fecha_primer_contacto && newConsulta.estado !== 'nueva') {
+      newConsulta.fecha_primer_contacto = new Date().toISOString()
+    }
+    
+    // Cierre - Matriculado
+    if (newConsulta.estado === 'matriculado') {
+      newConsulta.fecha_cierre = new Date().toISOString()
+      newConsulta.matriculado = true
+      addActividad(id, userId, 'matriculado', '🎉 Lead matriculado exitosamente')
+      cancelarRecordatorios(id)
+    }
+    
+    // Cierre - Descartado
+    if (newConsulta.estado === 'descartado') {
+      newConsulta.fecha_cierre = new Date().toISOString()
+      newConsulta.descartado = true
+      addActividad(id, userId, 'descartado', `Lead descartado: ${updates.motivo_descarte || 'Sin motivo especificado'}`)
+      cancelarRecordatorios(id)
+    }
+  }
+  
+  // Detectar cambio de tipo_alumno
+  if (updates.tipo_alumno && oldConsulta.tipo_alumno !== newConsulta.tipo_alumno) {
+    addActividad(id, userId, 'cambio_tipo', `Tipo: ${oldConsulta.tipo_alumno || 'nuevo'} → ${newConsulta.tipo_alumno}`)
+  }
+  
+  // Detectar reasignación
+  if (updates.asignado_a && oldConsulta.asignado_a !== newConsulta.asignado_a) {
+    const oldEnc = store.usuarios.find(u => u.id === oldConsulta.asignado_a)
+    const newEnc = store.usuarios.find(u => u.id === newConsulta.asignado_a)
+    addActividad(id, userId, 'reasignacion', `Reasignado de ${oldEnc?.nombre || 'Sin asignar'} a ${newEnc?.nombre || 'Sin asignar'}`)
+  }
+  
+  // Detectar cambio de notas
+  if (updates.notas !== undefined && oldConsulta.notas !== newConsulta.notas) {
+    const preview = newConsulta.notas ? newConsulta.notas.substring(0, 50) + (newConsulta.notas.length > 50 ? '...' : '') : '(vacío)'
+    addActividad(id, userId, 'nota_guardada', `Nota: "${preview}"`)
+  }
+  
+  // Actualizar store local PRIMERO
+  store.consultas[index] = newConsulta
+  saveStore()
+  
+  // ========== SYNC DIRECTO CON SUPABASE ==========
+  // Calcular campos que cambiaron
+  const syncUpdates = { ...updates }
+  
+  if (newConsulta.matriculado !== oldConsulta.matriculado) {
+    syncUpdates.matriculado = newConsulta.matriculado
+  }
+  if (newConsulta.descartado !== oldConsulta.descartado) {
+    syncUpdates.descartado = newConsulta.descartado
+  }
+  if (newConsulta.fecha_cierre !== oldConsulta.fecha_cierre) {
+    syncUpdates.fecha_cierre = newConsulta.fecha_cierre
+  }
+  if (newConsulta.fecha_primer_contacto !== oldConsulta.fecha_primer_contacto) {
+    syncUpdates.fecha_primer_contacto = newConsulta.fecha_primer_contacto
+  }
+  
+  // SYNC DIRECTO - Esperar respuesta
+  const syncResult = await syncActualizarLeadDirecto(id, syncUpdates)
+  
+  if (!syncResult.success) {
+    console.error('❌ Error en sync:', syncResult.error)
+    // El cambio local ya se hizo, pero el servidor no lo guardó
+    return { success: false, error: syncResult.error, lead: newConsulta }
+  }
+  
+  console.log('✅ Cambio sincronizado correctamente')
+  return { success: true, lead: newConsulta }
 }
 
 export async function deleteConsulta(id) {

@@ -852,11 +852,37 @@ export default function Dashboard() {
     return matchCarrera && matchEstado && matchTipo && matchSearch
   })
 
-  function handleUpdateEstado(id, nuevoEstado) {
-    store.updateConsulta(id, { estado: nuevoEstado }, user.id)
-    loadData()
-    if (selectedConsulta?.id === id) {
-      setSelectedConsulta(store.getConsultaById(id))
+  async function handleUpdateEstado(id, nuevoEstado) {
+    // Mostrar feedback inmediato
+    setNotification({ type: 'info', message: 'Actualizando estado...' })
+    
+    try {
+      // Usar versión async que espera confirmación de Supabase
+      const result = await store.updateConsultaAsync(id, { estado: nuevoEstado }, user.id)
+      
+      if (!result || !result.success) {
+        setNotification({ type: 'error', message: result?.error || 'Error al cambiar estado' })
+        setTimeout(() => setNotification(null), 4000)
+        return
+      }
+      
+      loadData()
+      if (selectedConsulta?.id === id) {
+        setSelectedConsulta(store.getConsultaById(id))
+      }
+      
+      setNotification({ type: 'success', message: `Estado cambiado a "${nuevoEstado}"` })
+      setTimeout(() => setNotification(null), 2000)
+    } catch (error) {
+      console.error('Error cambiando estado:', error)
+      // Fallback: usar versión síncrona
+      store.updateConsulta(id, { estado: nuevoEstado }, user.id)
+      loadData()
+      if (selectedConsulta?.id === id) {
+        setSelectedConsulta(store.getConsultaById(id))
+      }
+      setNotification({ type: 'warning', message: 'Estado cambiado (sin confirmar servidor)' })
+      setTimeout(() => setNotification(null), 3000)
     }
   }
 
@@ -1482,6 +1508,7 @@ export default function Dashboard() {
       { estado: 'seguimiento', titulo: 'Seguimiento', color: 'border-purple-500', filtro: c => c.estado === 'seguimiento' && !c.matriculado && !c.descartado },
       { estado: 'examen_admision', titulo: 'Examen Adm.', color: 'border-cyan-500', filtro: c => c.estado === 'examen_admision' && !c.matriculado && !c.descartado },
       { estado: 'matriculado', titulo: 'Matriculados', color: 'border-emerald-500', filtro: c => c.matriculado },
+      { estado: 'descartado', titulo: 'Descartados', color: 'border-red-500', filtro: c => c.descartado },
     ]
 
     return (
@@ -2192,39 +2219,69 @@ export default function Dashboard() {
 
           {/* Acciones */}
           <div className="space-y-6">
+            {/* CAMBIAR ESTADO - Sin requerir lock, colores que coinciden con Kanban */}
             {canEdit && !c.matriculado && !c.descartado && (
-              <div className={`bg-white rounded-xl p-6 shadow-sm border ${isMyLock ? 'border-slate-100' : 'border-slate-200 opacity-60'}`}>
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
                 <h3 className="font-semibold text-slate-800 mb-4">Cambiar Estado</h3>
                 <div className="space-y-2">
-                  {Object.values(ESTADOS).filter(e => e.id !== c.estado).map(estado => (
-                    <button key={estado.id}
-                            onClick={() => isMyLock && handleUpdateEstado(c.id, estado.id)}
-                            disabled={!isMyLock}
-                            className={`w-full px-4 py-3 rounded-lg text-left transition-colors ${estado.bg} ${estado.text} ${isMyLock ? 'hover:opacity-80 cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
-                      {estado.label}
+                  {/* Nueva Consulta - Azul */}
+                  {c.estado !== 'nueva' && (
+                    <button 
+                      onClick={() => handleUpdateEstado(c.id, 'nueva')}
+                      className="w-full px-4 py-3 rounded-lg text-left transition-colors bg-blue-500 text-white hover:bg-blue-600 cursor-pointer font-medium">
+                      Nueva Consulta
                     </button>
-                  ))}
+                  )}
+                  {/* Contactado - Ámbar */}
+                  {c.estado !== 'contactado' && (
+                    <button 
+                      onClick={() => handleUpdateEstado(c.id, 'contactado')}
+                      className="w-full px-4 py-3 rounded-lg text-left transition-colors bg-amber-500 text-white hover:bg-amber-600 cursor-pointer font-medium">
+                      Contactado
+                    </button>
+                  )}
+                  {/* Seguimiento - Púrpura */}
+                  {c.estado !== 'seguimiento' && (
+                    <button 
+                      onClick={() => handleUpdateEstado(c.id, 'seguimiento')}
+                      className="w-full px-4 py-3 rounded-lg text-left transition-colors bg-purple-500 text-white hover:bg-purple-600 cursor-pointer font-medium">
+                      En Seguimiento
+                    </button>
+                  )}
+                  {/* Examen Admisión - Cyan */}
+                  {c.estado !== 'examen_admision' && (
+                    <button 
+                      onClick={() => handleUpdateEstado(c.id, 'examen_admision')}
+                      className="w-full px-4 py-3 rounded-lg text-left transition-colors bg-cyan-500 text-white hover:bg-cyan-600 cursor-pointer font-medium">
+                      Examen de Admisión
+                    </button>
+                  )}
+                  {/* Matriculado - Verde */}
+                  <button 
+                    onClick={() => handleUpdateEstado(c.id, 'matriculado')}
+                    className="w-full px-4 py-3 rounded-lg text-left transition-colors bg-emerald-500 text-white hover:bg-emerald-600 cursor-pointer font-medium">
+                    ✓ Matriculado
+                  </button>
+                  {/* Descartado - Rojo */}
+                  <button 
+                    onClick={() => handleUpdateEstado(c.id, 'descartado')}
+                    className="w-full px-4 py-3 rounded-lg text-left transition-colors bg-red-500 text-white hover:bg-red-600 cursor-pointer font-medium">
+                    ✗ Descartado
+                  </button>
                 </div>
-                {!isMyLock && isLocked && (
-                  <p className="text-xs text-amber-600 mt-3 flex items-center gap-1">
-                    <Icon name="Lock" size={12} /> Bloqueado por {lockedByName}
-                  </p>
-                )}
               </div>
             )}
 
             {canEdit && !c.matriculado && !c.descartado && (
-              <div className={`bg-white rounded-xl p-6 shadow-sm border ${isMyLock ? 'border-slate-100' : 'border-slate-200 opacity-60'}`}>
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
                 <h3 className="font-semibold text-slate-800 mb-4">Tipo de Alumno</h3>
                 <div className="flex gap-2">
-                  <button onClick={() => isMyLock && handleTipoAlumnoChange(c.id, 'nuevo')}
-                          disabled={!isMyLock}
-                          className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'nuevo' ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300' : 'bg-slate-100 text-slate-600'} ${isMyLock ? 'hover:bg-slate-200 cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
+                  <button onClick={() => handleTipoAlumnoChange(c.id, 'nuevo')}
+                          className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'nuevo' ? 'bg-blue-500 text-white ring-2 ring-blue-300' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} cursor-pointer`}>
                     Nuevo
                   </button>
-                  <button onClick={() => isMyLock && handleTipoAlumnoChange(c.id, 'antiguo')}
-                          disabled={!isMyLock}
-                          className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'antiguo' ? 'bg-violet-100 text-violet-700 ring-2 ring-violet-300' : 'bg-slate-100 text-slate-600'} ${isMyLock ? 'hover:bg-slate-200 cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
+                  <button onClick={() => handleTipoAlumnoChange(c.id, 'antiguo')}
+                          className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'antiguo' ? 'bg-violet-500 text-white ring-2 ring-violet-300' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} cursor-pointer`}>
                     Antiguo
                   </button>
                 </div>
