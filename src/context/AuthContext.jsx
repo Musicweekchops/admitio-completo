@@ -47,17 +47,21 @@ export function AuthProvider({ children }) {
     uso: { leads: 0, usuarios: 0, formularios: 0 }
   })
   
-  // Ref para evitar race conditions durante signOut
+  // Refs para evitar race conditions
   const isSigningOut = useRef(false)
+  const isLoggingIn = useRef(false)  // Nuevo: evita doble carga en login
+  const currentAuthId = useRef(null) // Nuevo: trackea el auth_id actual
 
   useEffect(() => {
-    // Timeout de seguridad - nunca quedarse en loading más de 8 segundos
+    let mounted = true // Para evitar updates en componente desmontado
+    
+    // Timeout de seguridad - nunca quedarse en loading más de 10 segundos
     const safetyTimeout = setTimeout(() => {
-      if (loading) {
+      if (mounted && loading) {
         console.warn('⚠️ Timeout de carga - forzando fin de loading')
         setLoading(false)
       }
-    }, 8000)
+    }, 10000)
 
     // Limpiar datos viejos de localStorage al iniciar
     const oldData = localStorage.getItem('admitio_data')
@@ -74,36 +78,79 @@ export function AuthProvider({ children }) {
       }
     }
 
-    checkSession()
+    // Solo verificar sesión inicial UNA VEZ
+    if (!currentAuthId.current) {
+      checkSession()
+    } else {
+      setLoading(false)
+    }
 
     let subscription = null
     if (isSupabaseConfigured()) {
       const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
-        console.log('🔔 Auth event:', event, '- isSigningOut:', isSigningOut.current)
+        if (!mounted) return // Componente desmontado
         
-        // Ignorar eventos SIGNED_IN si estamos cerrando sesión
+        console.log('🔔 Auth event:', event, {
+          isSigningOut: isSigningOut.current,
+          isLoggingIn: isLoggingIn.current,
+          hasUser: !!currentAuthId.current
+        })
+        
+        // REGLA 1: Ignorar TODO durante signOut
         if (isSigningOut.current) {
-          console.log('⏸️ Ignorando evento durante signOut')
+          console.log('⏸️ Ignorando evento - signOut en progreso')
           return
         }
         
+        // REGLA 2: Ignorar SIGNED_IN si login está manejándolo
+        if (event === 'SIGNED_IN' && isLoggingIn.current) {
+          console.log('⏸️ Ignorando SIGNED_IN - signIn() lo maneja')
+          return
+        }
+        
+        // REGLA 3: Ignorar si ya tenemos este usuario
+        if (event === 'SIGNED_IN' && session?.user && currentAuthId.current === session.user.id) {
+          console.log('⏸️ Usuario ya cargado:', session.user.id.slice(0, 8))
+          return
+        }
+        
+        // REGLA 4: Solo procesar eventos válidos
         if (event === 'SIGNED_IN' && session?.user) {
-          await loadUserFromAuth(session.user)
+          // Solo cargar si no hay usuario actual (caso de refresh de página)
+          if (!currentAuthId.current) {
+            console.log('📥 onAuthStateChange: Nueva sesión detectada')
+            await loadUserFromAuth(session.user)
+          }
         } else if (event === 'SIGNED_OUT') {
-          console.log('👋 Evento SIGNED_OUT recibido')
-          setUser(null)
-          setInstitucion(null)
+          console.log('👋 SIGNED_OUT recibido')
+          currentAuthId.current = null
+          if (mounted) {
+            setUser(null)
+            setInstitucion(null)
+            setLoading(false)
+          }
           localStorage.removeItem('admitio_user')
           localStorage.removeItem('admitio_data')
-          setLoading(false)
         } else if (event === 'TOKEN_REFRESHED') {
-          console.log('🔄 Token refrescado')
+          console.log('🔄 Token refrescado automáticamente')
+        } else if (event === 'INITIAL_SESSION') {
+          // Solo procesar si no estamos en proceso de login y no hay usuario
+          if (!isLoggingIn.current && !currentAuthId.current) {
+            if (session?.user) {
+              console.log('📥 INITIAL_SESSION: Restaurando sesión...')
+              await loadUserFromAuth(session.user)
+            } else {
+              console.log('ℹ️ INITIAL_SESSION: Sin sesión')
+              if (mounted) setLoading(false)
+            }
+          }
         }
       })
       subscription = data.subscription
     }
 
     return () => {
+      mounted = false
       clearTimeout(safetyTimeout)
       if (subscription) subscription.unsubscribe()
     }
@@ -111,9 +158,15 @@ export function AuthProvider({ children }) {
 
   async function checkSession() {
     try {
-      // No verificar sesión si estamos cerrando sesión
-      if (isSigningOut.current) {
-        console.log('⏸️ Saltando checkSession - signOut en progreso')
+      // No verificar si ya hay un proceso en curso
+      if (isSigningOut.current || isLoggingIn.current) {
+        console.log('⏸️ checkSession saltado - operación en progreso')
+        return
+      }
+      
+      // No verificar si ya tenemos usuario
+      if (currentAuthId.current) {
+        console.log('⏸️ checkSession saltado - usuario ya cargado')
         setLoading(false)
         return
       }
@@ -124,6 +177,8 @@ export function AuthProvider({ children }) {
         return
       }
 
+      console.log('🔍 checkSession: Verificando sesión existente...')
+
       // Timeout para getSession
       const sessionPromise = supabase.auth.getSession()
       const timeoutPromise = new Promise((_, reject) => 
@@ -132,17 +187,18 @@ export function AuthProvider({ children }) {
 
       const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise])
       
-      // Verificar de nuevo por si signOut se llamó mientras esperábamos
-      if (isSigningOut.current) {
-        console.log('⏸️ signOut detectado durante checkSession')
+      // Verificar de nuevo por si algo cambió mientras esperábamos
+      if (isSigningOut.current || isLoggingIn.current || currentAuthId.current) {
+        console.log('⏸️ checkSession cancelado - estado cambió')
         setLoading(false)
         return
       }
       
       if (session?.user) {
+        console.log('✅ checkSession: Sesión encontrada, cargando usuario...')
         await loadUserFromAuth(session.user)
       } else {
-        console.log('ℹ️ No hay sesión activa')
+        console.log('ℹ️ checkSession: No hay sesión activa')
         localStorage.removeItem('admitio_user')
         localStorage.removeItem('admitio_data')
         setLoading(false)
@@ -157,14 +213,23 @@ export function AuthProvider({ children }) {
   }
 
   async function loadUserFromAuth(authUser) {
-    // No cargar usuario si estamos cerrando sesión
+    // GUARD 1: No cargar si estamos cerrando sesión
     if (isSigningOut.current) {
-      console.log('⏸️ Saltando loadUserFromAuth - signOut en progreso')
-      return
+      console.log('⏸️ loadUserFromAuth cancelado - signOut en progreso')
+      return false
+    }
+    
+    // GUARD 2: No cargar si ya tenemos este usuario
+    if (currentAuthId.current === authUser.id) {
+      console.log('⏸️ loadUserFromAuth cancelado - usuario ya cargado:', authUser.id.slice(0, 8))
+      return true // Ya está cargado, considerarlo éxito
     }
     
     try {
-      console.log('🔍 Buscando usuario con auth_id:', authUser.id)
+      console.log('🔍 loadUserFromAuth: Buscando usuario con auth_id:', authUser.id.slice(0, 8))
+      
+      // Marcar este auth_id como "en proceso" para evitar cargas paralelas
+      const processingId = authUser.id
       
       // Primero buscar por auth_id
       let { data: usuario, error } = await supabase
@@ -186,9 +251,9 @@ export function AuthProvider({ children }) {
           .single()
         
         if (errorEmail || !usuarioPorEmail) {
-          console.log('❌ Usuario no encontrado en tabla usuarios por email')
+          console.log('❌ Usuario no encontrado en tabla usuarios')
           setLoading(false)
-          return
+          return false
         }
         
         // Actualizar auth_id si no lo tiene
@@ -202,6 +267,12 @@ export function AuthProvider({ children }) {
         
         usuario = usuarioPorEmail
         console.log('✅ Usuario encontrado por email:', usuario.nombre)
+      }
+      
+      // Verificar que seguimos queriendo cargar este usuario
+      if (isSigningOut.current || (currentAuthId.current && currentAuthId.current !== processingId)) {
+        console.log('⏸️ loadUserFromAuth cancelado - estado cambió durante carga')
+        return false
       }
 
       // Obtener rol con permisos por defecto si no existe
@@ -222,6 +293,9 @@ export function AuthProvider({ children }) {
         permisos: rol.permisos || { editar: true, ver_propios: true, crear_leads: true }
       }
 
+      // Actualizar refs ANTES de setear estado (previene race conditions)
+      currentAuthId.current = authUser.id
+      
       setUser(enrichedUser)
       setInstitucion(usuario.instituciones)
       localStorage.setItem('admitio_user', JSON.stringify(enrichedUser))
@@ -229,8 +303,10 @@ export function AuthProvider({ children }) {
       await loadInstitucionData(usuario.institucion_id)
 
       console.log('✅ Usuario cargado:', enrichedUser.nombre, '- canEdit:', enrichedUser.permisos?.editar)
+      return true
     } catch (error) {
-      console.error('Error cargando usuario:', error)
+      console.error('❌ Error cargando usuario:', error)
+      return false
     } finally {
       setLoading(false)
     }
@@ -242,14 +318,23 @@ export function AuthProvider({ children }) {
       return { success: false, error: 'Sistema no configurado. Contacta al administrador.' }
     }
 
+    // Marcar que estamos en proceso de login
+    isSigningOut.current = false
+    isLoggingIn.current = true
+    setLoading(true) // IMPORTANTE: Poner loading en true durante el proceso
+    
     try {
+      console.log('🔐 signIn: Iniciando...')
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.toLowerCase().trim(),
         password
       })
 
       if (error) {
-        console.error('Error en login:', error)
+        console.error('❌ signIn: Error de autenticación:', error.message)
+        isLoggingIn.current = false
+        setLoading(false)
         if (error.message.includes('Invalid login')) {
           return { success: false, error: 'Credenciales inválidas' }
         }
@@ -261,13 +346,38 @@ export function AuthProvider({ children }) {
 
       if (!data.user.email_confirmed_at) {
         await supabase.auth.signOut()
+        isLoggingIn.current = false
+        setLoading(false)
         return { success: false, error: 'Debes verificar tu email antes de iniciar sesión. Revisa tu bandeja de entrada.' }
       }
 
+      // Cargar usuario y datos de institución
+      console.log('🔄 signIn: Cargando usuario y datos...')
+      const loadResult = await loadUserFromAuth(data.user)
+      
+      if (!loadResult) {
+        console.error('❌ signIn: Falló la carga del usuario')
+        isLoggingIn.current = false
+        setLoading(false)
+        return { success: false, error: 'Error al cargar datos del usuario' }
+      }
+      
+      // Verificar que el usuario está correctamente cargado
+      if (!currentAuthId.current) {
+        console.error('❌ signIn: Usuario no se cargó correctamente')
+        isLoggingIn.current = false
+        setLoading(false)
+        return { success: false, error: 'Error al cargar datos del usuario' }
+      }
+      
+      isLoggingIn.current = false
+      console.log('✅ signIn: Completado exitosamente')
       return { success: true, user: data.user }
 
     } catch (error) {
-      console.error('Error en signIn:', error)
+      console.error('❌ signIn: Error inesperado:', error)
+      isLoggingIn.current = false
+      setLoading(false)
       return { success: false, error: 'Error de conexión' }
     }
   }
@@ -448,10 +558,12 @@ export function AuthProvider({ children }) {
   async function signOut() {
     console.log('🚪 Iniciando cierre de sesión...')
     
-    // 1. Marcar que estamos cerrando sesión (evita race conditions con onAuthStateChange)
+    // 1. Marcar que estamos cerrando sesión
     isSigningOut.current = true
+    isLoggingIn.current = false
+    currentAuthId.current = null
     
-    // 2. Limpiar estado de React PRIMERO
+    // 2. Limpiar estado de React
     setUser(null)
     setInstitucion(null)
     setLoading(false)
@@ -471,15 +583,13 @@ export function AuthProvider({ children }) {
       }
     }
     
-    // 5. Resetear el flag después de un breve delay
-    // Esto permite que cualquier evento residual de Supabase sea ignorado
+    // 5. Resetear el flag después de un delay
     setTimeout(() => {
       isSigningOut.current = false
       console.log('🔓 Flag isSigningOut reseteado')
     }, 1000)
     
     console.log('👋 Sesión cerrada completamente')
-    // La redirección la maneja ProtectedRoute al detectar !isAuthenticated
   }
 
   // ========== RESET PASSWORD ==========
