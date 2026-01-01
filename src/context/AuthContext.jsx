@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react'
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { reloadStore } from '../lib/store'
 
@@ -46,8 +46,19 @@ export function AuthProvider({ children }) {
     limites: PLANES_DEFAULT.free,
     uso: { leads: 0, usuarios: 0, formularios: 0 }
   })
+  
+  // Ref para evitar race conditions durante signOut
+  const isSigningOut = useRef(false)
 
   useEffect(() => {
+    // Timeout de seguridad - nunca quedarse en loading más de 8 segundos
+    const safetyTimeout = setTimeout(() => {
+      if (loading) {
+        console.warn('⚠️ Timeout de carga - forzando fin de loading')
+        setLoading(false)
+      }
+    }, 8000)
+
     // Limpiar datos viejos de localStorage al iniciar
     const oldData = localStorage.getItem('admitio_data')
     if (oldData) {
@@ -65,48 +76,93 @@ export function AuthProvider({ children }) {
 
     checkSession()
 
+    let subscription = null
     if (isSupabaseConfigured()) {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-        console.log('🔔 Auth event:', event)
+      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log('🔔 Auth event:', event, '- isSigningOut:', isSigningOut.current)
+        
+        // Ignorar eventos SIGNED_IN si estamos cerrando sesión
+        if (isSigningOut.current) {
+          console.log('⏸️ Ignorando evento durante signOut')
+          return
+        }
         
         if (event === 'SIGNED_IN' && session?.user) {
           await loadUserFromAuth(session.user)
         } else if (event === 'SIGNED_OUT') {
+          console.log('👋 Evento SIGNED_OUT recibido')
           setUser(null)
           setInstitucion(null)
           localStorage.removeItem('admitio_user')
           localStorage.removeItem('admitio_data')
+          setLoading(false)
+        } else if (event === 'TOKEN_REFRESHED') {
+          console.log('🔄 Token refrescado')
         }
       })
+      subscription = data.subscription
+    }
 
-      return () => subscription.unsubscribe()
+    return () => {
+      clearTimeout(safetyTimeout)
+      if (subscription) subscription.unsubscribe()
     }
   }, [])
 
   async function checkSession() {
     try {
+      // No verificar sesión si estamos cerrando sesión
+      if (isSigningOut.current) {
+        console.log('⏸️ Saltando checkSession - signOut en progreso')
+        setLoading(false)
+        return
+      }
+      
       if (!isSupabaseConfigured()) {
         console.log('⚠️ Supabase no configurado')
         setLoading(false)
         return
       }
 
-      const { data: { session } } = await supabase.auth.getSession()
+      // Timeout para getSession
+      const sessionPromise = supabase.auth.getSession()
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout')), 5000)
+      )
+
+      const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise])
+      
+      // Verificar de nuevo por si signOut se llamó mientras esperábamos
+      if (isSigningOut.current) {
+        console.log('⏸️ signOut detectado durante checkSession')
+        setLoading(false)
+        return
+      }
       
       if (session?.user) {
         await loadUserFromAuth(session.user)
       } else {
+        console.log('ℹ️ No hay sesión activa')
         localStorage.removeItem('admitio_user')
         localStorage.removeItem('admitio_data')
         setLoading(false)
       }
     } catch (error) {
       console.error('Error checking session:', error)
+      // En caso de error, limpiar y permitir login
+      localStorage.removeItem('admitio_user')
+      localStorage.removeItem('admitio_data')
       setLoading(false)
     }
   }
 
   async function loadUserFromAuth(authUser) {
+    // No cargar usuario si estamos cerrando sesión
+    if (isSigningOut.current) {
+      console.log('⏸️ Saltando loadUserFromAuth - signOut en progreso')
+      return
+    }
+    
     try {
       console.log('🔍 Buscando usuario con auth_id:', authUser.id)
       
@@ -390,15 +446,40 @@ export function AuthProvider({ children }) {
 
   // ========== SIGN OUT ==========
   async function signOut() {
-    if (isSupabaseConfigured()) {
-      await supabase.auth.signOut()
-    }
+    console.log('🚪 Iniciando cierre de sesión...')
+    
+    // 1. Marcar que estamos cerrando sesión (evita race conditions con onAuthStateChange)
+    isSigningOut.current = true
+    
+    // 2. Limpiar estado de React PRIMERO
     setUser(null)
     setInstitucion(null)
+    setLoading(false)
+    
+    // 3. Limpiar localStorage
     localStorage.removeItem('admitio_user')
     localStorage.removeItem('admitio_data')
     localStorage.removeItem('admitio_pending_email')
-    console.log('👋 Sesión cerrada')
+    
+    // 4. Cerrar sesión en Supabase
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.auth.signOut()
+        console.log('✅ Sesión cerrada en Supabase')
+      } catch (error) {
+        console.error('Error en signOut de Supabase:', error)
+      }
+    }
+    
+    // 5. Resetear el flag después de un breve delay
+    // Esto permite que cualquier evento residual de Supabase sea ignorado
+    setTimeout(() => {
+      isSigningOut.current = false
+      console.log('🔓 Flag isSigningOut reseteado')
+    }, 1000)
+    
+    console.log('👋 Sesión cerrada completamente')
+    // La redirección la maneja ProtectedRoute al detectar !isAuthenticated
   }
 
   // ========== RESET PASSWORD ==========
@@ -448,37 +529,29 @@ export function AuthProvider({ children }) {
 
   // ========== LOAD INSTITUCION DATA ==========
   async function loadInstitucionData(institucionId) {
+    console.log('📥 Cargando datos de institución:', institucionId)
+    
     try {
-      const { data: leads } = await supabase
-        .from('leads')
-        .select('*')
-        .eq('institucion_id', institucionId)
-        .order('created_at', { ascending: false })
-
-      const { data: usuarios } = await supabase
-        .from('usuarios')
-        .select('*')
-        .eq('institucion_id', institucionId)
-        .eq('activo', true)
-
-      const { data: carreras } = await supabase
-        .from('carreras')
-        .select('*')
-        .eq('institucion_id', institucionId)
-        .eq('activa', true)
-        .order('nombre', { ascending: true })
-
-      const { data: formularios } = await supabase
-        .from('formularios')
-        .select('*')
-        .eq('institucion_id', institucionId)
-        .order('created_at', { ascending: false })
-
-      const { data: acciones } = await supabase
-        .from('acciones_lead')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100)
+      // Cargar datos en paralelo con timeout
+      const timeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout cargando datos')), 10000)
+      )
+      
+      const dataPromise = Promise.all([
+        supabase.from('leads').select('*').eq('institucion_id', institucionId).order('created_at', { ascending: false }),
+        supabase.from('usuarios').select('*').eq('institucion_id', institucionId).eq('activo', true),
+        supabase.from('carreras').select('*').eq('institucion_id', institucionId).eq('activa', true).order('nombre', { ascending: true }),
+        supabase.from('formularios').select('*').eq('institucion_id', institucionId).order('created_at', { ascending: false }),
+        supabase.from('acciones_lead').select('*').order('created_at', { ascending: false }).limit(100)
+      ])
+      
+      const [leadsRes, usuariosRes, carrerasRes, formulariosRes, accionesRes] = await Promise.race([dataPromise, timeout])
+      
+      const leads = leadsRes.data || []
+      const usuarios = usuariosRes.data || []
+      const carreras = carrerasRes.data || []
+      const formularios = formulariosRes.data || []
+      const acciones = accionesRes.data || []
 
       const storeData = {
         consultas: (leads || []).map(lead => ({
