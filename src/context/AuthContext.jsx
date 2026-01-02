@@ -321,7 +321,7 @@ export function AuthProvider({ children }) {
     // Marcar que estamos en proceso de login
     isSigningOut.current = false
     isLoggingIn.current = true
-    setLoading(true) // IMPORTANTE: Poner loading en true durante el proceso
+    // NO llamar setLoading(true) aquí - el componente Login maneja su propio loading
     
     try {
       console.log('🔐 signIn: Iniciando...')
@@ -334,7 +334,6 @@ export function AuthProvider({ children }) {
       if (error) {
         console.error('❌ signIn: Error de autenticación:', error.message)
         isLoggingIn.current = false
-        setLoading(false)
         if (error.message.includes('Invalid login')) {
           return { success: false, error: 'Credenciales inválidas' }
         }
@@ -347,10 +346,12 @@ export function AuthProvider({ children }) {
       if (!data.user.email_confirmed_at) {
         await supabase.auth.signOut()
         isLoggingIn.current = false
-        setLoading(false)
         return { success: false, error: 'Debes verificar tu email antes de iniciar sesión. Revisa tu bandeja de entrada.' }
       }
 
+      // Ahora sí ponemos loading porque vamos a cargar datos
+      setLoading(true)
+      
       // Cargar usuario y datos de institución
       console.log('🔄 signIn: Cargando usuario y datos...')
       const loadResult = await loadUserFromAuth(data.user)
@@ -359,7 +360,7 @@ export function AuthProvider({ children }) {
         console.error('❌ signIn: Falló la carga del usuario')
         isLoggingIn.current = false
         setLoading(false)
-        return { success: false, error: 'Error al cargar datos del usuario' }
+        return { success: false, error: 'Error al cargar datos del usuario. Verifica que tu cuenta esté activa.' }
       }
       
       // Verificar que el usuario está correctamente cargado
@@ -637,6 +638,111 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // ========== INVITE USER (Para KeyMaster) ==========
+  async function inviteUser({ nombre, email, rol, institucionId }) {
+    if (!isSupabaseConfigured()) {
+      return { success: false, error: 'Sistema no configurado' }
+    }
+
+    const emailLower = email.toLowerCase().trim()
+    
+    try {
+      console.log('📨 Invitando usuario:', emailLower)
+      
+      // 1. Verificar que el email no exista ya en la institución
+      const { data: existingUser } = await supabase
+        .from('usuarios')
+        .select('id, email')
+        .eq('email', emailLower)
+        .eq('institucion_id', institucionId)
+        .single()
+      
+      if (existingUser) {
+        return { success: false, error: 'Ya existe un usuario con ese email en tu institución' }
+      }
+
+      // 2. Generar contraseña temporal segura (el usuario la cambiará)
+      const tempPassword = crypto.randomUUID().slice(0, 16) + 'Aa1!'
+      
+      // 3. Crear usuario en Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: emailLower,
+        password: tempPassword,
+        options: {
+          data: {
+            nombre: nombre,
+            rol: rol,
+            institucion_id: institucionId,
+            invited: true
+          },
+          emailRedirectTo: `${window.location.origin}/auth/callback`
+        }
+      })
+
+      if (authError) {
+        console.error('❌ Error creando usuario en Auth:', authError)
+        // Si el usuario ya existe en Auth pero no en nuestra tabla
+        if (authError.message.includes('already registered')) {
+          return { success: false, error: 'Este email ya está registrado en el sistema. El usuario debe usar "Olvidé mi contraseña" para recuperar acceso.' }
+        }
+        return { success: false, error: authError.message }
+      }
+
+      if (!authData.user) {
+        return { success: false, error: 'No se pudo crear el usuario' }
+      }
+
+      console.log('✅ Usuario creado en Auth:', authData.user.id)
+
+      // 4. Crear registro en tabla usuarios
+      const { data: usuarioData, error: usuarioError } = await supabase
+        .from('usuarios')
+        .insert({
+          auth_id: authData.user.id,
+          institucion_id: institucionId,
+          nombre: nombre,
+          email: emailLower,
+          rol: rol,
+          activo: true,
+          invitado_por: user?.id,
+          fecha_invitacion: new Date().toISOString(),
+          password_pendiente: true
+        })
+        .select()
+        .single()
+
+      if (usuarioError) {
+        console.error('❌ Error creando registro de usuario:', usuarioError)
+        // Intentar limpiar el usuario de Auth si falla la tabla
+        // (No siempre es posible sin admin API)
+        return { success: false, error: 'Error al crear el usuario: ' + usuarioError.message }
+      }
+
+      console.log('✅ Usuario creado en tabla usuarios:', usuarioData.id)
+
+      // 5. Enviar email de establecer contraseña
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+        emailLower,
+        { redirectTo: `${window.location.origin}/establecer-password` }
+      )
+
+      if (resetError) {
+        console.warn('⚠️ Usuario creado pero falló envío de email:', resetError)
+        // No fallar, el usuario está creado
+      }
+
+      return { 
+        success: true, 
+        message: `Invitación enviada a ${emailLower}. El usuario recibirá un email para establecer su contraseña.`,
+        usuario: usuarioData
+      }
+
+    } catch (error) {
+      console.error('❌ Error en inviteUser:', error)
+      return { success: false, error: 'Error al invitar usuario: ' + error.message }
+    }
+  }
+
   // ========== LOAD INSTITUCION DATA ==========
   async function loadInstitucionData(institucionId) {
     console.log('📥 Cargando datos de institución:', institucionId)
@@ -857,6 +963,7 @@ export function AuthProvider({ children }) {
       signUp,
       resetPassword,
       resendVerification,
+      inviteUser,
       reloadFromSupabase,
       login,
       logout,

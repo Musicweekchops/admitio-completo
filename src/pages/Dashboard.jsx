@@ -587,7 +587,7 @@ const PieChart = ({ data, size = 200 }) => {
 }
 
 export default function Dashboard() {
-  const { user, institucion, signOut, isKeyMaster, isRector, isEncargado, isAsistente, canViewAll, canEdit, canConfig, canCreateLeads, canReasignar, reloadFromSupabase, planInfo, actualizarUso, puedeCrearLead, puedeCrearUsuario, puedeCrearFormulario } = useAuth()
+  const { user, institucion, signOut, isKeyMaster, isRector, isEncargado, isAsistente, canViewAll, canEdit, canConfig, canCreateLeads, canReasignar, reloadFromSupabase, planInfo, actualizarUso, puedeCrearLead, puedeCrearUsuario, puedeCrearFormulario, inviteUser } = useAuth()
   
   // Nombre dinámico de la institución
   const nombreInstitucion = institucion?.nombre || user?.institucion_nombre || store.getConfig()?.nombre || 'Mi Institución'
@@ -4127,15 +4127,19 @@ export default function Dashboard() {
     const [localShowUserModal, setLocalShowUserModal] = useState(false)
     const [localShowDeleteModal, setLocalShowDeleteModal] = useState(null)
     const [migrateToUser, setMigrateToUser] = useState('')
+    const [inviteLoading, setInviteLoading] = useState(false)
     const [userFormData, setUserFormData] = useState({
       nombre: '',
       email: '',
-      password: '',
       rol_id: 'encargado',
       activo: true
     })
     
-    const refreshUsuarios = () => setUsuarios(store.getUsuarios(user?.id, isSuperAdmin))
+    const refreshUsuarios = async () => {
+      // Recargar desde Supabase para obtener usuarios actualizados
+      await reloadFromSupabase()
+      setUsuarios(store.getUsuarios(user?.id, isSuperAdmin))
+    }
     
     const openNewUser = () => {
       if (!puedeCrearUsuario()) {
@@ -4149,57 +4153,85 @@ export default function Dashboard() {
       setUserFormData({
         nombre: '',
         email: '',
-        password: '',
         rol_id: 'encargado',
         activo: true
       })
       setLocalShowUserModal(true)
     }
     
-    const openEditUser = (user) => {
-      setLocalEditingUser(user)
+    const openEditUser = (targetUser) => {
+      setLocalEditingUser(targetUser)
       setUserFormData({
-        nombre: user.nombre,
-        email: user.email,
-        password: '',
-        rol_id: user.rol_id,
-        activo: user.activo
+        nombre: targetUser.nombre,
+        email: targetUser.email,
+        rol_id: targetUser.rol_id || targetUser.rol,
+        activo: targetUser.activo
       })
       setLocalShowUserModal(true)
     }
     
-    const handleSaveUser = () => {
+    const handleSaveUser = async () => {
       if (!userFormData.nombre || !userFormData.email) {
         alert('Nombre y email son requeridos')
         return
       }
       
+      // Validar email
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(userFormData.email)) {
+        alert('Por favor ingresa un email válido')
+        return
+      }
+      
       if (localEditingUser) {
-        // Actualizar
+        // ========== ACTUALIZAR USUARIO EXISTENTE ==========
         const updates = {
           nombre: userFormData.nombre,
           email: userFormData.email,
           rol_id: userFormData.rol_id,
           activo: userFormData.activo
         }
-        if (userFormData.password) {
-          updates.password = userFormData.password
-        }
         store.updateUsuario(localEditingUser.id, updates)
         setNotification({ type: 'success', message: 'Usuario actualizado' })
+        setLocalShowUserModal(false)
+        refreshUsuarios()
       } else {
-        // Crear
-        if (!userFormData.password) {
-          alert('La contraseña es requerida para nuevos usuarios')
-          return
+        // ========== INVITAR NUEVO USUARIO ==========
+        setInviteLoading(true)
+        
+        try {
+          const result = await inviteUser({
+            nombre: userFormData.nombre,
+            email: userFormData.email,
+            rol: userFormData.rol_id,
+            institucionId: user?.institucion_id || institucion?.id
+          })
+          
+          if (result.success) {
+            setNotification({ 
+              type: 'success', 
+              message: result.message || 'Invitación enviada correctamente'
+            })
+            setLocalShowUserModal(false)
+            await refreshUsuarios()
+          } else {
+            setNotification({ 
+              type: 'error', 
+              message: result.error || 'Error al invitar usuario'
+            })
+          }
+        } catch (error) {
+          console.error('Error invitando usuario:', error)
+          setNotification({ 
+            type: 'error', 
+            message: 'Error al invitar usuario: ' + error.message
+          })
+        } finally {
+          setInviteLoading(false)
         }
-        store.createUsuario(userFormData)
-        setNotification({ type: 'success', message: 'Usuario creado' })
       }
       
-      setLocalShowUserModal(false)
-      refreshUsuarios()
-      setTimeout(() => setNotification(null), 2000)
+      setTimeout(() => setNotification(null), 4000)
     }
     
     const handleToggleActivo = (userId) => {
@@ -4292,7 +4324,7 @@ export default function Dashboard() {
             className="px-4 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 flex items-center gap-2"
           >
             <Icon name="UserPlus" size={20} />
-            Nuevo Usuario
+            Invitar Usuario
           </button>
         </div>
 
@@ -4392,12 +4424,25 @@ export default function Dashboard() {
             <div className="bg-white rounded-2xl p-6 w-full max-w-md">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-xl font-bold text-slate-800">
-                  {localEditingUser ? 'Editar Usuario' : 'Nuevo Usuario'}
+                  {localEditingUser ? 'Editar Usuario' : 'Invitar Usuario'}
                 </h3>
                 <button onClick={() => setLocalShowUserModal(false)} className="p-2 text-red-500 hover:text-white hover:bg-red-500 rounded-lg transition-colors">
                   <Icon name="X" size={24} />
                 </button>
               </div>
+              
+              {/* Mensaje informativo para nuevos usuarios */}
+              {!localEditingUser && (
+                <div className="mb-4 p-3 bg-violet-50 border border-violet-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <Icon name="Mail" className="text-violet-600 mt-0.5" size={18} />
+                    <div className="text-sm text-violet-700">
+                      <p className="font-medium">Se enviará un email de invitación</p>
+                      <p className="text-violet-600">El usuario recibirá un enlace para establecer su contraseña.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
               
               <div className="space-y-4">
                 <div>
@@ -4408,6 +4453,7 @@ export default function Dashboard() {
                     onChange={e => setUserFormData({...userFormData, nombre: e.target.value})}
                     className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                     placeholder="Juan Pérez"
+                    disabled={inviteLoading}
                   />
                 </div>
                 
@@ -4419,20 +4465,11 @@ export default function Dashboard() {
                     onChange={e => setUserFormData({...userFormData, email: e.target.value})}
                     className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                     placeholder="usuario@institucion.com"
+                    disabled={inviteLoading || localEditingUser}
                   />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Contraseña {localEditingUser ? '(dejar vacío para mantener)' : '*'}
-                  </label>
-                  <input
-                    type="password"
-                    value={userFormData.password}
-                    onChange={e => setUserFormData({...userFormData, password: e.target.value})}
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                    placeholder="••••••••"
-                  />
+                  {localEditingUser && (
+                    <p className="text-xs text-slate-400 mt-1">El email no se puede cambiar</p>
+                  )}
                 </div>
                 
                 <div>
@@ -4441,6 +4478,7 @@ export default function Dashboard() {
                     value={userFormData.rol_id}
                     onChange={e => setUserFormData({...userFormData, rol_id: e.target.value})}
                     className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                    disabled={inviteLoading}
                   >
                     {ROLES_DISPONIBLES.map(rol => (
                       <option key={rol.id} value={rol.id}>{rol.nombre}</option>
@@ -4451,32 +4489,48 @@ export default function Dashboard() {
                   </p>
                 </div>
                 
-                <div className="flex items-center gap-3">
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={userFormData.activo}
-                      onChange={e => setUserFormData({...userFormData, activo: e.target.checked})}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-slate-200 peer-focus:ring-2 peer-focus:ring-violet-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>
-                  </label>
-                  <span className="text-sm text-slate-700">Usuario activo</span>
-                </div>
+                {localEditingUser && (
+                  <div className="flex items-center gap-3">
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={userFormData.activo}
+                        onChange={e => setUserFormData({...userFormData, activo: e.target.checked})}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:ring-2 peer-focus:ring-violet-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>
+                    </label>
+                    <span className="text-sm text-slate-700">Usuario activo</span>
+                  </div>
+                )}
               </div>
               
               <div className="flex gap-3 mt-6">
                 <button
                   onClick={() => setLocalShowUserModal(false)}
-                  className="flex-1 px-4 py-2 border border-slate-200 text-slate-600 rounded-lg font-medium hover:bg-slate-50"
+                  disabled={inviteLoading}
+                  className="flex-1 px-4 py-2 border border-slate-200 text-slate-600 rounded-lg font-medium hover:bg-slate-50 disabled:opacity-50"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleSaveUser}
-                  className="flex-1 px-4 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700"
+                  disabled={inviteLoading}
+                  className="flex-1 px-4 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  {localEditingUser ? 'Guardar Cambios' : 'Crear Usuario'}
+                  {inviteLoading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      Enviando...
+                    </>
+                  ) : localEditingUser ? (
+                    'Guardar Cambios'
+                  ) : (
+                    <>
+                      <Icon name="Send" size={18} />
+                      Enviar Invitación
+                    </>
+                  )}
                 </button>
               </div>
             </div>

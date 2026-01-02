@@ -8,6 +8,7 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import CambiarPassword from './pages/CambiarPassword';
+import EstablecerPassword from './pages/EstablecerPassword';
 import AuthCallback from './pages/AuthCallback';
 import Backoffice from './pages/backoffice/Backoffice';
 
@@ -109,6 +110,9 @@ const AppRoutes = () => {
         {/* Cambiar contraseña */}
         <Route path="/cambiar-password" element={<CambiarPassword />} />
         <Route path="/reset-password" element={<CambiarPassword />} />
+        
+        {/* Establecer contraseña (para usuarios invitados) */}
+        <Route path="/establecer-password" element={<EstablecerPassword />} />
 
         {/* Dashboard */}
         <Route
