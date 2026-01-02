@@ -1,7 +1,7 @@
 // ============================================
 // ADMITIO - Página de Auth Callback
 // src/pages/AuthCallback.jsx
-// Maneja tokens en hash fragment (#access_token=...)
+// Maneja PKCE Auth Code Flow (?code=) y Legacy (#access_token=)
 // ============================================
 
 import React, { useEffect, useState } from 'react';
@@ -27,102 +27,159 @@ const AuthCallback = () => {
 
   const procesarCallback = async () => {
     try {
-      // Supabase maneja automáticamente el hash fragment
-      // Solo necesitamos obtener la sesión
-      const { data: { session }, error } = await supabase.auth.getSession();
-
-      if (error) {
-        console.error('Error obteniendo sesión:', error);
-        throw new Error(error.message);
-      }
-
-      // Detectar tipo desde la URL (puede estar en hash o query)
+      const url = new URL(window.location.href);
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
-      const queryParams = new URLSearchParams(window.location.search);
-      
-      const type = hashParams.get('type') || queryParams.get('type');
+      const queryParams = url.searchParams;
+
+      // Detectar errores en URL primero
       const errorCode = hashParams.get('error') || queryParams.get('error');
       const errorDesc = hashParams.get('error_description') || queryParams.get('error_description');
-
-      // Si hay error en la URL
-      if (errorCode) {
-        throw new Error(errorDesc || 'Error en la verificación');
-      }
-
-      // Si no hay sesión
-      if (!session?.user) {
-        // Esperar un momento y reintentar (a veces tarda)
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        const { data: { session: retrySession } } = await supabase.auth.getSession();
-        
-        if (!retrySession?.user) {
-          throw new Error('No se pudo obtener la sesión. El enlace puede haber expirado.');
-        }
-      }
-
-      // Obtener sesión actualizada
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
       
-      if (!currentSession?.user) {
-        throw new Error('No se pudo verificar la sesión');
+      if (errorCode) {
+        throw new Error(errorDesc || `Error: ${errorCode}`);
       }
 
-      const user = currentSession.user;
-      console.log('✅ Usuario verificado:', user.email);
-
-      // Determinar tipo de callback
-      if (type === 'recovery') {
-        setTipo('recovery');
-        setEstado('exito');
-        setMensaje('Ahora puedes cambiar tu contraseña');
+      // ========================================
+      // PKCE AUTH CODE FLOW (Supabase moderno)
+      // ========================================
+      const code = queryParams.get('code');
+      
+      if (code) {
+        console.log('🔐 Auth Code Flow detectado, intercambiando código...');
         
-        setTimeout(() => {
-          navigate('/cambiar-password?type=recovery', { replace: true });
-        }, 2000);
+        const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        
+        if (exchangeError) {
+          console.error('❌ Error intercambiando código:', exchangeError);
+          
+          // Errores específicos
+          if (exchangeError.message.includes('expired')) {
+            throw new Error('El enlace ha expirado. Solicita uno nuevo.');
+          }
+          if (exchangeError.message.includes('already been used')) {
+            throw new Error('Este enlace ya fue utilizado. Si ya verificaste, inicia sesión.');
+          }
+          
+          throw new Error(exchangeError.message);
+        }
+
+        if (!data.session) {
+          throw new Error('No se pudo establecer la sesión');
+        }
+
+        console.log('✅ Código intercambiado exitosamente');
+        
+        // Limpiar URL (remover ?code=)
+        window.history.replaceState(null, '', window.location.pathname);
+        
+        // Continuar con el flujo normal
+        await procesarSesion(data.session, queryParams.get('type'));
         return;
       }
 
-      if (type === 'invite') {
-        setTipo('invite');
-        setEstado('exito');
-        setMensaje('Invitación aceptada. Configura tu contraseña.');
+      // ========================================
+      // LEGACY IMPLICIT FLOW (#access_token=)
+      // ========================================
+      const accessToken = hashParams.get('access_token');
+      
+      if (accessToken) {
+        console.log('🔐 Implicit Flow detectado (legacy)');
         
-        setTimeout(() => {
-          navigate('/cambiar-password?type=recovery', { replace: true });
-        }, 2000);
+        // Supabase JS debería haberlo procesado automáticamente
+        // Solo esperamos un momento y obtenemos la sesión
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error || !session) {
+          throw new Error('No se pudo obtener la sesión del token');
+        }
+        
+        // Limpiar hash de la URL
+        window.history.replaceState(null, '', window.location.pathname);
+        
+        await procesarSesion(session, hashParams.get('type'));
         return;
       }
 
-      // Signup o email verification
-      setTipo('signup');
+      // ========================================
+      // SIN CÓDIGO NI TOKEN - Verificar sesión existente
+      // ========================================
+      console.log('⚠️ No se detectó code ni token, verificando sesión existente...');
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        console.log('✅ Sesión existente encontrada');
+        await procesarSesion(session, queryParams.get('type') || hashParams.get('type'));
+        return;
+      }
 
-      // Actualizar email_verificado en nuestra tabla usuarios
+      // No hay nada que procesar
+      throw new Error('No se encontró información de autenticación en el enlace');
+
+    } catch (error) {
+      console.error('❌ Error en callback:', error);
+      setEstado('error');
+      setMensaje(error.message || 'Error al verificar tu cuenta');
+    }
+  };
+
+  // Procesar sesión una vez obtenida
+  const procesarSesion = async (session, type) => {
+    const user = session.user;
+    console.log('👤 Procesando sesión para:', user.email);
+
+    // Determinar tipo de callback
+    if (type === 'recovery') {
+      setTipo('recovery');
+      setEstado('exito');
+      setMensaje('Ahora puedes cambiar tu contraseña');
+      
+      setTimeout(() => {
+        navigate('/cambiar-password?type=recovery', { replace: true });
+      }, 2000);
+      return;
+    }
+
+    if (type === 'invite') {
+      setTipo('invite');
+      setEstado('exito');
+      setMensaje('Invitación aceptada. Configura tu contraseña.');
+      
+      setTimeout(() => {
+        navigate('/establecer-password', { replace: true });
+      }, 2000);
+      return;
+    }
+
+    // Signup o email verification
+    setTipo('signup');
+
+    // Actualizar email_verificado en nuestra tabla usuarios
+    try {
       const { error: updateError } = await supabase
         .from('usuarios')
         .update({ email_verificado: true })
         .eq('auth_id', user.id);
 
       if (updateError) {
-        console.warn('No se pudo actualizar email_verificado:', updateError);
+        console.warn('⚠️ No se pudo actualizar email_verificado:', updateError);
         // No es crítico, continuamos
+      } else {
+        console.log('✅ email_verificado actualizado');
       }
-
-      setEstado('exito');
-      setMensaje('¡Tu cuenta ha sido verificada correctamente!');
-
-      // Limpiar el hash de la URL
-      window.history.replaceState(null, '', window.location.pathname);
-
-      // Redirigir al dashboard
-      setTimeout(() => {
-        navigate('/dashboard', { replace: true });
-      }, 2000);
-
-    } catch (error) {
-      console.error('Error en callback:', error);
-      setEstado('error');
-      setMensaje(error.message || 'Error al verificar tu cuenta');
+    } catch (err) {
+      console.warn('⚠️ Error actualizando usuario:', err);
     }
+
+    setEstado('exito');
+    setMensaje('¡Tu cuenta ha sido verificada correctamente!');
+
+    // Redirigir al dashboard
+    setTimeout(() => {
+      navigate('/dashboard', { replace: true });
+    }, 2000);
   };
 
   const handleIrALogin = () => {
@@ -148,7 +205,7 @@ const AuthCallback = () => {
         alert('Error al reenviar: ' + err.message);
       }
     } else {
-      navigate('/login', { replace: true });
+      navigate('/signup', { replace: true });
     }
   };
 
@@ -183,7 +240,9 @@ const AuthCallback = () => {
               <CheckCircle className="w-8 h-8 text-green-600" />
             </div>
             <h2 className="text-xl font-bold text-gray-900 mb-2">
-              {tipo === 'recovery' ? '¡Listo!' : '¡Cuenta verificada!'}
+              {tipo === 'recovery' ? '¡Listo!' : 
+               tipo === 'invite' ? '¡Bienvenido!' : 
+               '¡Cuenta verificada!'}
             </h2>
             <p className="text-gray-600 mb-6">{mensaje}</p>
             
