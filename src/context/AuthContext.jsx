@@ -496,8 +496,36 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'Este correo electrónico ya está registrado' }
       }
 
-      // ========== PASO 1: CREAR INSTITUCIÓN PRIMERO ==========
-      // La creamos antes del auth.user para tener el ID disponible
+      // ========== PASO 1: CREAR EN SUPABASE AUTH ==========
+      // Esto envía el email de verificación automáticamente vía SMTP (Resend)
+      console.log('📝 Creando usuario en Auth...')
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: emailNormalizado,
+        password,
+        options: {
+          data: {
+            nombre: nombreUsuario,
+            institucion: nombreInst
+          },
+          emailRedirectTo: `${window.location.origin}/auth/callback`
+        }
+      })
+
+      if (authError) {
+        console.error('Error creando auth user:', authError)
+        if (authError.message.includes('already registered')) {
+          return { success: false, error: 'Este correo electrónico ya está registrado' }
+        }
+        return { success: false, error: authError.message }
+      }
+
+      if (!authData.user) {
+        return { success: false, error: 'Error al crear usuario' }
+      }
+
+      console.log('✅ Usuario creado en Auth, ID:', authData.user.id)
+
+      // ========== PASO 2: CREAR INSTITUCIÓN ==========
       console.log('🏢 Creando institución...')
       const { data: nuevaInst, error: instError } = await supabase
         .from('instituciones')
@@ -517,55 +545,43 @@ export function AuthProvider({ children }) {
 
       if (instError) {
         console.error('Error creando institución:', instError)
-        return { success: false, error: 'Error al crear la institución. Por favor contacta soporte.' }
+        // No hacemos rollback del auth.user porque ya se envió el email
+        return { success: false, error: 'Error al crear la institución. Contacta soporte.' }
       }
 
-      // ========== PASO 2: CREAR EN SUPABASE AUTH ==========
-      // Guardamos todos los datos necesarios en metadata para crear el usuario después de verificar
-      console.log('📝 Creando usuario en Auth...')
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: emailNormalizado,
-        password,
-        options: {
-          data: {
-            nombre: nombreUsuario,
-            institucion_id: nuevaInst.id,
-            institucion_nombre: nombreInst,
-            rol: 'keymaster'
-          },
-          emailRedirectTo: `${window.location.origin}/auth/callback`
-        }
-      })
+      console.log('✅ Institución creada:', nuevaInst.id)
 
-      if (authError) {
-        console.error('Error creando auth user:', authError)
-        // Rollback: eliminar la institución creada
+      // ========== PASO 3: CREAR USUARIO EN TABLA ==========
+      // NOTA: La FK hacia auth.users debe estar eliminada para evitar timing issues
+      console.log('👤 Creando usuario en tabla...')
+      const { error: userError } = await supabase
+        .from('usuarios')
+        .insert({
+          institucion_id: nuevaInst.id,
+          auth_id: authData.user.id,
+          email: emailNormalizado,
+          nombre: nombreUsuario,
+          rol: 'keymaster',
+          activo: true,
+          email_verificado: false
+        })
+
+      if (userError) {
+        console.error('Error creando usuario en tabla:', userError)
+        // Rollback: eliminar institución
         await supabase.from('instituciones').delete().eq('id', nuevaInst.id)
-        
-        if (authError.message.includes('already registered')) {
-          return { success: false, error: 'Este correo electrónico ya está registrado' }
-        }
-        return { success: false, error: authError.message }
+        return { success: false, error: 'Error al crear el usuario. Intenta de nuevo.' }
       }
 
-      if (!authData.user) {
-        // Rollback: eliminar la institución creada
-        await supabase.from('instituciones').delete().eq('id', nuevaInst.id)
-        return { success: false, error: 'Error al crear usuario' }
-      }
-
-      // ========== NO CREAMOS EN TABLA USUARIOS AQUÍ ==========
-      // El registro en tabla 'usuarios' se creará en AuthCallback después de verificar email
-      // Esto evita problemas de FK y mantiene la BD limpia (solo usuarios verificados)
+      console.log('✅ Usuario creado en tabla usuarios')
 
       localStorage.setItem('admitio_pending_email', emailNormalizado)
-      localStorage.setItem('admitio_pending_institucion_id', nuevaInst.id)
 
-      console.log('✅ Signup iniciado:', {
+      console.log('✅ Signup completo:', {
         institucion: nuevaInst.nombre,
         institucion_id: nuevaInst.id,
-        email: emailNormalizado,
-        pendiente: 'verificación de email'
+        auth_id: authData.user.id,
+        email: emailNormalizado
       })
 
       return { 
