@@ -231,10 +231,10 @@ export function AuthProvider({ children }) {
       // Marcar este auth_id como "en proceso" para evitar cargas paralelas
       const processingId = authUser.id
       
-      // Primero buscar por auth_id
+      // Buscar usuario SIN JOIN (evita problemas de RLS)
       let { data: usuario, error } = await supabase
         .from('usuarios')
-        .select('*, instituciones(id, nombre, tipo, pais, ciudad, region, sitio_web, plan)')
+        .select('*')
         .eq('auth_id', authUser.id)
         .eq('activo', true)
         .single()
@@ -245,7 +245,7 @@ export function AuthProvider({ children }) {
         
         const { data: usuarioPorEmail, error: errorEmail } = await supabase
           .from('usuarios')
-          .select('*, instituciones(id, nombre, tipo, pais, ciudad, region, sitio_web, plan)')
+          .select('*')
           .eq('email', authUser.email.toLowerCase())
           .eq('activo', true)
           .single()
@@ -258,7 +258,7 @@ export function AuthProvider({ children }) {
         
         // Actualizar auth_id si no lo tiene
         if (!usuarioPorEmail.auth_id) {
-          console.log('📝 Actualizando auth_id del usuario...')
+          console.log('🔗 Vinculando auth_id al usuario existente...')
           await supabase
             .from('usuarios')
             .update({ auth_id: authUser.id })
@@ -266,19 +266,29 @@ export function AuthProvider({ children }) {
         }
         
         usuario = usuarioPorEmail
-        console.log('✅ Usuario encontrado por email:', usuario.nombre)
       }
-      
+
       // Verificar que seguimos queriendo cargar este usuario
       if (isSigningOut.current || (currentAuthId.current && currentAuthId.current !== processingId)) {
         console.log('⏸️ loadUserFromAuth cancelado - estado cambió durante carga')
         return false
       }
 
-      // Obtener rol con permisos por defecto si no existe
-      const rol = ROLES[usuario.rol] || ROLES.encargado
-      console.log('👤 Rol:', usuario.rol, '- Permisos:', rol.permisos)
+      // Cargar institución por separado (más robusto)
+      let institucionData = null
+      if (usuario.institucion_id) {
+        const { data: inst } = await supabase
+          .from('instituciones')
+          .select('id, nombre, tipo, pais, ciudad, region, sitio_web, plan')
+          .eq('id', usuario.institucion_id)
+          .single()
+        
+        institucionData = inst
+      }
 
+      console.log('👤 Rol:', usuario.rol, '- Permisos:', ROLES[usuario.rol]?.permisos || {})
+
+      // Crear usuario enriquecido
       const enrichedUser = {
         id: usuario.id,
         auth_id: authUser.id,
@@ -287,28 +297,28 @@ export function AuthProvider({ children }) {
         rol_id: usuario.rol,
         activo: true,
         institucion_id: usuario.institucion_id,
-        institucion_nombre: usuario.instituciones?.nombre || 'Mi Institución',
-        email_verificado: authUser.email_confirmed_at != null,
-        rol: rol,
-        permisos: rol.permisos || { editar: true, ver_propios: true, crear_leads: true }
+        institucion_nombre: institucionData?.nombre || 'Mi Institución',
+        rol: ROLES[usuario.rol] || ROLES.encargado,
+        permisos: ROLES[usuario.rol]?.permisos || {}
       }
 
-      // Actualizar refs ANTES de setear estado (previene race conditions)
+      // Actualizar refs ANTES de setear estado
       currentAuthId.current = authUser.id
-      
+
       setUser(enrichedUser)
-      setInstitucion(usuario.instituciones)
+      setInstitucion(institucionData)
       localStorage.setItem('admitio_user', JSON.stringify(enrichedUser))
 
+      // Cargar datos de la institución
       await loadInstitucionData(usuario.institucion_id)
 
-      console.log('✅ Usuario cargado:', enrichedUser.nombre, '- canEdit:', enrichedUser.permisos?.editar)
+      console.log('✅ Usuario cargado:', enrichedUser.nombre)
       return true
+
     } catch (error) {
       console.error('❌ Error cargando usuario:', error)
-      return false
-    } finally {
       setLoading(false)
+      return false
     }
   }
 
@@ -434,39 +444,60 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'La contraseña debe tener al menos 6 caracteres' }
       }
 
-      // Verificar si la institución ya existe
-      const { data: instExistePorCodigo } = await supabase
-        .from('instituciones')
-        .select('id, nombre')
-        .eq('codigo', nombreInst)
-        .maybeSingle()
-
-      if (instExistePorCodigo) {
-        return { success: false, error: `Ya existe una institución llamada "${instExistePorCodigo.nombre}"` }
+      // Generar código único para la institución
+      const generarCodigo = (nombre) => {
+        return nombre
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '') // Remover acentos
+          .replace(/[^a-z0-9\s]/g, '') // Solo alfanuméricos
+          .replace(/\s+/g, '-') // Espacios a guiones
+          .substring(0, 50) // Limitar largo
       }
+      
+      const codigoBase = generarCodigo(nombreInst)
+      const codigoUnico = `${codigoBase}-${Date.now().toString(36)}`
 
-      const { data: instExistePorNombre } = await supabase
+      // Verificar si la institución ya existe por nombre exacto o similar
+      console.log('🔍 Verificando si existe institución:', nombreInst)
+      
+      // Búsqueda por nombre exacto (case-insensitive)
+      const { data: instExacta, error: errorExacta } = await supabase
         .from('instituciones')
         .select('id, nombre')
         .ilike('nombre', nombreInst)
-        .maybeSingle()
+        .limit(1)
 
-      if (instExistePorNombre) {
-        return { success: false, error: `Ya existe una institución con un nombre similar: "${instExistePorNombre.nombre}"` }
+      if (!errorExacta && instExacta && instExacta.length > 0) {
+        return { success: false, error: `Ya existe una institución llamada "${instExacta[0].nombre}"` }
       }
 
-      // Verificar si el email ya existe
-      const { data: emailExisteEnUsuarios } = await supabase
+      // Búsqueda por nombre similar (contiene)
+      const { data: instSimilar, error: errorSimilar } = await supabase
+        .from('instituciones')
+        .select('id, nombre')
+        .ilike('nombre', `%${nombreInst}%`)
+        .limit(1)
+
+      if (!errorSimilar && instSimilar && instSimilar.length > 0) {
+        return { success: false, error: `Ya existe una institución con un nombre similar: "${instSimilar[0].nombre}"` }
+      }
+
+      // Verificar si el email ya existe en usuarios
+      console.log('🔍 Verificando si existe email:', emailNormalizado)
+      
+      const { data: emailExiste, error: errorEmail } = await supabase
         .from('usuarios')
         .select('id')
         .eq('email', emailNormalizado)
-        .maybeSingle()
+        .limit(1)
 
-      if (emailExisteEnUsuarios) {
+      if (!errorEmail && emailExiste && emailExiste.length > 0) {
         return { success: false, error: 'Este correo electrónico ya está registrado' }
       }
 
       // ========== CREAR EN SUPABASE AUTH ==========
+      console.log('📝 Creando usuario en Auth...')
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: emailNormalizado,
         password,
@@ -492,11 +523,12 @@ export function AuthProvider({ children }) {
       }
 
       // ========== CREAR INSTITUCIÓN CON TODOS LOS CAMPOS ==========
+      console.log('🏢 Creando institución...')
       const { data: nuevaInst, error: instError } = await supabase
         .from('instituciones')
         .insert({ 
           nombre: nombreInst, 
-          codigo: nombreInst,
+          codigo: codigoUnico,
           tipo: tipo,
           pais: pais,
           ciudad: ciudad.trim(),
