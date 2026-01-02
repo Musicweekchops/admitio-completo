@@ -3,11 +3,65 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Icon from '../components/Icon'
 
+// Tipos de institución disponibles
+const TIPOS_INSTITUCION = [
+  { id: 'universidad', nombre: 'Universidad' },
+  { id: 'instituto', nombre: 'Instituto Profesional' },
+  { id: 'cft', nombre: 'Centro de Formación Técnica' },
+  { id: 'colegio', nombre: 'Colegio' },
+  { id: 'preuniversitario', nombre: 'Preuniversitario' },
+  { id: 'academia', nombre: 'Academia / Escuela' },
+  { id: 'otro', nombre: 'Otro' }
+]
+
+// Países disponibles
+const PAISES = [
+  { id: 'CL', nombre: 'Chile' },
+  { id: 'AR', nombre: 'Argentina' },
+  { id: 'PE', nombre: 'Perú' },
+  { id: 'CO', nombre: 'Colombia' },
+  { id: 'MX', nombre: 'México' },
+  { id: 'EC', nombre: 'Ecuador' },
+  { id: 'BO', nombre: 'Bolivia' },
+  { id: 'UY', nombre: 'Uruguay' },
+  { id: 'PY', nombre: 'Paraguay' },
+  { id: 'VE', nombre: 'Venezuela' },
+  { id: 'BR', nombre: 'Brasil' },
+  { id: 'ES', nombre: 'España' },
+  { id: 'US', nombre: 'Estados Unidos' },
+  { id: 'OTRO', nombre: 'Otro' }
+]
+
+// Regiones de Chile
+const REGIONES_CHILE = [
+  'Arica y Parinacota',
+  'Tarapacá',
+  'Antofagasta',
+  'Atacama',
+  'Coquimbo',
+  'Valparaíso',
+  'Metropolitana',
+  'O\'Higgins',
+  'Maule',
+  'Ñuble',
+  'Biobío',
+  'La Araucanía',
+  'Los Ríos',
+  'Los Lagos',
+  'Aysén',
+  'Magallanes'
+]
+
 const Signup = () => {
   const [step, setStep] = useState(1)
   const [formData, setFormData] = useState({
     // Institución
     institucion: '',
+    tipo: '',
+    pais: 'CL',
+    ciudad: '',
+    region: '',
+    sitioWeb: '',
     // Usuario
     nombre: '',
     email: '',
@@ -20,30 +74,64 @@ const Signup = () => {
   const { signup } = useAuth()
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value })
+    const { name, value } = e.target
+    setFormData(prev => ({ ...prev, [name]: value }))
+    
+    // Limpiar región si cambia el país
+    if (name === 'pais' && value !== 'CL') {
+      setFormData(prev => ({ ...prev, region: '' }))
+    }
   }
 
   const handleNextStep = (e) => {
     e.preventDefault()
-    if (!formData.institucion.trim()) {
-      setError('Ingresa el nombre de tu institución')
+    setError('')
+    
+    // Validaciones paso 1
+    if (!formData.institucion.trim() || formData.institucion.trim().length < 3) {
+      setError('El nombre de la institución debe tener al menos 3 caracteres')
       return
     }
-    setError('')
+    if (!formData.tipo) {
+      setError('Selecciona el tipo de institución')
+      return
+    }
+    if (!formData.pais) {
+      setError('Selecciona el país')
+      return
+    }
+    if (!formData.ciudad.trim() || formData.ciudad.trim().length < 2) {
+      setError('Ingresa la ciudad')
+      return
+    }
+    
     setStep(2)
+  }
+
+  const handlePrevStep = () => {
+    setError('')
+    setStep(1)
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
 
-    // Validaciones
-    if (formData.password !== formData.confirmPassword) {
-      setError('Las contraseñas no coinciden')
+    // Validaciones paso 2
+    if (!formData.nombre.trim() || formData.nombre.trim().length < 2) {
+      setError('El nombre debe tener al menos 2 caracteres')
+      return
+    }
+    if (!formData.email.includes('@')) {
+      setError('Ingresa un email válido')
       return
     }
     if (formData.password.length < 6) {
       setError('La contraseña debe tener al menos 6 caracteres')
+      return
+    }
+    if (formData.password !== formData.confirmPassword) {
+      setError('Las contraseñas no coinciden')
       return
     }
 
@@ -52,17 +140,28 @@ const Signup = () => {
     try {
       const result = await signup({
         institucion: formData.institucion,
+        tipo: formData.tipo,
+        pais: formData.pais,
+        ciudad: formData.ciudad,
+        region: formData.region,
+        sitioWeb: formData.sitioWeb,
         nombre: formData.nombre,
         email: formData.email,
         password: formData.password
       })
 
       if (result.success) {
-        navigate('/app')
+        if (result.requiresVerification) {
+          // Redirigir a página de verificación pendiente
+          navigate('/verificar-email', { state: { email: formData.email } })
+        } else {
+          navigate('/dashboard')
+        }
       } else {
         setError(result.error || 'Error al crear la cuenta')
       }
     } catch (err) {
+      console.error('Error en signup:', err)
       setError('Error de conexión. Intenta nuevamente.')
     } finally {
       setLoading(false)
@@ -141,10 +240,10 @@ const Signup = () => {
 
           <div className="text-center mb-8">
             <h2 className="font-display text-2xl font-bold text-slate-800 mb-2">
-              {step === 1 ? 'Crea tu cuenta gratis' : 'Datos del administrador'}
+              {step === 1 ? 'Datos de tu institución' : 'Crea tu cuenta'}
             </h2>
             <p className="text-slate-500">
-              {step === 1 ? 'Empieza con el nombre de tu institución' : 'Serás el Key Master de tu institución'}
+              {step === 1 ? 'Cuéntanos sobre tu institución educativa' : 'Serás el administrador principal (Key Master)'}
             </p>
           </div>
 
@@ -157,10 +256,10 @@ const Signup = () => {
 
           {/* Step 1: Institution */}
           {step === 1 && (
-            <form onSubmit={handleNextStep} className="space-y-5">
+            <form onSubmit={handleNextStep} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Nombre de la institución
+                  Nombre de la institución *
                 </label>
                 <div className="relative">
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
@@ -177,12 +276,107 @@ const Signup = () => {
                     autoFocus
                   />
                 </div>
-                <p className="mt-2 text-xs text-slate-500">
-                  Este será el nombre que verán tus usuarios
-                </p>
               </div>
 
-              <button type="submit" className="btn btn-primary w-full justify-center py-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Tipo de institución *
+                </label>
+                <div className="relative">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                    <Icon name="GraduationCap" size={20} />
+                  </div>
+                  <select
+                    name="tipo"
+                    value={formData.tipo}
+                    onChange={handleChange}
+                    className="form-input pl-12 appearance-none"
+                    required
+                  >
+                    <option value="">Selecciona el tipo</option>
+                    {TIPOS_INSTITUCION.map(tipo => (
+                      <option key={tipo.id} value={tipo.id}>{tipo.nombre}</option>
+                    ))}
+                  </select>
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                    <Icon name="ChevronDown" size={20} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    País *
+                  </label>
+                  <select
+                    name="pais"
+                    value={formData.pais}
+                    onChange={handleChange}
+                    className="form-input appearance-none"
+                    required
+                  >
+                    {PAISES.map(pais => (
+                      <option key={pais.id} value={pais.id}>{pais.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Ciudad *
+                  </label>
+                  <input
+                    type="text"
+                    name="ciudad"
+                    value={formData.ciudad}
+                    onChange={handleChange}
+                    className="form-input"
+                    placeholder="Ej: Santiago"
+                    required
+                  />
+                </div>
+              </div>
+
+              {formData.pais === 'CL' && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Región
+                  </label>
+                  <select
+                    name="region"
+                    value={formData.region}
+                    onChange={handleChange}
+                    className="form-input appearance-none"
+                  >
+                    <option value="">Selecciona la región</option>
+                    {REGIONES_CHILE.map(region => (
+                      <option key={region} value={region}>{region}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Sitio web (opcional)
+                </label>
+                <div className="relative">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                    <Icon name="Globe" size={20} />
+                  </div>
+                  <input
+                    type="url"
+                    name="sitioWeb"
+                    value={formData.sitioWeb}
+                    onChange={handleChange}
+                    className="form-input pl-12"
+                    placeholder="https://www.tuinstitucion.cl"
+                  />
+                </div>
+              </div>
+
+              <button type="submit" className="btn btn-primary w-full justify-center py-4 mt-6">
                 Continuar
                 <Icon name="ArrowRight" size={20} />
               </button>
@@ -191,10 +385,10 @@ const Signup = () => {
 
           {/* Step 2: User details */}
           {step === 2 && (
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Tu nombre completo
+                  Tu nombre completo *
                 </label>
                 <div className="relative">
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
@@ -215,7 +409,7 @@ const Signup = () => {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Correo electrónico
+                  Correo electrónico *
                 </label>
                 <div className="relative">
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
@@ -235,7 +429,7 @@ const Signup = () => {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Contraseña
+                  Contraseña *
                 </label>
                 <div className="relative">
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
@@ -255,7 +449,7 @@ const Signup = () => {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Confirmar contraseña
+                  Confirmar contraseña *
                 </label>
                 <div className="relative">
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
@@ -273,10 +467,10 @@ const Signup = () => {
                 </div>
               </div>
 
-              <div className="flex gap-3">
+              <div className="flex gap-3 mt-6">
                 <button 
                   type="button" 
-                  onClick={() => setStep(1)}
+                  onClick={handlePrevStep}
                   className="btn btn-secondary flex-1 justify-center"
                 >
                   <Icon name="ArrowLeft" size={18} />
@@ -301,7 +495,7 @@ const Signup = () => {
                 </button>
               </div>
 
-              <p className="text-xs text-slate-500 text-center">
+              <p className="text-xs text-slate-500 text-center mt-4">
                 Al crear tu cuenta, aceptas nuestros{' '}
                 <a href="#" className="text-violet-600 hover:underline">Términos de Servicio</a>
                 {' '}y{' '}
