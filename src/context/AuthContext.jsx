@@ -496,33 +496,8 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'Este correo electrónico ya está registrado' }
       }
 
-      // ========== CREAR EN SUPABASE AUTH ==========
-      console.log('📝 Creando usuario en Auth...')
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: emailNormalizado,
-        password,
-        options: {
-          data: {
-            nombre: nombreUsuario,
-            institucion: nombreInst
-          },
-          emailRedirectTo: `${window.location.origin}/auth/callback`
-        }
-      })
-
-      if (authError) {
-        console.error('Error creando auth user:', authError)
-        if (authError.message.includes('already registered')) {
-          return { success: false, error: 'Este correo electrónico ya está registrado' }
-        }
-        return { success: false, error: authError.message }
-      }
-
-      if (!authData.user) {
-        return { success: false, error: 'Error al crear usuario' }
-      }
-
-      // ========== CREAR INSTITUCIÓN CON TODOS LOS CAMPOS ==========
+      // ========== PASO 1: CREAR INSTITUCIÓN PRIMERO ==========
+      // La creamos antes del auth.user para tener el ID disponible
       console.log('🏢 Creando institución...')
       const { data: nuevaInst, error: instError } = await supabase
         .from('instituciones')
@@ -545,33 +520,52 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'Error al crear la institución. Por favor contacta soporte.' }
       }
 
-      // ========== CREAR USUARIO ==========
-      const { error: userError } = await supabase
-        .from('usuarios')
-        .insert({
-          institucion_id: nuevaInst.id,
-          auth_id: authData.user.id,
-          email: emailNormalizado,
-          nombre: nombreUsuario,
-          rol: 'keymaster',
-          activo: true,
-          email_verificado: false
-        })
+      // ========== PASO 2: CREAR EN SUPABASE AUTH ==========
+      // Guardamos todos los datos necesarios en metadata para crear el usuario después de verificar
+      console.log('📝 Creando usuario en Auth...')
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: emailNormalizado,
+        password,
+        options: {
+          data: {
+            nombre: nombreUsuario,
+            institucion_id: nuevaInst.id,
+            institucion_nombre: nombreInst,
+            rol: 'keymaster'
+          },
+          emailRedirectTo: `${window.location.origin}/auth/callback`
+        }
+      })
 
-      if (userError) {
-        console.error('Error creando usuario:', userError)
+      if (authError) {
+        console.error('Error creando auth user:', authError)
+        // Rollback: eliminar la institución creada
         await supabase.from('instituciones').delete().eq('id', nuevaInst.id)
-        return { success: false, error: 'Error al crear el usuario. Por favor intenta de nuevo.' }
+        
+        if (authError.message.includes('already registered')) {
+          return { success: false, error: 'Este correo electrónico ya está registrado' }
+        }
+        return { success: false, error: authError.message }
       }
 
-      localStorage.setItem('admitio_pending_email', emailNormalizado)
+      if (!authData.user) {
+        // Rollback: eliminar la institución creada
+        await supabase.from('instituciones').delete().eq('id', nuevaInst.id)
+        return { success: false, error: 'Error al crear usuario' }
+      }
 
-      console.log('✅ Cuenta creada:', {
+      // ========== NO CREAMOS EN TABLA USUARIOS AQUÍ ==========
+      // El registro en tabla 'usuarios' se creará en AuthCallback después de verificar email
+      // Esto evita problemas de FK y mantiene la BD limpia (solo usuarios verificados)
+
+      localStorage.setItem('admitio_pending_email', emailNormalizado)
+      localStorage.setItem('admitio_pending_institucion_id', nuevaInst.id)
+
+      console.log('✅ Signup iniciado:', {
         institucion: nuevaInst.nombre,
-        tipo: tipo,
-        pais: pais,
-        ciudad: ciudad,
-        email: emailNormalizado
+        institucion_id: nuevaInst.id,
+        email: emailNormalizado,
+        pendiente: 'verificación de email'
       })
 
       return { 

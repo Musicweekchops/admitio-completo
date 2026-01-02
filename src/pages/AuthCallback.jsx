@@ -153,24 +153,66 @@ const AuthCallback = () => {
       return;
     }
 
-    // Signup o email verification
+    // ========== VERIFICACIÓN DE SIGNUP ==========
     setTipo('signup');
 
-    // Actualizar email_verificado en nuestra tabla usuarios
-    try {
-      const { error: updateError } = await supabase
+    // Verificar si el usuario ya existe en tabla usuarios
+    const { data: usuarioExistente, error: errorBusqueda } = await supabase
+      .from('usuarios')
+      .select('id')
+      .eq('auth_id', user.id)
+      .single();
+
+    // Si no existe, crearlo usando metadata del auth.user
+    if (errorBusqueda || !usuarioExistente) {
+      console.log('📝 Usuario no existe en tabla, creando...');
+      
+      // Obtener datos de metadata
+      const metadata = user.user_metadata || {};
+      const nombre = metadata.nombre || user.email.split('@')[0];
+      const institucionId = metadata.institucion_id || localStorage.getItem('admitio_pending_institucion_id');
+      const rol = metadata.rol || 'keymaster';
+
+      if (!institucionId) {
+        console.error('❌ No se encontró institucion_id');
+        setEstado('error');
+        setMensaje('Error: No se encontró la institución. Contacta soporte.');
+        return;
+      }
+
+      // Crear el registro en tabla usuarios
+      const { error: createError } = await supabase
+        .from('usuarios')
+        .insert({
+          auth_id: user.id,
+          institucion_id: institucionId,
+          email: user.email.toLowerCase(),
+          nombre: nombre,
+          rol: rol,
+          activo: true,
+          email_verificado: true
+        });
+
+      if (createError) {
+        console.error('❌ Error creando usuario:', createError);
+        setEstado('error');
+        setMensaje('Error al completar el registro. Contacta soporte.');
+        return;
+      }
+
+      console.log('✅ Usuario creado en tabla usuarios');
+      
+      // Limpiar localStorage temporal
+      localStorage.removeItem('admitio_pending_institucion_id');
+      localStorage.removeItem('admitio_pending_email');
+    } else {
+      // Usuario ya existe, actualizar email_verificado
+      console.log('✅ Usuario ya existe, actualizando email_verificado');
+      
+      await supabase
         .from('usuarios')
         .update({ email_verificado: true })
         .eq('auth_id', user.id);
-
-      if (updateError) {
-        console.warn('⚠️ No se pudo actualizar email_verificado:', updateError);
-        // No es crítico, continuamos
-      } else {
-        console.log('✅ email_verificado actualizado');
-      }
-    } catch (err) {
-      console.warn('⚠️ Error actualizando usuario:', err);
     }
 
     setEstado('exito');
