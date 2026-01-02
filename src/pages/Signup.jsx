@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
 
 // Tipos de institución disponibles
@@ -73,6 +74,85 @@ const Signup = () => {
   const navigate = useNavigate()
   const { signup } = useAuth()
 
+  // Estados para validación en tiempo real del nombre de institución
+  const [institucionStatus, setInstitucionStatus] = useState('idle') // 'idle' | 'checking' | 'available' | 'taken' | 'error'
+  const [institucionMessage, setInstitucionMessage] = useState('')
+  const debounceTimer = useRef(null)
+
+  // Validación en tiempo real del nombre de institución
+  useEffect(() => {
+    const nombreInst = formData.institucion.trim()
+    
+    // Si está vacío o muy corto, resetear estado
+    if (!nombreInst || nombreInst.length < 3) {
+      setInstitucionStatus('idle')
+      setInstitucionMessage('')
+      return
+    }
+
+    // Mostrar estado "verificando"
+    setInstitucionStatus('checking')
+    setInstitucionMessage('Verificando disponibilidad...')
+
+    // Debounce: esperar 500ms después de que el usuario deje de escribir
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current)
+    }
+
+    debounceTimer.current = setTimeout(async () => {
+      try {
+        // Buscar por nombre exacto (case-insensitive)
+        const { data: instExacta, error: errorExacta } = await supabase
+          .from('instituciones')
+          .select('id, nombre')
+          .ilike('nombre', nombreInst)
+          .limit(1)
+
+        if (errorExacta) {
+          console.error('Error verificando institución:', errorExacta)
+          setInstitucionStatus('error')
+          setInstitucionMessage('Error al verificar. Intenta de nuevo.')
+          return
+        }
+
+        if (instExacta && instExacta.length > 0) {
+          setInstitucionStatus('taken')
+          setInstitucionMessage(`"${instExacta[0].nombre}" ya está registrada`)
+          return
+        }
+
+        // Buscar por nombre similar (contiene)
+        const { data: instSimilar, error: errorSimilar } = await supabase
+          .from('instituciones')
+          .select('id, nombre')
+          .ilike('nombre', `%${nombreInst}%`)
+          .limit(1)
+
+        if (!errorSimilar && instSimilar && instSimilar.length > 0) {
+          setInstitucionStatus('taken')
+          setInstitucionMessage(`Ya existe una similar: "${instSimilar[0].nombre}"`)
+          return
+        }
+
+        // Si llegamos aquí, el nombre está disponible
+        setInstitucionStatus('available')
+        setInstitucionMessage('¡Nombre disponible!')
+
+      } catch (err) {
+        console.error('Error en validación:', err)
+        setInstitucionStatus('error')
+        setInstitucionMessage('Error de conexión')
+      }
+    }, 500)
+
+    // Cleanup
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current)
+      }
+    }
+  }, [formData.institucion])
+
   const handleChange = (e) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
@@ -92,6 +172,19 @@ const Signup = () => {
       setError('El nombre de la institución debe tener al menos 3 caracteres')
       return
     }
+    
+    // No permitir continuar si la institución ya existe
+    if (institucionStatus === 'taken') {
+      setError('El nombre de la institución ya está registrado. Por favor, elige otro.')
+      return
+    }
+    
+    // No permitir continuar si aún está verificando
+    if (institucionStatus === 'checking') {
+      setError('Espera a que se verifique la disponibilidad del nombre')
+      return
+    }
+    
     if (!formData.tipo) {
       setError('Selecciona el tipo de institución')
       return
@@ -165,6 +258,37 @@ const Signup = () => {
       setError('Error de conexión. Intenta nuevamente.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Función para obtener clases del input según estado
+  const getInstitucionInputClasses = () => {
+    const baseClasses = "form-input pl-12 pr-12 transition-colors"
+    switch (institucionStatus) {
+      case 'available':
+        return `${baseClasses} border-emerald-400 focus:border-emerald-500 focus:ring-emerald-200`
+      case 'taken':
+        return `${baseClasses} border-red-400 focus:border-red-500 focus:ring-red-200`
+      case 'checking':
+        return `${baseClasses} border-amber-400 focus:border-amber-500 focus:ring-amber-200`
+      default:
+        return baseClasses
+    }
+  }
+
+  // Función para obtener ícono de estado
+  const getStatusIcon = () => {
+    switch (institucionStatus) {
+      case 'checking':
+        return <div className="w-5 h-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+      case 'available':
+        return <Icon name="CheckCircle" size={20} className="text-emerald-500" />
+      case 'taken':
+        return <Icon name="XCircle" size={20} className="text-red-500" />
+      case 'error':
+        return <Icon name="AlertCircle" size={20} className="text-red-500" />
+      default:
+        return null
     }
   }
 
@@ -270,12 +394,29 @@ const Signup = () => {
                     name="institucion"
                     value={formData.institucion}
                     onChange={handleChange}
-                    className="form-input pl-12"
+                    className={getInstitucionInputClasses()}
                     placeholder="Ej: Instituto Técnico Profesional"
                     required
                     autoFocus
                   />
+                  {/* Ícono de estado a la derecha */}
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                    {getStatusIcon()}
+                  </div>
                 </div>
+                {/* Mensaje de estado debajo del input */}
+                {institucionMessage && (
+                  <p className={`mt-2 text-sm flex items-center gap-1.5 ${
+                    institucionStatus === 'available' ? 'text-emerald-600' :
+                    institucionStatus === 'taken' ? 'text-red-600' :
+                    institucionStatus === 'checking' ? 'text-amber-600' :
+                    'text-red-600'
+                  }`}>
+                    {institucionStatus === 'available' && <Icon name="Check" size={14} />}
+                    {institucionStatus === 'taken' && <Icon name="X" size={14} />}
+                    {institucionMessage}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -376,9 +517,26 @@ const Signup = () => {
                 </div>
               </div>
 
-              <button type="submit" className="btn btn-primary w-full justify-center py-4 mt-6">
-                Continuar
-                <Icon name="ArrowRight" size={20} />
+              <button 
+                type="submit" 
+                disabled={institucionStatus === 'taken' || institucionStatus === 'checking'}
+                className={`btn w-full justify-center py-4 mt-6 ${
+                  institucionStatus === 'taken' 
+                    ? 'btn-secondary opacity-50 cursor-not-allowed' 
+                    : 'btn-primary'
+                }`}
+              >
+                {institucionStatus === 'checking' ? (
+                  <>
+                    <div className="spinner"></div>
+                    Verificando...
+                  </>
+                ) : (
+                  <>
+                    Continuar
+                    <Icon name="ArrowRight" size={20} />
+                  </>
+                )}
               </button>
             </form>
           )}
