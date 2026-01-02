@@ -1170,7 +1170,7 @@ export function registrarIntentoWhatsApp(leadId, userId) {
   
   // Generar URL de WhatsApp
   const telefono = lead.telefono.replace(/\D/g, '')
-  const mensaje = encodeURIComponent(`Hola ${lead.nombre}, soy ${store.usuarios.find(u => u.id === userId)?.nombre} de ProJazz. Me comunico por tu consulta sobre ${lead.carrera?.nombre || 'nuestras carreras'}.`)
+  const mensaje = encodeURIComponent(`Hola ${lead.nombre}, soy ${store.usuarios.find(u => u.id === userId)?.nombre} de ${store.config?.nombre || 'nuestra institución'}. Me comunico por tu consulta sobre ${lead.carrera?.nombre || 'nuestras carreras'}.`)
   return `https://wa.me/${telefono}?text=${mensaje}`
 }
 
@@ -1392,7 +1392,7 @@ export function enviarCorreo(leadId, userId, plantillaId, asuntoPersonalizado = 
   if (!lead) return { success: false, error: 'Lead no encontrado' }
   
   // Reemplazar variables
-  let asunto = asuntoPersonalizado || plantilla?.asunto || 'Mensaje de ProJazz'
+  let asunto = asuntoPersonalizado || plantilla?.asunto || `Mensaje de ${store.config?.nombre || 'Admisiones'}`
   let contenido = contenidoPersonalizado || plantilla?.contenido || ''
   
   const variables = {

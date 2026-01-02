@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Icon from '../components/Icon'
 
@@ -10,7 +10,6 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [showCredentials, setShowCredentials] = useState(false)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -18,7 +17,6 @@ export default function Login() {
     setLoading(true)
     
     try {
-      // IMPORTANTE: await para esperar el resultado completo
       const result = await signIn(email, password)
       
       if (!result.success) {
@@ -27,7 +25,6 @@ export default function Login() {
         return
       }
       
-      // Login exitoso - navegar al dashboard
       console.log('✅ Login exitoso, navegando a dashboard...')
       navigate('/dashboard', { replace: true })
       
@@ -38,151 +35,160 @@ export default function Login() {
     }
   }
 
-  const demoCredentials = [
-    { email: 'admin@projazz.cl', password: 'admin123', rol: 'Key Master', desc: 'Control total' },
-    { email: 'maria@projazz.cl', password: '123456', rol: 'Encargado', desc: 'María - Gestiona sus leads' },
-    { email: 'pedro@projazz.cl', password: '123456', rol: 'Encargado', desc: 'Pedro - Gestiona sus leads' },
-    { email: 'secretaria@projazz.cl', password: '123456', rol: 'Asistente', desc: 'Solo crea leads' },
-    { email: 'rector@projazz.cl', password: 'rector123', rol: 'Rector', desc: 'Solo reportes' },
-  ]
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-violet-50 via-indigo-50 to-purple-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Logo y título */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-2xl shadow-lg mb-4">
-            <Icon name="GraduationCap" className="text-white" size={32} />
+    <div className="auth-container">
+      {/* Left Side - Branding */}
+      <div className="auth-left items-center justify-center p-12">
+        <div className="relative z-10 max-w-lg">
+          {/* Floating shapes */}
+          <div className="absolute -top-20 -left-20 w-40 h-40 bg-white/10 rounded-full animate-float"></div>
+          <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-white/10 rounded-full animate-float" style={{ animationDelay: '-2s' }}></div>
+          
+          <div className="flex items-center gap-3 mb-8">
+            <div className="w-14 h-14 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
+              <Icon name="GraduationCap" className="text-white" size={32} />
+            </div>
+            <span className="font-display text-3xl font-bold text-white">Admitio</span>
           </div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">
-            Admitio
+          
+          <h1 className="font-display text-4xl font-bold text-white mb-4 leading-tight">
+            Bienvenido de vuelta
           </h1>
-          <p className="text-slate-500 mt-1">Sistema de Gestión de Admisiones</p>
+          <p className="text-white/80 text-lg mb-8">
+            Accede a tu panel de control y continúa gestionando tus procesos de admisión.
+          </p>
+          
+          {/* Features list */}
+          <div className="space-y-4">
+            {[
+              'Gestiona todos tus leads en un solo lugar',
+              'Revisa métricas y reportes en tiempo real',
+              'Colabora con tu equipo de admisiones',
+              'Automatiza tu seguimiento de prospectos'
+            ].map((feature, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="w-6 h-6 bg-emerald-400 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Icon name="Check" className="text-white" size={14} />
+                </div>
+                <span className="text-white/90">{feature}</span>
+              </div>
+            ))}
+          </div>
         </div>
+      </div>
 
-        {/* Formulario */}
-        <div className="bg-white rounded-2xl shadow-xl p-8">
+      {/* Right Side - Form */}
+      <div className="auth-right bg-slate-50">
+        <div className="auth-form">
+          {/* Mobile logo */}
+          <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
+            <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-violet-700 rounded-xl flex items-center justify-center">
+              <Icon name="GraduationCap" className="text-white" size={28} />
+            </div>
+            <span className="font-display text-2xl font-bold text-slate-800">Admitio</span>
+          </div>
+
+          <div className="text-center mb-8">
+            <h2 className="font-display text-2xl font-bold text-slate-800 mb-2">
+              Inicia sesión
+            </h2>
+            <p className="text-slate-500">
+              Ingresa tus credenciales para acceder
+            </p>
+          </div>
+
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-600 animate-slide-up">
+              <Icon name="AlertCircle" size={20} />
+              <span className="text-sm">{error}</span>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 Correo electrónico
               </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Icon name="Mail" className="text-slate-400" size={20} />
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  <Icon name="Mail" size={20} />
                 </div>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all"
-                  placeholder="tu@email.com"
+                  className="form-input pl-12"
+                  placeholder="tu@institucion.com"
                   required
                   disabled={loading}
+                  autoFocus
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Contraseña
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-slate-700">
+                  Contraseña
+                </label>
+                <Link 
+                  to="/reset-password" 
+                  className="text-sm text-violet-600 hover:text-violet-700 font-medium"
+                >
+                  ¿Olvidaste tu contraseña?
+                </Link>
+              </div>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Icon name="Lock" className="text-slate-400" size={20} />
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  <Icon name="Lock" size={20} />
                 </div>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all"
-                  placeholder="••••••••"
+                  className="form-input pl-12"
+                  placeholder="Tu contraseña"
                   required
                   disabled={loading}
                 />
               </div>
             </div>
 
-            {error && (
-              <div className="flex items-center gap-2 text-red-600 bg-red-50 px-4 py-3 rounded-xl">
-                <Icon name="AlertCircle" size={20} />
-                <span className="text-sm">{error}</span>
-              </div>
-            )}
-
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl font-semibold hover:from-violet-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="btn btn-primary w-full justify-center py-4"
             >
               {loading ? (
                 <>
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <div className="spinner"></div>
                   Ingresando...
                 </>
               ) : (
                 <>
-                  <Icon name="LogIn" size={20} />
-                  Ingresar
+                  Iniciar sesión
+                  <Icon name="ArrowRight" size={20} />
                 </>
               )}
             </button>
           </form>
-          
-          {/* Link a registro */}
-          <div className="mt-6 text-center">
-            <a href="/signup" className="text-sm text-violet-600 hover:text-violet-700 font-medium">
-              ¿No tienes cuenta? Regístrate aquí
-            </a>
-          </div>
-          
-          {/* Link a recuperar contraseña */}
-          <div className="mt-2 text-center">
-            <a href="/reset-password" className="text-sm text-slate-500 hover:text-slate-700">
-              ¿Olvidaste tu contraseña?
-            </a>
+
+          <div className="mt-8 text-center">
+            <p className="text-slate-500">
+              ¿No tienes cuenta?{' '}
+              <Link to="/signup" className="text-violet-600 hover:text-violet-700 font-semibold">
+                Regístrate gratis
+              </Link>
+            </p>
           </div>
 
-          {/* Botones de login rápido para demo */}
-          <div className="mt-6 pt-6 border-t border-slate-100">
-            <button
-              onClick={() => setShowCredentials(!showCredentials)}
-              className="w-full text-sm text-slate-500 hover:text-violet-600 flex items-center justify-center gap-2"
-            >
-              <Icon name={showCredentials ? 'ChevronUp' : 'ChevronDown'} size={16} />
-              {showCredentials ? 'Ocultar' : 'Mostrar'} credenciales de prueba
-            </button>
-            
-            {showCredentials && (
-              <div className="mt-4 space-y-2">
-                {demoCredentials.map((cred, i) => (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      setEmail(cred.email)
-                      setPassword(cred.password)
-                    }}
-                    disabled={loading}
-                    className="w-full text-left p-3 rounded-lg border border-slate-100 hover:border-violet-200 hover:bg-violet-50 transition-all group disabled:opacity-50"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-slate-700 group-hover:text-violet-700">{cred.rol}</p>
-                        <p className="text-xs text-slate-400">{cred.desc}</p>
-                      </div>
-                      <Icon name="ArrowRight" className="text-slate-300 group-hover:text-violet-500" size={16} />
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
+          <div className="mt-8 pt-8 border-t border-slate-200">
+            <Link to="/" className="flex items-center justify-center gap-2 text-slate-500 hover:text-violet-600 transition-colors">
+              <Icon name="ArrowLeft" size={18} />
+              Volver al inicio
+            </Link>
           </div>
         </div>
-
-        {/* Footer */}
-        <p className="text-center text-sm text-slate-400 mt-6">
-          © 2024 Admitio • Sistema de Gestión de Admisiones
-        </p>
       </div>
     </div>
   )

@@ -4418,7 +4418,7 @@ export default function Dashboard() {
                     value={userFormData.email}
                     onChange={e => setUserFormData({...userFormData, email: e.target.value})}
                     className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                    placeholder="juan@projazz.cl"
+                    placeholder="usuario@institucion.com"
                   />
                 </div>
                 
