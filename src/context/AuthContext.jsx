@@ -226,17 +226,33 @@ export const AuthProvider = ({ children }) => {
         supabase.from('formularios').select('*').eq('institucion_id', institucionId)
       ])
 
-      // Guardar en store global si existe
-      if (window.admitioStore?.getState) {
-        const store = window.admitioStore.getState()
-        if (store.setLeads) store.setLeads(leadsRes.data || [])
-        if (store.setUsuarios) store.setUsuarios(usuariosRes.data || [])
-        if (store.setCarreras) store.setCarreras(carrerasRes.data || [])
-        if (store.setFormularios) store.setFormularios(formulariosRes.data || [])
+      // Guardar en localStorage en el formato que espera el store
+      const storeData = {
+        consultas: leadsRes.data || [],
+        usuarios: usuariosRes.data || [],
+        carreras: carrerasRes.data || [],
+        formularios: formulariosRes.data || [],
+        actividad: [],
+        medios: [],
+        plantillas: [],
+        config: { nombre: institucion?.nombre || 'Mi Institución' },
+        metricas_encargados: {},
+        recordatorios: [],
+        cola_leads: [],
+        correos_enviados: [],
+        notificaciones: [],
+        importaciones: [],
+        _supabase_sync: true
       }
 
+      localStorage.setItem('admitio_data', JSON.stringify(storeData))
+      localStorage.setItem('admitio_version', '2.7')
+
+      // Disparar evento para que el store se recargue
+      window.dispatchEvent(new Event('admitio-data-loaded'))
+
       setDataLoaded(true)
-      console.log('✅ Datos cargados:', {
+      console.log('✅ Datos cargados y guardados:', {
         leads: leadsRes.data?.length || 0,
         usuarios: usuariosRes.data?.length || 0,
         carreras: carrerasRes.data?.length || 0,

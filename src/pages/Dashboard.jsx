@@ -800,22 +800,29 @@ export default function Dashboard() {
     setFormularios(store.getFormularios())
   }
 
-  // Cargar datos inicial - con retry para asegurar que el store esté listo
+  // Cargar datos inicial y escuchar eventos de datos cargados
   useEffect(() => {
     loadData()
     
+    // Escuchar cuando AuthContext carga datos de Supabase
+    const handleDataLoaded = () => {
+      console.log('📡 Evento admitio-data-loaded recibido')
+      store.reloadStore() // Recargar store desde localStorage
+      loadData() // Recargar datos en el Dashboard
+    }
+    
+    window.addEventListener('admitio-data-loaded', handleDataLoaded)
+    
     // Retry después de 500ms por si el store aún no tenía datos
     const timer = setTimeout(() => {
-      if (isRector || isKeyMaster) {
-        const storeLeads = store.getConsultasParaReportes()
-        if (storeLeads.length > 0) {
-          console.log('📊 Retry - Recargando con', storeLeads.length, 'leads')
-          loadData()
-        }
-      }
+      store.reloadStore()
+      loadData()
     }, 500)
     
-    return () => clearTimeout(timer)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('admitio-data-loaded', handleDataLoaded)
+    }
   }, [user])
 
   // Helper para abrir modal de nuevo lead con validación de límite
