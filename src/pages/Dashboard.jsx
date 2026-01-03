@@ -1396,8 +1396,8 @@ export default function Dashboard() {
               <div>
                 <p className="text-sm text-slate-500">Tipo de Alumnos</p>
                 <div className="flex gap-4 mt-1">
-                  <span className="text-lg font-bold text-blue-600">{stats.alumnos_nuevos || alumnosNuevos || 0} <span className="text-xs font-normal text-slate-400">Nuevos</span></span>
-                  <span className="text-lg font-bold text-violet-600">{stats.alumnos_antiguos || alumnosAntiguos || 0} <span className="text-xs font-normal text-slate-400">Antiguos</span></span>
+                  <span className="text-lg font-bold text-blue-600">{alumnosNuevos} <span className="text-xs font-normal text-slate-400">Nuevos</span></span>
+                  <span className="text-lg font-bold text-violet-600">{alumnosAntiguos} <span className="text-xs font-normal text-slate-400">Antiguos</span></span>
                 </div>
               </div>
             </div>
