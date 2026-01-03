@@ -101,6 +101,12 @@ export function AuthProvider({ children }) {
           console.log('⏸️ Ignorando evento - signOut en progreso')
           return
         }
+
+        // REGLA: Ignorar eventos si estamos en /auth/callback (AuthCallback lo maneja)
+        if (window.location.pathname === '/auth/callback') {
+          console.log('⏸️ Ignorando evento - AuthCallback lo maneja')
+          return
+        }
         
         // REGLA 2: Ignorar SIGNED_IN si login está manejándolo
         if (event === 'SIGNED_IN' && isLoggingIn.current) {
@@ -158,6 +164,13 @@ export function AuthProvider({ children }) {
 
   async function checkSession() {
     try {
+      // No verificar si estamos en la página de callback (AuthCallback lo maneja)
+      if (window.location.pathname === '/auth/callback') {
+        console.log('⏸️ checkSession saltado - AuthCallback lo maneja')
+        setLoading(false)
+        return
+      }
+
       // No verificar si ya hay un proceso en curso
       if (isSigningOut.current || isLoggingIn.current) {
         console.log('⏸️ checkSession saltado - operación en progreso')
@@ -182,7 +195,7 @@ export function AuthProvider({ children }) {
       // Timeout para getSession
       const sessionPromise = supabase.auth.getSession()
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout')), 5000)
+        setTimeout(() => reject(new Error('Timeout')), 5000))
       )
 
       const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise])
