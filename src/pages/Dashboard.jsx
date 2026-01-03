@@ -939,17 +939,22 @@ export default function Dashboard() {
   // SIDEBAR - Responsive y Colapsable
   // ============================================
   const Sidebar = () => {
+    // Fallback: verificar rol directamente si isKeyMaster no está definido
+    const esAdmin = isKeyMaster || user?.rol_id === 'keymaster' || user?.rol_id === 'superadmin'
+    const esRector = isRector || user?.rol_id === 'rector'
+    const esEncargado = isEncargado || user?.rol_id === 'encargado'
+    
     const navItems = [
-      { id: 'dashboard', icon: 'Home', label: 'Dashboard', show: !isRector },
-      { id: 'consultas', icon: 'Users', label: 'Consultas', show: !isRector, badge: consultas.filter(c => c.estado === 'nueva').length },
-      { id: 'historial', icon: 'Archive', label: 'Historial', show: !isRector },
-      { id: 'reportes', icon: 'BarChart', label: isRector ? 'Dashboard' : 'Reportes', show: isKeyMaster || isRector || isEncargado || user?.rol_id === 'superadmin' },
-      { id: 'formularios', icon: 'FileCode', label: 'Formularios', show: isKeyMaster || user?.rol_id === 'superadmin' },
-      { id: 'usuarios', icon: 'User', label: 'Usuarios', show: isKeyMaster || user?.rol_id === 'superadmin' },
-      { id: 'programas', icon: 'GraduationCap', label: 'Carreras/Cursos', show: isKeyMaster || user?.rol_id === 'superadmin' },
-      { id: 'importar', icon: 'Upload', label: 'Importar', show: isKeyMaster || user?.rol_id === 'superadmin' },
-      { id: 'importaciones_sheets', icon: 'Table', label: 'Google Sheets', show: (isKeyMaster || user?.rol_id === 'superadmin') && planInfo?.plan === 'enterprise', badge: importacionesPendientes },
-      { id: 'configuracion', icon: 'Settings', label: 'Configuración', show: isKeyMaster || user?.rol_id === 'superadmin' },
+      { id: 'dashboard', icon: 'Home', label: 'Dashboard', show: !esRector },
+      { id: 'consultas', icon: 'Users', label: 'Consultas', show: !esRector, badge: consultas.filter(c => c.estado === 'nueva').length },
+      { id: 'historial', icon: 'Archive', label: 'Historial', show: !esRector },
+      { id: 'reportes', icon: 'BarChart', label: esRector ? 'Dashboard' : 'Reportes', show: esAdmin || esRector || esEncargado },
+      { id: 'formularios', icon: 'FileCode', label: 'Formularios', show: esAdmin },
+      { id: 'usuarios', icon: 'User', label: 'Usuarios', show: esAdmin },
+      { id: 'programas', icon: 'GraduationCap', label: 'Carreras/Cursos', show: esAdmin },
+      { id: 'importar', icon: 'Upload', label: 'Importar', show: esAdmin },
+      { id: 'importaciones_sheets', icon: 'Table', label: 'Google Sheets', show: esAdmin && planInfo?.plan === 'enterprise', badge: importacionesPendientes },
+      { id: 'configuracion', icon: 'Settings', label: 'Configuración', show: esAdmin },
     ]
     
     const handleNavClick = (tabId) => {
@@ -1133,24 +1138,41 @@ export default function Dashboard() {
   // DASHBOARD VIEW - Para Encargados y KeyMaster
   // ============================================
   const DashboardView = () => {
-    const stats = isKeyMaster ? metricasGlobales : metricas
-    if (!stats) return null
+    // Fallback: verificar rol directamente
+    const esAdmin = isKeyMaster || user?.rol_id === 'keymaster' || user?.rol_id === 'superadmin'
+    
+    const stats = esAdmin ? metricasGlobales : metricas
+    
+    // Valores por defecto si no hay stats
+    const defaultStats = {
+      total: consultas.length || 0,
+      nuevas: consultas.filter(c => c.estado === 'nueva').length || 0,
+      contactados: consultas.filter(c => c.estado === 'contactado').length || 0,
+      seguimiento: consultas.filter(c => c.estado === 'seguimiento').length || 0,
+      examen_admision: consultas.filter(c => c.estado === 'examen_admision').length || 0,
+      matriculados: consultas.filter(c => c.matriculado).length || 0,
+      sinContactar: consultas.filter(c => c.estado === 'nueva' && !c.matriculado).length || 0,
+      activos: consultas.filter(c => !c.matriculado && !c.descartado).length || 0,
+      tasaConversion: 0
+    }
+    
+    const safeStats = stats || defaultStats
     
     // Calcular valores según el rol
-    const totalLeads = stats.total || 0
-    const pendientes = isKeyMaster ? (stats.nuevas || 0) : (stats.sinContactar || 0)
-    const enProceso = isKeyMaster 
-      ? (stats.contactados || 0) + (stats.seguimiento || 0) + (stats.examen_admision || 0)
-      : (stats.activos || 0)
-    const examenAdm = stats.examen_admision || 0
-    const matriculados = stats.matriculados || 0
-    const tasaConv = stats.tasaConversion || stats.tasa_conversion || 0
-    const tiempoResp = stats.tiempoRespuestaPromedio || stats.tiempo_respuesta_promedio || null
-    const tiempoCierre = stats.tiempoCierrePromedio || stats.tiempo_cierre_promedio || null
+    const totalLeads = safeStats.total || 0
+    const pendientes = esAdmin ? (safeStats.nuevas || 0) : (safeStats.sinContactar || 0)
+    const enProceso = esAdmin 
+      ? (safeStats.contactados || 0) + (safeStats.seguimiento || 0) + (safeStats.examen_admision || 0)
+      : (safeStats.activos || 0)
+    const examenAdm = safeStats.examen_admision || 0
+    const matriculados = safeStats.matriculados || 0
+    const tasaConv = safeStats.tasaConversion || safeStats.tasa_conversion || 0
+    const tiempoResp = safeStats.tiempoRespuestaPromedio || safeStats.tiempo_respuesta_promedio || null
+    const tiempoCierre = safeStats.tiempoCierrePromedio || safeStats.tiempo_cierre_promedio || null
     
     // Calcular tipo de alumnos si no viene en stats
-    const alumnosNuevos = stats.alumnos_nuevos || filteredConsultas.filter(c => c.tipo_alumno === 'nuevo').length
-    const alumnosAntiguos = stats.alumnos_antiguos || filteredConsultas.filter(c => c.tipo_alumno === 'antiguo').length
+    const alumnosNuevos = safeStats.alumnos_nuevos || filteredConsultas.filter(c => c.tipo_alumno === 'nuevo').length
+    const alumnosAntiguos = safeStats.alumnos_antiguos || filteredConsultas.filter(c => c.tipo_alumno === 'antiguo').length
 
     return (
       <div className="space-y-6">
@@ -1162,16 +1184,16 @@ export default function Dashboard() {
               </div>
               <div>
                 <h1 className="text-2xl font-bold">
-                  {isKeyMaster ? 'Panel de Control' : `Hola, ${user?.nombre?.split(' ')[0]}`}
+                  {esAdmin ? 'Panel de Control' : `Hola, ${user?.nombre?.split(' ')[0]}`}
                 </h1>
                 <p className="text-violet-200">
-                  {isKeyMaster ? 'Vista general del sistema' : 'Tu resumen de hoy'}
+                  {esAdmin ? 'Vista general del sistema' : 'Tu resumen de hoy'}
                 </p>
               </div>
             </div>
             <div className="text-right">
               <p className="text-3xl font-bold">{totalLeads}</p>
-              <p className="text-violet-200">{isKeyMaster ? 'Consultas totales' : 'Leads asignados'}</p>
+              <p className="text-violet-200">{esAdmin ? 'Consultas totales' : 'Leads asignados'}</p>
               {/* Botón de actualizar manual */}
               <button
                 onClick={handleRefreshData}
@@ -1203,12 +1225,12 @@ export default function Dashboard() {
             onClick={() => { setFilterEstado('todos'); setActiveTab('consultas'); }}
           />
           <StatCard 
-            title={isKeyMaster ? "Examen Adm." : "Contactar Hoy"} 
-            value={isKeyMaster ? examenAdm : leadsHoy.length} 
-            icon={isKeyMaster ? "ClipboardCheck" : "Phone"} 
+            title={esAdmin ? "Examen Adm." : "Contactar Hoy"} 
+            value={esAdmin ? examenAdm : leadsHoy.length} 
+            icon={esAdmin ? "ClipboardCheck" : "Phone"} 
             color="cyan" 
-            sub={isKeyMaster ? "Agendados" : "Requieren atención"}
-            onClick={() => isKeyMaster ? navigateToEstado('examen_admision') : setShowLeadsHoyModal(true)}
+            sub={esAdmin ? "Agendados" : "Requieren atención"}
+            onClick={() => esAdmin ? navigateToEstado('examen_admision') : setShowLeadsHoyModal(true)}
           />
           <StatCard 
             title="Matriculados" 

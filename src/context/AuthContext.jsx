@@ -1,278 +1,175 @@
-// ============================================
-// ADMITIO - AuthContext Simplificado
-// src/context/AuthContext.jsx
-// Versión robusta sin race conditions
-// ============================================
-
-import { createContext, useContext, useState, useEffect } from 'react'
+import React, { createContext, useContext, useState, useEffect } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
-// ========== ROLES Y PERMISOS ==========
+const AuthContext = createContext(null)
+
+// Configuración de roles
 const ROLES = {
   superadmin: {
     nombre: 'Super Admin',
-    nivel: 100,
-    permisos: { ver_todos: true, editar: true, reasignar: true, config: true, usuarios: true, eliminar: true }
+    permisos: { ver_todos: true, editar: true, reasignar: true, config: true, usuarios: true, reportes: true, formularios: true, crear_leads: true, eliminar_keymaster: true }
   },
   keymaster: {
     nombre: 'Key Master',
-    nivel: 90,
-    permisos: { ver_todos: true, editar: true, reasignar: true, config: true, usuarios: true, eliminar: true }
-  },
-  admin: {
-    nombre: 'Administrador',
-    nivel: 80,
-    permisos: { ver_todos: true, editar: true, reasignar: true, config: true, usuarios: false, eliminar: false }
+    permisos: { ver_todos: true, editar: true, reasignar: true, config: true, usuarios: true, reportes: true, formularios: true, crear_leads: true }
   },
   encargado: {
     nombre: 'Encargado',
-    nivel: 50,
-    permisos: { ver_todos: false, editar: true, reasignar: false, config: false, usuarios: false, eliminar: false, ver_propios: true, crear_leads: true }
+    permisos: { ver_todos: true, editar: true, reasignar: true, reportes: true, crear_leads: true }
   },
-  viewer: {
-    nombre: 'Solo Lectura',
-    nivel: 10,
-    permisos: { ver_todos: true, editar: false, reasignar: false, config: false, usuarios: false, eliminar: false }
+  asistente: {
+    nombre: 'Asistente',
+    permisos: { ver_propios: true, editar: true, crear_leads: true }
+  },
+  rector: {
+    nombre: 'Rector',
+    permisos: { ver_todos: true, reportes: true }
   }
 }
 
-const AuthContext = createContext({})
-
-export const useAuth = () => {
-  const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth debe usarse dentro de AuthProvider')
-  }
-  return context
+// Configuración de planes
+const PLANES_DEFAULT = {
+  free: { nombre: 'Gratis', max_leads: 10, max_usuarios: 1, max_formularios: 1 },
+  inicial: { nombre: 'Inicial', max_leads: 300, max_usuarios: 5, max_formularios: 1 },
+  profesional: { nombre: 'Profesional', max_leads: 1500, max_usuarios: 15, max_formularios: 3 },
+  premium: { nombre: 'Premium', max_leads: 5000, max_usuarios: 50, max_formularios: 10 },
+  enterprise: { nombre: 'Enterprise', max_leads: 999999, max_usuarios: 999, max_formularios: 999 },
 }
 
-export const AuthProvider = ({ children }) => {
+export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [institucion, setInstitucion] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [dataLoaded, setDataLoaded] = useState(false)
+  const [planInfo, setPlanInfo] = useState({
+    plan: 'free',
+    limites: PLANES_DEFAULT.free,
+    uso: { leads: 0, usuarios: 0, formularios: 0 }
+  })
 
-  // ========== INICIALIZACIÓN ==========
   useEffect(() => {
-    if (!isSupabaseConfigured()) {
-      console.log('⚠️ Supabase no configurado')
-      setLoading(false)
-      return
+    // Limpiar datos viejos de localStorage al iniciar
+    const oldData = localStorage.getItem('admitio_data')
+    if (oldData) {
+      try {
+        const parsed = JSON.parse(oldData)
+        if (parsed.consultas?.some(c => typeof c.id === 'number')) {
+          console.log('🧹 Limpiando datos de demostración...')
+          localStorage.removeItem('admitio_data')
+          localStorage.removeItem('admitio_user')
+        }
+      } catch (e) {
+        localStorage.removeItem('admitio_data')
+      }
     }
 
-    // Verificar si estamos en /auth/callback - dejar que esa página maneje todo
-    if (window.location.pathname === '/auth/callback') {
-      console.log('📍 En /auth/callback - esperando procesamiento')
-      setLoading(false)
-      return
-    }
+    checkSession()
 
-    let mounted = true
+    if (isSupabaseConfigured()) {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log('🔔 Auth event:', event)
+        
+        // No procesar si estamos en /auth/callback (AuthCallback lo maneja)
+        if (window.location.pathname === '/auth/callback') {
+          console.log('⏸️ Ignorando evento - AuthCallback lo maneja')
+          return
+        }
+        
+        if (event === 'SIGNED_IN' && session?.user) {
+          await loadUserFromAuth(session.user)
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null)
+          setInstitucion(null)
+          localStorage.removeItem('admitio_user')
+          localStorage.removeItem('admitio_data')
+        }
+      })
 
-    // Listener de cambios de auth
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('🔔 Auth event:', event, { hasSession: !!session })
-
-      if (!mounted) return
-
-      // Ignorar eventos mientras estamos en callback
-      if (window.location.pathname === '/auth/callback') {
-        return
-      }
-
-      if (event === 'SIGNED_OUT' || !session) {
-        setUser(null)
-        setInstitucion(null)
-        setDataLoaded(false)
-        setLoading(false)
-        return
-      }
-
-      if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) {
-        await loadUserData(session.user)
-      }
-    })
-
-    // Verificar sesión inicial
-    checkInitialSession()
-
-    return () => {
-      mounted = false
-      subscription.unsubscribe()
+      return () => subscription.unsubscribe()
     }
   }, [])
 
-  // ========== VERIFICAR SESIÓN INICIAL ==========
-  async function checkInitialSession() {
+  async function checkSession() {
     try {
+      // No verificar si estamos en /auth/callback (AuthCallback lo maneja)
+      if (window.location.pathname === '/auth/callback') {
+        console.log('⏸️ checkSession saltado - AuthCallback lo maneja')
+        setLoading(false)
+        return
+      }
+
+      if (!isSupabaseConfigured()) {
+        console.log('⚠️ Supabase no configurado')
+        setLoading(false)
+        return
+      }
+
       const { data: { session } } = await supabase.auth.getSession()
       
       if (session?.user) {
-        console.log('✅ Sesión existente encontrada')
-        await loadUserData(session.user)
+        await loadUserFromAuth(session.user)
       } else {
-        console.log('ℹ️ No hay sesión activa')
+        localStorage.removeItem('admitio_user')
+        localStorage.removeItem('admitio_data')
         setLoading(false)
       }
     } catch (error) {
-      console.error('Error verificando sesión:', error)
+      console.error('Error checking session:', error)
       setLoading(false)
     }
   }
 
-  // ========== CARGAR DATOS DEL USUARIO ==========
-  async function loadUserData(authUser) {
+  async function loadUserFromAuth(authUser) {
     try {
-      console.log('🔍 Cargando datos para:', authUser.email)
-
-      // Buscar usuario en nuestra tabla
       const { data: usuario, error } = await supabase
         .from('usuarios')
-        .select('*')
+        .select('*, instituciones(id, nombre, tipo, pais, ciudad, region, sitio_web, plan)')
         .eq('auth_id', authUser.id)
         .eq('activo', true)
-        .maybeSingle()
+        .single()
 
-      if (error) {
-        console.error('Error buscando usuario:', error)
+      if (error || !usuario) {
+        console.log('⚠️ Usuario no encontrado en tabla usuarios')
         setLoading(false)
-        return false
+        return
       }
 
-      // Si no existe por auth_id, buscar por email
-      let userData = usuario
-      if (!userData) {
-        console.log('⚠️ No encontrado por auth_id, buscando por email...')
-        const { data: usuarioEmail } = await supabase
-          .from('usuarios')
-          .select('*')
-          .eq('email', authUser.email.toLowerCase())
-          .eq('activo', true)
-          .maybeSingle()
+      const rol = ROLES[usuario.rol] || ROLES.asistente
 
-        if (usuarioEmail) {
-          // Vincular auth_id
-          await supabase
-            .from('usuarios')
-            .update({ auth_id: authUser.id })
-            .eq('id', usuarioEmail.id)
-          
-          userData = usuarioEmail
-        }
-      }
-
-      if (!userData) {
-        console.log('❌ Usuario no encontrado en BD')
-        setLoading(false)
-        return false
-      }
-
-      // Cargar institución
-      let institucionData = null
-      if (userData.institucion_id) {
-        const { data: inst } = await supabase
-          .from('instituciones')
-          .select('*')
-          .eq('id', userData.institucion_id)
-          .single()
-        
-        institucionData = inst
-      }
-
-      // Crear objeto de usuario enriquecido
-      const rol = ROLES[userData.rol] || ROLES.encargado
       const enrichedUser = {
-        id: userData.id,
+        id: usuario.id,
         auth_id: authUser.id,
-        email: userData.email,
-        nombre: userData.nombre,
-        rol_id: userData.rol,
+        email: usuario.email,
+        nombre: usuario.nombre,
+        rol_id: usuario.rol,
         activo: true,
-        institucion_id: userData.institucion_id,
-        institucion_nombre: institucionData?.nombre || 'Mi Institución',
+        institucion_id: usuario.institucion_id,
+        institucion_nombre: usuario.instituciones?.nombre || 'Mi Institución',
+        email_verificado: authUser.email_confirmed_at != null,
         rol: rol,
-        permisos: rol.permisos
+        permisos: rol.permisos || {}
       }
-
-      console.log('✅ Usuario cargado:', enrichedUser.nombre)
 
       setUser(enrichedUser)
-      setInstitucion(institucionData)
-      
-      // Cargar datos adicionales de la institución
-      await loadInstitucionData(userData.institucion_id)
-      
-      setLoading(false)
-      return true
+      setInstitucion(usuario.instituciones)
+      localStorage.setItem('admitio_user', JSON.stringify(enrichedUser))
 
+      await loadInstitucionData(usuario.institucion_id)
+
+      console.log('✅ Usuario cargado:', enrichedUser.nombre)
     } catch (error) {
       console.error('Error cargando usuario:', error)
+    } finally {
       setLoading(false)
-      return false
-    }
-  }
-
-  // ========== CARGAR DATOS DE LA INSTITUCIÓN ==========
-  async function loadInstitucionData(institucionId) {
-    if (!institucionId) return
-
-    try {
-      console.log('📦 Cargando datos de institución...')
-
-      const [leadsRes, usuariosRes, carrerasRes, formulariosRes] = await Promise.all([
-        supabase.from('leads').select('*').eq('institucion_id', institucionId),
-        supabase.from('usuarios').select('*').eq('institucion_id', institucionId).eq('activo', true),
-        supabase.from('carreras').select('*').eq('institucion_id', institucionId),
-        supabase.from('formularios').select('*').eq('institucion_id', institucionId)
-      ])
-
-      // Guardar en localStorage en el formato que espera el store
-      const storeData = {
-        consultas: leadsRes.data || [],
-        usuarios: usuariosRes.data || [],
-        carreras: carrerasRes.data || [],
-        formularios: formulariosRes.data || [],
-        actividad: [],
-        medios: [],
-        plantillas: [],
-        config: { nombre: institucion?.nombre || 'Mi Institución' },
-        metricas_encargados: {},
-        recordatorios: [],
-        cola_leads: [],
-        correos_enviados: [],
-        notificaciones: [],
-        importaciones: [],
-        _supabase_sync: true
-      }
-
-      localStorage.setItem('admitio_data', JSON.stringify(storeData))
-      localStorage.setItem('admitio_version', '2.7')
-
-      // Disparar evento para que el store se recargue
-      window.dispatchEvent(new Event('admitio-data-loaded'))
-
-      setDataLoaded(true)
-      console.log('✅ Datos cargados y guardados:', {
-        leads: leadsRes.data?.length || 0,
-        usuarios: usuariosRes.data?.length || 0,
-        carreras: carrerasRes.data?.length || 0,
-        formularios: formulariosRes.data?.length || 0
-      })
-
-    } catch (error) {
-      console.error('Error cargando datos de institución:', error)
     }
   }
 
   // ========== SIGN IN ==========
   async function signIn(email, password) {
     if (!isSupabaseConfigured()) {
-      return { success: false, error: 'Sistema no configurado' }
+      return { success: false, error: 'Sistema no configurado. Contacta al administrador.' }
     }
 
     try {
-      console.log('🔐 Iniciando login...')
-
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.toLowerCase().trim(),
         password
@@ -280,15 +177,24 @@ export const AuthProvider = ({ children }) => {
 
       if (error) {
         console.error('Error en login:', error)
-        return { success: false, error: 'Credenciales inválidas' }
+        if (error.message.includes('Invalid login')) {
+          return { success: false, error: 'Credenciales inválidas' }
+        }
+        if (error.message.includes('Email not confirmed')) {
+          return { success: false, error: 'Debes verificar tu email antes de iniciar sesión. Revisa tu bandeja de entrada.' }
+        }
+        return { success: false, error: error.message }
       }
 
-      // onAuthStateChange manejará la carga del usuario
-      console.log('✅ Login exitoso')
-      return { success: true }
+      if (!data.user.email_confirmed_at) {
+        await supabase.auth.signOut()
+        return { success: false, error: 'Debes verificar tu email antes de iniciar sesión. Revisa tu bandeja de entrada.' }
+      }
+
+      return { success: true, user: data.user }
 
     } catch (error) {
-      console.error('Error inesperado en login:', error)
+      console.error('Error en signIn:', error)
       return { success: false, error: 'Error de conexión' }
     }
   }
@@ -306,7 +212,7 @@ export const AuthProvider = ({ children }) => {
     password 
   }) {
     if (!isSupabaseConfigured()) {
-      return { success: false, error: 'Sistema no configurado' }
+      return { success: false, error: 'Sistema no configurado. Contacta al administrador.' }
     }
 
     const emailNormalizado = email.toLowerCase().trim()
@@ -314,70 +220,85 @@ export const AuthProvider = ({ children }) => {
     const nombreUsuario = nombre.trim()
 
     try {
-      // Validaciones
+      // ========== VALIDACIONES PREVIAS ==========
+      
       if (!nombreInst || nombreInst.length < 3) {
         return { success: false, error: 'El nombre de la institución debe tener al menos 3 caracteres' }
       }
+      
       if (!tipo) {
         return { success: false, error: 'Selecciona el tipo de institución' }
       }
+
       if (!pais) {
         return { success: false, error: 'Selecciona el país' }
       }
+
       if (!ciudad || ciudad.trim().length < 2) {
         return { success: false, error: 'Ingresa la ciudad' }
       }
+      
       if (!nombreUsuario || nombreUsuario.length < 2) {
         return { success: false, error: 'El nombre debe tener al menos 2 caracteres' }
       }
-      if (!emailNormalizado.includes('@')) {
+
+      if (!emailNormalizado || !emailNormalizado.includes('@')) {
         return { success: false, error: 'Email inválido' }
       }
+
       if (!password || password.length < 6) {
         return { success: false, error: 'La contraseña debe tener al menos 6 caracteres' }
       }
 
-      // Generar código único
-      const codigoUnico = `${nombreInst.toLowerCase().replace(/[^a-z0-9]/g, '-').substring(0, 30)}-${Date.now().toString(36)}`
+      // Verificar si la institución ya existe
+      const { data: instExistePorCodigo } = await supabase
+        .from('instituciones')
+        .select('id, nombre')
+        .eq('codigo', nombreInst)
+        .maybeSingle()
 
-      // Verificar institución duplicada
-      const { data: instExiste } = await supabase
+      if (instExistePorCodigo) {
+        return { success: false, error: `Ya existe una institución llamada "${instExistePorCodigo.nombre}"` }
+      }
+
+      const { data: instExistePorNombre } = await supabase
         .from('instituciones')
         .select('id, nombre')
         .ilike('nombre', nombreInst)
-        .limit(1)
+        .maybeSingle()
 
-      if (instExiste?.length > 0) {
-        return { success: false, error: `Ya existe una institución llamada "${instExiste[0].nombre}"` }
+      if (instExistePorNombre) {
+        return { success: false, error: `Ya existe una institución con un nombre similar: "${instExistePorNombre.nombre}"` }
       }
 
-      // Verificar email duplicado
-      const { data: emailExiste } = await supabase
+      // Verificar si el email ya existe
+      const { data: emailExisteEnUsuarios } = await supabase
         .from('usuarios')
         .select('id')
         .eq('email', emailNormalizado)
-        .limit(1)
+        .maybeSingle()
 
-      if (emailExiste?.length > 0) {
+      if (emailExisteEnUsuarios) {
         return { success: false, error: 'Este correo electrónico ya está registrado' }
       }
 
-      console.log('📝 Creando usuario en Auth...')
-      
-      // Crear en Supabase Auth (envía email automáticamente)
+      // ========== CREAR EN SUPABASE AUTH ==========
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: emailNormalizado,
         password,
         options: {
-          data: { nombre: nombreUsuario, institucion: nombreInst },
+          data: {
+            nombre: nombreUsuario,
+            institucion: nombreInst
+          },
           emailRedirectTo: `${window.location.origin}/auth/callback`
         }
       })
 
       if (authError) {
-        console.error('Error creando auth:', authError)
+        console.error('Error creando auth user:', authError)
         if (authError.message.includes('already registered')) {
-          return { success: false, error: 'Este correo ya está registrado' }
+          return { success: false, error: 'Este correo electrónico ya está registrado' }
         }
         return { success: false, error: authError.message }
       }
@@ -386,16 +307,14 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: 'Error al crear usuario' }
       }
 
-      console.log('🏢 Creando institución...')
-      
-      // Crear institución
+      // ========== CREAR INSTITUCIÓN CON TODOS LOS CAMPOS ==========
       const { data: nuevaInst, error: instError } = await supabase
         .from('instituciones')
         .insert({ 
           nombre: nombreInst, 
-          codigo: codigoUnico,
-          tipo,
-          pais,
+          codigo: nombreInst,
+          tipo: tipo,
+          pais: pais,
           ciudad: ciudad.trim(),
           region: region || null,
           sitio_web: sitioWeb || null,
@@ -407,12 +326,10 @@ export const AuthProvider = ({ children }) => {
 
       if (instError) {
         console.error('Error creando institución:', instError)
-        return { success: false, error: 'Error al crear la institución' }
+        return { success: false, error: 'Error al crear la institución. Por favor contacta soporte.' }
       }
 
-      console.log('👤 Creando usuario en tabla...')
-      
-      // Crear usuario en nuestra tabla
+      // ========== CREAR USUARIO ==========
       const { error: userError } = await supabase
         .from('usuarios')
         .insert({
@@ -427,39 +344,44 @@ export const AuthProvider = ({ children }) => {
 
       if (userError) {
         console.error('Error creando usuario:', userError)
-        // Rollback
         await supabase.from('instituciones').delete().eq('id', nuevaInst.id)
-        return { success: false, error: 'Error al crear el usuario' }
+        return { success: false, error: 'Error al crear el usuario. Por favor intenta de nuevo.' }
       }
 
       localStorage.setItem('admitio_pending_email', emailNormalizado)
 
-      console.log('✅ Signup completo')
+      console.log('✅ Cuenta creada:', {
+        institucion: nuevaInst.nombre,
+        tipo: tipo,
+        pais: pais,
+        ciudad: ciudad,
+        email: emailNormalizado
+      })
+
       return { 
         success: true, 
         requiresVerification: true,
+        message: 'Cuenta creada. Revisa tu correo para verificar tu cuenta.',
         email: emailNormalizado
       }
 
     } catch (error) {
       console.error('Error en signup:', error)
-      return { success: false, error: 'Error al crear cuenta' }
+      return { success: false, error: error.message || 'Error al crear cuenta' }
     }
   }
 
   // ========== SIGN OUT ==========
   async function signOut() {
-    console.log('🚪 Cerrando sesión...')
-    
-    setUser(null)
-    setInstitucion(null)
-    setDataLoaded(false)
-    
     if (isSupabaseConfigured()) {
       await supabase.auth.signOut()
     }
-    
-    console.log('✅ Sesión cerrada')
+    setUser(null)
+    setInstitucion(null)
+    localStorage.removeItem('admitio_user')
+    localStorage.removeItem('admitio_data')
+    localStorage.removeItem('admitio_pending_email')
+    console.log('👋 Sesión cerrada')
   }
 
   // ========== RESET PASSWORD ==========
@@ -469,73 +391,370 @@ export const AuthProvider = ({ children }) => {
     }
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email.toLowerCase().trim(), {
-        redirectTo: `${window.location.origin}/auth/callback?type=recovery`
-      })
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        email.toLowerCase().trim(),
+        { redirectTo: `${window.location.origin}/cambiar-password` }
+      )
 
       if (error) throw error
 
-      return { success: true }
+      return { success: true, message: 'Revisa tu correo para restablecer tu contraseña' }
     } catch (error) {
       console.error('Error en reset password:', error)
       return { success: false, error: error.message }
     }
   }
 
-  // ========== UPDATE PASSWORD ==========
-  async function updatePassword(newPassword) {
+  // ========== RESEND VERIFICATION ==========
+  async function resendVerification(email) {
     if (!isSupabaseConfigured()) {
       return { success: false, error: 'Sistema no configurado' }
     }
 
     try {
-      const { error } = await supabase.auth.updateUser({ password: newPassword })
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email.toLowerCase().trim(),
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`
+        }
+      })
 
       if (error) throw error
 
-      return { success: true }
+      return { success: true, message: 'Email de verificación reenviado' }
     } catch (error) {
-      console.error('Error actualizando password:', error)
+      console.error('Error reenviando verificación:', error)
       return { success: false, error: error.message }
     }
   }
 
-  // ========== HELPERS DE PERMISOS ==========
-  const canEdit = user?.permisos?.editar || false
-  const canDelete = user?.permisos?.eliminar || false
-  const canManageUsers = user?.permisos?.usuarios || false
-  const canConfig = user?.permisos?.config || false
-  const canViewAll = user?.permisos?.ver_todos || false
-  const isKeymaster = user?.rol_id === 'keymaster' || user?.rol_id === 'superadmin'
+  // ========== LOAD INSTITUCION DATA ==========
+  async function loadInstitucionData(institucionId) {
+    try {
+      const { data: leads } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('institucion_id', institucionId)
+        .order('created_at', { ascending: false })
 
-  // ========== CONTEXTO ==========
-  const value = {
-    user,
-    institucion,
-    loading,
-    dataLoaded,
-    signIn,
-    signUp,
-    signOut,
-    resetPassword,
-    updatePassword,
-    loadInstitucionData,
-    // Helpers
-    canEdit,
-    canDelete,
-    canManageUsers,
-    canConfig,
-    canViewAll,
-    isKeymaster,
-    isAuthenticated: !!user,
-    ROLES
+      const { data: usuarios } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('institucion_id', institucionId)
+        .eq('activo', true)
+
+      const { data: carreras } = await supabase
+        .from('carreras')
+        .select('*')
+        .eq('institucion_id', institucionId)
+        .eq('activa', true)
+        .order('nombre', { ascending: true })
+
+      const { data: formularios } = await supabase
+        .from('formularios')
+        .select('*')
+        .eq('institucion_id', institucionId)
+        .order('created_at', { ascending: false })
+
+      const { data: acciones } = await supabase
+        .from('acciones_lead')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100)
+
+      const storeData = {
+        consultas: (leads || []).map(lead => ({
+          id: lead.id,
+          nombre: lead.nombre,
+          email: lead.email,
+          telefono: lead.telefono,
+          carrera_id: lead.carrera_id,
+          carrera_nombre: lead.carrera_nombre,
+          medio_id: lead.medio || 'web',
+          estado: lead.estado || 'nueva',
+          prioridad: lead.prioridad || 'media',
+          notas: lead.notas,
+          asignado_a: lead.asignado_a,
+          creado_por: lead.creado_por,
+          created_at: lead.created_at,
+          fecha_primer_contacto: lead.fecha_primer_contacto,
+          fecha_cierre: lead.fecha_cierre,
+          matriculado: lead.matriculado || false,
+          descartado: lead.descartado || false,
+          updated_at: lead.updated_at
+        })),
+        usuarios: (usuarios || []).map(u => ({
+          id: u.id,
+          email: u.email,
+          nombre: u.nombre,
+          rol_id: u.rol,
+          activo: u.activo,
+          avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.nombre)}&background=7c3aed&color=fff`
+        })),
+        carreras: (carreras || []).map(c => ({
+          id: c.id,
+          nombre: c.nombre,
+          color: c.color || 'bg-violet-500',
+          activa: c.activa
+        })),
+        formularios: (formularios || []).map(f => ({
+          id: f.id,
+          nombre: f.nombre,
+          slug: f.slug,
+          campos: f.campos || [],
+          carrera_default: f.carrera_default,
+          activo: f.activo !== false,
+          submissions: f.submissions || 0,
+          created_at: f.created_at
+        })),
+        actividad: (acciones || []).map(a => ({
+          id: a.id,
+          tipo: a.tipo,
+          descripcion: a.descripcion,
+          fecha: a.created_at,
+          usuario_id: a.usuario_id,
+          lead_id: a.lead_id
+        })),
+        medios: [
+          { id: 'instagram', nombre: 'Instagram', icono: 'Instagram', color: 'text-pink-500' },
+          { id: 'web', nombre: 'Sitio Web', icono: 'Globe', color: 'text-blue-500' },
+          { id: 'whatsapp', nombre: 'WhatsApp', icono: 'MessageCircle', color: 'text-green-500' },
+          { id: 'telefono', nombre: 'Teléfono', icono: 'Phone', color: 'text-slate-500' },
+          { id: 'referido', nombre: 'Referido', icono: 'Users', color: 'text-violet-500' },
+          { id: 'facebook', nombre: 'Facebook', icono: 'Facebook', color: 'text-blue-600' },
+          { id: 'email', nombre: 'Email', icono: 'Mail', color: 'text-amber-500' },
+          { id: 'presencial', nombre: 'Presencial', icono: 'MapPin', color: 'text-emerald-500' },
+          { id: 'otro', nombre: 'Otro', icono: 'MoreHorizontal', color: 'text-gray-500' }
+        ],
+        recordatorios: [],
+        lastSync: new Date().toISOString()
+      }
+
+      localStorage.setItem('admitio_data', JSON.stringify(storeData))
+      
+      // Disparar evento para que el Dashboard recargue
+      window.dispatchEvent(new Event('admitio-data-loaded'))
+      
+      console.log('📦 Datos cargados desde Supabase:', {
+        leads: storeData.consultas.length,
+        usuarios: storeData.usuarios.length,
+        carreras: storeData.carreras.length,
+        formularios: storeData.formularios.length
+      })
+
+      await loadPlanInfo(institucionId, storeData.consultas.length, storeData.usuarios.length)
+
+    } catch (error) {
+      console.error('Error cargando datos de institución:', error)
+    }
   }
 
+  async function loadPlanInfo(institucionId, leadsCount, usuariosCount) {
+    try {
+      const { data: inst } = await supabase
+        .from('instituciones')
+        .select('plan')
+        .eq('id', institucionId)
+        .single()
+
+      const planId = inst?.plan || 'free'
+      const limites = PLANES_DEFAULT[planId] || PLANES_DEFAULT.free
+
+      const { count: formCount } = await supabase
+        .from('formularios')
+        .select('*', { count: 'exact', head: true })
+        .eq('institucion_id', institucionId)
+
+      setPlanInfo({
+        plan: planId,
+        limites,
+        uso: {
+          leads: leadsCount,
+          usuarios: usuariosCount,
+          formularios: formCount || 0
+        }
+      })
+
+    } catch (error) {
+      console.error('Error cargando info del plan:', error)
+    }
+  }
+
+  function actualizarUso(tipo, delta) {
+    setPlanInfo(prev => ({
+      ...prev,
+      uso: {
+        ...prev.uso,
+        [tipo]: Math.max(0, (prev.uso[tipo] || 0) + delta)
+      }
+    }))
+  }
+
+  async function reloadFromSupabase() {
+    if (!user?.institucion_id || !isSupabaseConfigured()) {
+      return false
+    }
+    
+    try {
+      await loadInstitucionData(user.institucion_id)
+      return true
+    } catch (error) {
+      console.error('Error recargando:', error)
+      return false
+    }
+  }
+
+  // Helpers
+  const puedeCrearLead = () => planInfo.uso.leads < planInfo.limites.max_leads
+  const puedeCrearUsuario = () => planInfo.uso.usuarios < planInfo.limites.max_usuarios
+  const puedeCrearFormulario = () => planInfo.uso.formularios < planInfo.limites.max_formularios
+  const porcentajeUsoLeads = () => Math.round((planInfo.uso.leads / planInfo.limites.max_leads) * 100)
+  const porcentajeUsoUsuarios = () => Math.round((planInfo.uso.usuarios / planInfo.limites.max_usuarios) * 100)
+  const porcentajeUsoFormularios = () => Math.round((planInfo.uso.formularios / planInfo.limites.max_formularios) * 100)
+
+  // Aliases
+  const login = signIn
+  const logout = signOut
+  const signup = signUp
+
+  // ========== INVITE USER ==========
+  async function inviteUser({ email, nombre, rol }) {
+    if (!isSupabaseConfigured()) {
+      return { success: false, error: 'No disponible en modo local' }
+    }
+
+    if (!user || !['keymaster', 'superadmin'].includes(user.rol_id)) {
+      return { success: false, error: 'No tienes permisos para invitar usuarios' }
+    }
+
+    try {
+      // Crear usuario con contraseña temporal
+      const tempPassword = Math.random().toString(36).slice(-12) + 'A1!'
+      
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: email.toLowerCase().trim(),
+        password: tempPassword,
+        options: {
+          data: { nombre, rol },
+          emailRedirectTo: `${window.location.origin}/auth/callback?type=invite`
+        }
+      })
+
+      if (authError) {
+        if (authError.message.includes('already registered')) {
+          return { success: false, error: 'Este correo ya está registrado' }
+        }
+        throw authError
+      }
+
+      // Crear usuario en nuestra tabla
+      const { error: userError } = await supabase
+        .from('usuarios')
+        .insert({
+          institucion_id: user.institucion_id,
+          auth_id: authData.user?.id,
+          email: email.toLowerCase().trim(),
+          nombre,
+          rol,
+          activo: true,
+          password_pendiente: true,
+          email_verificado: false,
+          invitado_por: user.id,
+          fecha_invitacion: new Date().toISOString()
+        })
+
+      if (userError) {
+        console.error('Error creando usuario:', userError)
+        return { success: false, error: 'Error al crear el usuario' }
+      }
+
+      // Enviar email de reset para que establezca su contraseña
+      await supabase.auth.resetPasswordForEmail(email.toLowerCase().trim(), {
+        redirectTo: `${window.location.origin}/auth/callback?type=recovery`
+      })
+
+      // Actualizar uso
+      actualizarUso('usuarios', 1)
+
+      return {
+        success: true,
+        message: `Invitación enviada a ${email}. Recibirá un email para configurar su contraseña.`
+      }
+
+    } catch (error) {
+      console.error('Error invitando usuario:', error)
+      return { success: false, error: error.message || 'Error al enviar invitación' }
+    }
+  }
+
+  // Roles y permisos
+  const isSuperAdmin = user?.rol_id === 'superadmin'
+  const isKeyMaster = user?.rol_id === 'keymaster' || isSuperAdmin
+  const isEncargado = user?.rol_id === 'encargado'
+  const isAsistente = user?.rol_id === 'asistente'
+  const isRector = user?.rol_id === 'rector'
+  
+  const canViewAll = user?.permisos?.ver_todos || isSuperAdmin
+  const canViewOwn = user?.permisos?.ver_propios
+  const canEdit = user?.permisos?.editar || isSuperAdmin
+  const canReasignar = user?.permisos?.reasignar || isSuperAdmin
+  const canConfig = user?.permisos?.config || isSuperAdmin
+  const canManageUsers = user?.permisos?.usuarios || isSuperAdmin
+  const canViewReports = user?.permisos?.reportes || isEncargado || isSuperAdmin
+  const canManageForms = user?.permisos?.formularios || isSuperAdmin
+  const canCreateLeads = user?.permisos?.crear_leads || canEdit
+  const canDeleteKeyMaster = user?.permisos?.eliminar_keymaster || isSuperAdmin
+
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{
+      user,
+      institucion,
+      loading,
+      signIn,
+      signOut,
+      signUp,
+      resetPassword,
+      resendVerification,
+      reloadFromSupabase,
+      login,
+      logout,
+      signup,
+      isAuthenticated: !!user,
+      isSuperAdmin,
+      isKeyMaster,
+      isEncargado,
+      isAsistente,
+      isRector,
+      canViewAll,
+      canViewOwn,
+      canEdit,
+      canReasignar,
+      canConfig,
+      canManageUsers,
+      canViewReports,
+      canManageForms,
+      canCreateLeads,
+      canDeleteKeyMaster,
+      planInfo,
+      actualizarUso,
+      puedeCrearLead,
+      puedeCrearUsuario,
+      puedeCrearFormulario,
+      porcentajeUsoLeads,
+      porcentajeUsoUsuarios,
+      porcentajeUsoFormularios,
+      inviteUser,
+    }}>
       {children}
     </AuthContext.Provider>
   )
 }
 
-export default AuthContext
+export function useAuth() {
+  const context = useContext(AuthContext)
+  if (!context) {
+    throw new Error('useAuth debe usarse dentro de AuthProvider')
+  }
+  return context
+}
