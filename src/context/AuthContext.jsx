@@ -45,6 +45,7 @@ export function AuthProvider({ children }) {
     limites: PLANES_DEFAULT.free,
     uso: { leads: 0, usuarios: 0, formularios: 0 }
   })
+  const isLoadingUser = React.useRef(false)
 
   useEffect(() => {
     // Limpiar datos viejos de localStorage al iniciar
@@ -120,16 +121,14 @@ export function AuthProvider({ children }) {
   }
 
   async function loadUserFromAuth(authUser) {
+    if (isLoadingUser.current) {
+      console.log('⏸️ Ya cargando usuario, ignorando llamada duplicada')
+      return
+    }
+    isLoadingUser.current = true
+    
     try {
       console.log('🔎 Consultando BD para auth_id:', authUser.id)
-      const { data: usuario, error } = await supabase
-        .from('usuarios')
-        .select('*, instituciones(id, nombre, tipo, pais, ciudad, region, sitio_web, plan)')
-        .eq('auth_id', authUser.id)
-        .eq('activo', true)
-        .single()
-      console.log('📋 Respuesta BD:', { usuario: !!usuario, error: error?.message })
-
       if (error || !usuario) {
         console.log('⚠️ Usuario no encontrado en tabla usuarios')
         setLoading(false)
@@ -161,7 +160,8 @@ export function AuthProvider({ children }) {
       console.log('✅ Usuario cargado:', enrichedUser.nombre)
     } catch (error) {
       console.error('Error cargando usuario:', error)
-    } finally {
+       } finally {
+      isLoadingUser.current = false
       setLoading(false)
     }
   }
