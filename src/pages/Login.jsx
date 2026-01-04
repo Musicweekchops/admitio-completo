@@ -1,15 +1,25 @@
-import React, { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Icon from '../components/Icon'
 
 export default function Login() {
   const { signIn } = useAuth()
   const navigate = useNavigate()
-  const [email, setEmail] = useState('')
+  const location = useLocation()
+  const [email, setEmail] = useState(location.state?.email || '')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [successMessage, setSuccessMessage] = useState(location.state?.message || '')
   const [loading, setLoading] = useState(false)
+
+  // Limpiar mensaje después de mostrarlo
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => setSuccessMessage(''), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [successMessage])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -96,6 +106,13 @@ export default function Login() {
               Ingresa tus credenciales para acceder
             </p>
           </div>
+
+          {successMessage && (
+            <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3 text-emerald-600 animate-slide-up">
+              <Icon name="CheckCircle" size={20} />
+              <span className="text-sm">{successMessage}</span>
+            </div>
+          )}
 
           {error && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-600 animate-slide-up">

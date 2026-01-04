@@ -45,7 +45,6 @@ export function AuthProvider({ children }) {
     limites: PLANES_DEFAULT.free,
     uso: { leads: 0, usuarios: 0, formularios: 0 }
   })
-  const isLoadingUser = React.useRef(false)
 
   useEffect(() => {
     // Limpiar datos viejos de localStorage al iniciar
@@ -75,10 +74,8 @@ export function AuthProvider({ children }) {
           return
         }
         
-      if (event === 'SIGNED_IN' && session?.user && !user) {
-          console.log('🔍 Cargando datos para:', session.user.email)
+        if (event === 'SIGNED_IN' && session?.user) {
           await loadUserFromAuth(session.user)
-        
         } else if (event === 'SIGNED_OUT') {
           setUser(null)
           setInstitucion(null)
@@ -121,22 +118,14 @@ export function AuthProvider({ children }) {
     }
   }
 
- async function loadUserFromAuth(authUser) {
-    if (isLoadingUser.current) {
-      console.log('⏸️ Ya cargando usuario, ignorando llamada duplicada')
-      return
-    }
-    isLoadingUser.current = true
-    
+  async function loadUserFromAuth(authUser) {
     try {
-      console.log('🔎 Consultando BD para auth_id:', authUser.id)
       const { data: usuario, error } = await supabase
         .from('usuarios')
         .select('*, instituciones(id, nombre, tipo, pais, ciudad, region, sitio_web, plan)')
         .eq('auth_id', authUser.id)
         .eq('activo', true)
         .single()
-      console.log('📋 Respuesta BD:', { usuario: !!usuario, error: error?.message })
 
       if (error || !usuario) {
         console.log('⚠️ Usuario no encontrado en tabla usuarios')
@@ -170,7 +159,6 @@ export function AuthProvider({ children }) {
     } catch (error) {
       console.error('Error cargando usuario:', error)
     } finally {
-      isLoadingUser.current = false
       setLoading(false)
     }
   }
@@ -192,15 +180,7 @@ export function AuthProvider({ children }) {
         if (error.message.includes('Invalid login')) {
           return { success: false, error: 'Credenciales inválidas' }
         }
-        if (error.message.includes('Email not confirmed')) {
-          return { success: false, error: 'Debes verificar tu email antes de iniciar sesión. Revisa tu bandeja de entrada.' }
-        }
         return { success: false, error: error.message }
-      }
-
-      if (!data.user.email_confirmed_at) {
-        await supabase.auth.signOut()
-        return { success: false, error: 'Debes verificar tu email antes de iniciar sesión. Revisa tu bandeja de entrada.' }
       }
 
       return { success: true, user: data.user }
@@ -302,8 +282,7 @@ export function AuthProvider({ children }) {
           data: {
             nombre: nombreUsuario,
             institucion: nombreInst
-          },
-          emailRedirectTo: `${window.location.origin}/auth/callback`
+          }
         }
       })
 
@@ -351,7 +330,7 @@ export function AuthProvider({ children }) {
           nombre: nombreUsuario,
           rol: 'keymaster',
           activo: true,
-          email_verificado: false
+          email_verificado: true
         })
 
       if (userError) {
@@ -359,8 +338,6 @@ export function AuthProvider({ children }) {
         await supabase.from('instituciones').delete().eq('id', nuevaInst.id)
         return { success: false, error: 'Error al crear el usuario. Por favor intenta de nuevo.' }
       }
-
-      localStorage.setItem('admitio_pending_email', emailNormalizado)
 
       console.log('✅ Cuenta creada:', {
         institucion: nuevaInst.nombre,
@@ -372,8 +349,8 @@ export function AuthProvider({ children }) {
 
       return { 
         success: true, 
-        requiresVerification: true,
-        message: 'Cuenta creada. Revisa tu correo para verificar tu cuenta.',
+        requiresVerification: false,
+        message: 'Cuenta creada exitosamente.',
         email: emailNormalizado
       }
 
@@ -631,25 +608,25 @@ export function AuthProvider({ children }) {
   const signup = signUp
 
   // ========== INVITE USER ==========
-  async function inviteUser({ email, nombre, rol }) {
+  async function inviteUser({ email, nombre, rol, password }) {
     if (!isSupabaseConfigured()) {
       return { success: false, error: 'No disponible en modo local' }
     }
 
     if (!user || !['keymaster', 'superadmin'].includes(user.rol_id)) {
-      return { success: false, error: 'No tienes permisos para invitar usuarios' }
+      return { success: false, error: 'No tienes permisos para crear usuarios' }
+    }
+
+    if (!password || password.length < 6) {
+      return { success: false, error: 'La contraseña debe tener al menos 6 caracteres' }
     }
 
     try {
-      // Crear usuario con contraseña temporal
-      const tempPassword = Math.random().toString(36).slice(-12) + 'A1!'
-      
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: email.toLowerCase().trim(),
-        password: tempPassword,
+        password: password,
         options: {
-          data: { nombre, rol },
-          emailRedirectTo: `${window.location.origin}/auth/callback?type=invite`
+          data: { nombre, rol }
         }
       })
 
@@ -670,10 +647,8 @@ export function AuthProvider({ children }) {
           nombre,
           rol,
           activo: true,
-          password_pendiente: true,
-          email_verificado: false,
-          invitado_por: user.id,
-          fecha_invitacion: new Date().toISOString()
+          email_verificado: true,
+          creado_por: user.id
         })
 
       if (userError) {
@@ -681,22 +656,17 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'Error al crear el usuario' }
       }
 
-      // Enviar email de reset para que establezca su contraseña
-      await supabase.auth.resetPasswordForEmail(email.toLowerCase().trim(), {
-        redirectTo: `${window.location.origin}/auth/callback?type=recovery`
-      })
-
       // Actualizar uso
       actualizarUso('usuarios', 1)
 
       return {
         success: true,
-        message: `Invitación enviada a ${email}. Recibirá un email para configurar su contraseña.`
+        message: `Usuario ${nombre} creado correctamente.`
       }
 
     } catch (error) {
-      console.error('Error invitando usuario:', error)
-      return { success: false, error: error.message || 'Error al enviar invitación' }
+      console.error('Error creando usuario:', error)
+      return { success: false, error: error.message || 'Error al crear usuario' }
     }
   }
 

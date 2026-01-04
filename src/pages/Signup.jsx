@@ -244,12 +244,13 @@ const Signup = () => {
       })
 
       if (result.success) {
-        if (result.requiresVerification) {
-          // Redirigir a página de verificación pendiente
-          navigate('/verificar-email', { state: { email: formData.email } })
-        } else {
-          navigate('/dashboard')
-        }
+        // Redirigir a login con mensaje de éxito
+        navigate('/login', { 
+          state: { 
+            message: '¡Cuenta creada exitosamente! Ahora puedes iniciar sesión.',
+            email: formData.email 
+          } 
+        })
       } else {
         setError(result.error || 'Error al crear la cuenta')
       }

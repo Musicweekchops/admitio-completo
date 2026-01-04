@@ -4160,6 +4160,7 @@ export default function Dashboard() {
     const [userFormData, setUserFormData] = useState({
       nombre: '',
       email: '',
+      password: '',
       rol_id: 'encargado',
       activo: true
     })
@@ -4182,6 +4183,7 @@ export default function Dashboard() {
       setUserFormData({
         nombre: '',
         email: '',
+        password: '',
         rol_id: 'encargado',
         activo: true
       })
@@ -4212,6 +4214,12 @@ export default function Dashboard() {
         return
       }
       
+      // Validar contraseña para nuevo usuario
+      if (!localEditingUser && (!userFormData.password || userFormData.password.length < 6)) {
+        alert('La contraseña debe tener al menos 6 caracteres')
+        return
+      }
+      
       if (localEditingUser) {
         // ========== ACTUALIZAR USUARIO EXISTENTE ==========
         const updates = {
@@ -4225,15 +4233,15 @@ export default function Dashboard() {
         setLocalShowUserModal(false)
         refreshUsuarios()
       } else {
-        // ========== INVITAR NUEVO USUARIO ==========
+        // ========== CREAR NUEVO USUARIO ==========
         setInviteLoading(true)
         
         try {
           const result = await inviteUser({
             nombre: userFormData.nombre,
             email: userFormData.email,
-            rol: userFormData.rol_id,
-            institucionId: user?.institucion_id || institucion?.id
+            password: userFormData.password,
+            rol: userFormData.rol_id
           })
           
           if (result.success) {
@@ -4453,7 +4461,7 @@ export default function Dashboard() {
             <div className="bg-white rounded-2xl p-6 w-full max-w-md">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-xl font-bold text-slate-800">
-                  {localEditingUser ? 'Editar Usuario' : 'Invitar Usuario'}
+                  {localEditingUser ? 'Editar Usuario' : 'Crear Usuario'}
                 </h3>
                 <button onClick={() => setLocalShowUserModal(false)} className="p-2 text-red-500 hover:text-white hover:bg-red-500 rounded-lg transition-colors">
                   <Icon name="X" size={24} />
@@ -4462,12 +4470,12 @@ export default function Dashboard() {
               
               {/* Mensaje informativo para nuevos usuarios */}
               {!localEditingUser && (
-                <div className="mb-4 p-3 bg-violet-50 border border-violet-200 rounded-lg">
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <div className="flex items-start gap-2">
-                    <Icon name="Mail" className="text-violet-600 mt-0.5" size={18} />
-                    <div className="text-sm text-violet-700">
-                      <p className="font-medium">Se enviará un email de invitación</p>
-                      <p className="text-violet-600">El usuario recibirá un enlace para establecer su contraseña.</p>
+                    <Icon name="Info" className="text-blue-600 mt-0.5" size={18} />
+                    <div className="text-sm text-blue-700">
+                      <p className="font-medium">Crear nuevo usuario</p>
+                      <p className="text-blue-600">Deberás comunicarle las credenciales al usuario.</p>
                     </div>
                   </div>
                 </div>
@@ -4500,6 +4508,21 @@ export default function Dashboard() {
                     <p className="text-xs text-slate-400 mt-1">El email no se puede cambiar</p>
                   )}
                 </div>
+                
+                {!localEditingUser && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Contraseña *</label>
+                    <input
+                      type="password"
+                      value={userFormData.password}
+                      onChange={e => setUserFormData({...userFormData, password: e.target.value})}
+                      className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                      placeholder="Mínimo 6 caracteres"
+                      disabled={inviteLoading}
+                    />
+                    <p className="text-xs text-slate-400 mt-1">Deberás comunicar esta contraseña al usuario</p>
+                  </div>
+                )}
                 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Rol *</label>
@@ -4550,14 +4573,14 @@ export default function Dashboard() {
                   {inviteLoading ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                      Enviando...
+                      Creando...
                     </>
                   ) : localEditingUser ? (
                     'Guardar Cambios'
                   ) : (
                     <>
-                      <Icon name="Send" size={18} />
-                      Enviar Invitación
+                      <Icon name="UserPlus" size={18} />
+                      Crear Usuario
                     </>
                   )}
                 </button>
