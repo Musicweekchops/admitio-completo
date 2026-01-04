@@ -74,7 +74,7 @@ export function AuthProvider({ children }) {
           return
         }
         
-        if (event === 'SIGNED_IN' && session?.user) {
+       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
           await loadUserFromAuth(session.user)
         } else if (event === 'SIGNED_OUT') {
           setUser(null)
