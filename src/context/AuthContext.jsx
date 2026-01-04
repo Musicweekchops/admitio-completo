@@ -75,6 +75,7 @@ export function AuthProvider({ children }) {
         }
         
        if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
+          console.log('🔍 Cargando datos para:', session.user.email)
           await loadUserFromAuth(session.user)
         } else if (event === 'SIGNED_OUT') {
           setUser(null)
