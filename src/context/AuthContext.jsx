@@ -121,12 +121,14 @@ export function AuthProvider({ children }) {
 
   async function loadUserFromAuth(authUser) {
     try {
+      console.log('🔎 Consultando BD para auth_id:', authUser.id)
       const { data: usuario, error } = await supabase
         .from('usuarios')
         .select('*, instituciones(id, nombre, tipo, pais, ciudad, region, sitio_web, plan)')
         .eq('auth_id', authUser.id)
         .eq('activo', true)
         .single()
+      console.log('📋 Respuesta BD:', { usuario: !!usuario, error: error?.message })
 
       if (error || !usuario) {
         console.log('⚠️ Usuario no encontrado en tabla usuarios')
