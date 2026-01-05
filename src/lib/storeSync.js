@@ -5,7 +5,7 @@
 // Permite que el Dashboard funcione de forma síncrona
 // mientras los datos persisten en la nube
 
-import { supabase } from './supabase';
+import { supabase, isSupabaseConfigured } from './supabase';
 
 const STORAGE_KEY = 'admitio_data';
 
@@ -548,6 +548,11 @@ export function syncImportarLeads(institucionId, leads) {
     return;
   }
 
+  if (!isSupabaseConfigured() || !supabase) {
+    console.warn('⚠️ Supabase no configurado: la importación quedará en cola local');
+    return;
+  }
+
   addToSyncQueue('importar_leads', async () => {
     if (!Array.isArray(leads) || leads.length === 0) {
       console.log('⚠️ No hay leads para importar');
@@ -569,12 +574,9 @@ export function syncImportarLeads(institucionId, leads) {
         notas: lead.notas || null
       };
 
-      // Incluir campos relacionados solo si son UUIDs válidos
       if (lead.carrera_id && uuidRegex.test(lead.carrera_id)) item.carrera_id = lead.carrera_id;
       if (lead.asignado_a && uuidRegex.test(lead.asignado_a)) item.asignado_a = lead.asignado_a;
       if (lead.creado_por && uuidRegex.test(lead.creado_por)) item.creado_por = lead.creado_por;
-
-      // NO incluir ID si es local (evita conflictos). Incluir solo si parece UUID.
       if (lead.id && uuidRegex.test(lead.id)) item.id = lead.id;
 
       return item;
@@ -592,7 +594,6 @@ export function syncImportarLeads(institucionId, leads) {
         throw insertError;
       }
 
-      // Crear una acción por cada lead importado (evita crear acciones con IDs locales)
       const accionesParaSupabase = (insertedLeads || []).map(l => ({
         lead_id: l.id,
         tipo: 'import',
@@ -607,7 +608,6 @@ export function syncImportarLeads(institucionId, leads) {
 
         if (accionesError) {
           console.error('❌ Error creando acciones de importación:', accionesError);
-          // No forzamos rollback aquí; lanzar para que la cola lo registre
           throw accionesError;
         }
       }
