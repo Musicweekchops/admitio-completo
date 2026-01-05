@@ -2432,86 +2432,72 @@ function parseCSVLine(line) {
 }
 
 export async function importarLeadsCSV(csvData, userId) {
+  console.log("🚀 Iniciando importación de CSV...");
+  
   const institucionId = getInstitucionIdFromStore();
-  const lineas = csvData.split('\n').filter(l => l.trim());
+  const lineas = csvData.split('\n').filter(l => l.trim() !== '');
+  
+  if (lineas.length < 2) {
+    return { success: false, error: 'El archivo está vacío o no tiene datos suficientes' };
+  }
+
   const headers = lineas[0].split(',').map(h => h.trim().toLowerCase());
-}
-  
-  // Tu lógica de mapeo de columnas aquí...
-  
   let importados = 0;
   let errores = 0;
 
+  // 1. Mapeo de columnas
+  const col = {
+    nombre: headers.indexOf('nombre'),
+    email: headers.indexOf('email'),
+    telefono: headers.indexOf('telefono'),
+    carrera: headers.indexOf('carrera'),
+    medio: headers.indexOf('medio'),
+    nota: headers.indexOf('nota')
+  };
+
+  // 2. Procesar cada línea
   for (let i = 1; i < lineas.length; i++) {
     try {
       const valores = lineas[i].split(',').map(v => v.trim());
-      const data = { /* mapeo de valores a campos */ };
+      if (valores.length < 2) continue;
 
-      // 1. Crear localmente para feedback inmediato
-      const localLead = createConsulta(data, userId, 'admin');
+      const leadData = {
+        nombre: valores[col.nombre] || 'Sin nombre',
+        email: valores[col.email] || '',
+        telefono: valores[col.telefono] || '',
+        carrera_nombre: valores[col.carrera] || '',
+        medio: valores[col.medio] || 'importacion',
+        notas: valores[col.nota] || 'Importado via CSV'
+      };
 
-      // 2. Sincronizar y esperar el UUID de Supabase
+      // Crear localmente (genera ID temporal c-...)
+      const localLead = createConsulta(leadData, userId, 'admin');
+
+      // Sincronizar inmediatamente si hay institucionId
       if (institucionId) {
-        const supabaseLead = await syncCrearLeadDirecto(institucionId, localLead);
-        
-        // 3. REEMPLAZAR ID LOCAL POR UUID REAL
-        const index = store.consultas.findIndex(c => c.id === localLead.id);
-        if (index !== -1) {
-          store.consultas[index].id = supabaseLead.id;
-          saveStore();
+        try {
+          // Usamos la función de sincronización directa que espera a Supabase
+          const supabaseLead = await syncActualizarLeadDirecto(institucionId, localLead);
+          
+          if (supabaseLead && supabaseLead.id) {
+            // Reemplazamos el ID local por el ID real de Supabase
+            const index = store.consultas.findIndex(c => c.id === localLead.id);
+            if (index !== -1) {
+              store.consultas[index].id = supabaseLead.id;
+              store.consultas[index].sincronizado = true;
+              console.log(`✅ Sincronizado: ${leadData.nombre} -> ID: ${supabaseLead.id}`);
+            }
+          }
+        } catch (syncErr) {
+          console.error(`⚠️ Error sincronizando línea ${i}:`, syncErr);
         }
       }
+
       importados++;
     } catch (err) {
-      console.error('Error en línea ' + (i+1), err);
+      console.error(`❌ Error en línea ${i}:`, err);
       errores++;
     }
-  }
-
-  return { success: true, importados, errores };
-
-  
-  // Opciones de importación
-  const { asignarA = null } = opciones // ID del encargado al que asignar todos los leads
-  
-  // Normalizar saltos de línea y filtrar vacías
-  const lineas = csvData
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    .split('\n')
-    .filter(l => l.trim())
-  
-  if (lineas.length < 2) {
-    console.error('❌ CSV vacío o sin datos')
-    return { success: false, error: 'El archivo está vacío o no tiene datos' }
-  }
-  
-  // Parsear headers
-  const headers = parseCSVLine(lineas[0]).map(h => 
-    h.toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // Quitar acentos
-      .replace(/[^a-z0-9]/g, '') // Solo alfanumérico
-  )
-  
-  console.log('📋 Headers detectados:', headers)
-  
-  // Mapeo inteligente de columnas
-  const findColumn = (keywords) => {
-    for (const kw of keywords) {
-      const idx = headers.findIndex(h => h.includes(kw))
-      if (idx !== -1) return idx
-    }
-    return -1
-  }
-  
-  const mapeo = {
-    nombre: mapeoColumnas.nombre ?? findColumn(['nombre', 'name', 'contacto', 'cliente']),
-    email: mapeoColumnas.email ?? findColumn(['email', 'correo', 'mail']),
-    telefono: mapeoColumnas.telefono ?? findColumn(['telefono', 'celular', 'fono', 'movil', 'phone', 'tel']),
-    carrera: mapeoColumnas.carrera ?? findColumn(['carrera', 'instrumento', 'curso', 'programa', 'interes']),
-    medio: mapeoColumnas.medio ?? findColumn(['medio', 'fuente', 'origen', 'canal', 'source']),
-    notas: mapeoColumnas.notas ?? findColumn(['nota', 'comentario', 'observacion', 'detalle', 'mensaje'])
   }
   
   console.log('🗺️ Mapeo de columnas:', mapeo)
@@ -2800,4 +2786,4 @@ export function eliminarRegistroImportacion(id) {
 }
 
 // Importar para uso externo
-export { ROLES, ESTADOS, TIPOS_ALUMNO, TIPOS_ACTIVIDAD }
+export { ROLES, ESTADOS, TIPOS_ALUMNO, TIPOS_ACTIVIDAD } from './constants.js'
