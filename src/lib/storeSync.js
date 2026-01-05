@@ -541,8 +541,87 @@ export function syncActualizarUsuario(usuarioId, updates) {
     if (error) throw error;
   });
 }
-
+// ...existing code...
 export function syncImportarLeads(institucionId, leads) {
+  if (!institucionId) {
+    console.error('❌ No se puede importar leads: institucionId es null');
+    return;
+  }
+
+  addToSyncQueue('importar_leads', async () => {
+    if (!Array.isArray(leads) || leads.length === 0) {
+      console.log('⚠️ No hay leads para importar');
+      return;
+    }
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    const leadsParaSupabase = leads.map(lead => {
+      const item = {
+        institucion_id: institucionId,
+        nombre: lead.nombre || null,
+        email: lead.email || null,
+        telefono: lead.telefono || null,
+        carrera_nombre: lead.carrera_nombre || null,
+        medio: lead.medio_id || 'otro',
+        estado: lead.estado || 'nueva',
+        prioridad: lead.prioridad || 'media',
+        notas: lead.notas || null
+      };
+
+      // Incluir campos relacionados solo si son UUIDs válidos
+      if (lead.carrera_id && uuidRegex.test(lead.carrera_id)) item.carrera_id = lead.carrera_id;
+      if (lead.asignado_a && uuidRegex.test(lead.asignado_a)) item.asignado_a = lead.asignado_a;
+      if (lead.creado_por && uuidRegex.test(lead.creado_por)) item.creado_por = lead.creado_por;
+
+      // NO incluir ID si es local (evita conflictos). Incluir solo si parece UUID.
+      if (lead.id && uuidRegex.test(lead.id)) item.id = lead.id;
+
+      return item;
+    });
+
+    try {
+      console.log('📤 Importando leads a Supabase:', leadsParaSupabase.length);
+      const { data: insertedLeads, error: insertError } = await supabase
+        .from('leads')
+        .insert(leadsParaSupabase)
+        .select();
+
+      if (insertError) {
+        console.error('❌ Error importando leads a Supabase:', insertError);
+        throw insertError;
+      }
+
+      // Crear una acción por cada lead importado (evita crear acciones con IDs locales)
+      const accionesParaSupabase = (insertedLeads || []).map(l => ({
+        lead_id: l.id,
+        tipo: 'import',
+        descripcion: 'Importado desde CSV',
+        created_at: new Date().toISOString()
+      }));
+
+      if (accionesParaSupabase.length > 0) {
+        const { error: accionesError } = await supabase
+          .from('acciones_lead')
+          .insert(accionesParaSupabase);
+
+        if (accionesError) {
+          console.error('❌ Error creando acciones de importación:', accionesError);
+          // No forzamos rollback aquí; lanzar para que la cola lo registre
+          throw accionesError;
+        }
+      }
+
+      console.log(`✅ ${insertedLeads?.length || 0} leads importados a Supabase`);
+      return insertedLeads;
+    } catch (err) {
+      console.error('❌ Excepción importando leads a Supabase:', err);
+      throw err;
+    }
+  });
+}
+// ...existing code...
+
   addToSyncQueue('importar_leads', async () => {
     const leadsParaSupabase = leads.map(lead => ({
       id: lead.id,
