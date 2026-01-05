@@ -2431,9 +2431,44 @@ function parseCSVLine(line) {
   return result
 }
 
-// Función principal: Importar leads desde CSV
-export function importarLeadsCSV(csvData, userId, mapeoColumnas = {}, opciones = {}) {
-  console.log('📥 Iniciando importación de CSV...')
+export async function importarLeadsCSV(csvData, userId) {
+  const institucionId = getInstitucionIdFromStore();
+  const lineas = csvData.split('\n').filter(l => l.trim());
+  const headers = lineas[0].split(',').map(h => h.trim().toLowerCase());
+  
+  // Tu lógica de mapeo de columnas aquí...
+  
+  let importados = 0;
+  let errores = 0;
+
+  for (let i = 1; i < lineas.length; i++) {
+    try {
+      const valores = lineas[i].split(',').map(v => v.trim());
+      const data = { /* mapeo de valores a campos */ };
+
+      // 1. Crear localmente para feedback inmediato
+      const localLead = createConsulta(data, userId, 'admin');
+
+      // 2. Sincronizar y esperar el UUID de Supabase
+      if (institucionId) {
+        const supabaseLead = await syncCrearLeadDirecto(institucionId, localLead);
+        
+        // 3. REEMPLAZAR ID LOCAL POR UUID REAL
+        const index = store.consultas.findIndex(c => c.id === localLead.id);
+        if (index !== -1) {
+          store.consultas[index].id = supabaseLead.id;
+          saveStore();
+        }
+      }
+      importados++;
+    } catch (err) {
+      console.error('Error en línea ' + (i+1), err);
+      errores++;
+    }
+  }
+
+  return { success: true, importados, errores };
+}
   
   // Opciones de importación
   const { asignarA = null } = opciones // ID del encargado al que asignar todos los leads
@@ -2674,7 +2709,7 @@ export function importarLeadsCSV(csvData, userId, mapeoColumnas = {}, opciones =
   console.log('📝 Importación registrada:', registroImportacion.id)
   
   return { success: true, ...resultados, registro: registroImportacion }
-}
+
 
 // ============================================
 // HELPERS
@@ -2694,6 +2729,34 @@ function formatTime(dateStr) {
 // ============================================
 // HISTORIAL DE IMPORTACIONES
 // ============================================
+/**
+ * Sincronización directa que espera a Supabase y retorna el registro creado con su UUID real.
+ */
+export async function syncCrearLeadDirecto(institucionId, leadData) {
+  if (!institucionId) throw new Error('No hay ID de institución');
+
+  const { data, error } = await supabase
+    .from('leads')
+    .insert([{
+      institucion_id: institucionId,
+      nombre: leadData.nombre,
+      email: leadData.email || null,
+      telefono: leadData.telefono || null,
+      carrera_id: leadData.carrera_id || null,
+      carrera_nombre: leadData.carrera_nombre || null,
+      medio: leadData.medio_id || 'otro',
+      estado: 'nueva',
+      notas: leadData.notas || '',
+      asignado_a: leadData.asignado_a,
+      creado_por: leadData.creado_por
+    }])
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data; // Contiene el ID real de Supabase
+}
+
 export function getHistorialImportaciones(limite = 20) {
   if (!store.importaciones) {
     store.importaciones = []

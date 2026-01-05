@@ -40,35 +40,32 @@ export default function ImportarCSV({ onClose, onSuccess }) {
   }
 
   // Procesar importación
-  const handleImportar = async () => {
-    if (!archivo) return
+  // Dentro de ImportarCSV.jsx
+const handleImportar = async () => {
+  if (!archivo) return;
+  setProcesando(true);
 
-    setProcesando(true)
-    setResultado(null)
-
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const csvData = event.target.result
+  const reader = new FileReader();
+  reader.onload = async (event) => { // <-- Añade async aquí
+    const csvData = event.target.result;
+    
+    try {
+      // <-- Añade await aquí
+      const result = await importarLeadsCSV(csvData, user?.id || 'keymaster');
       
-      // Llamar a la función de importación
-      const result = importarLeadsCSV(csvData, user?.id || 'keymaster')
-      
-      setProcesando(false)
-      setResultado(result)
+      setProcesando(false);
+      setResultado(result);
 
-      // Si tuvo éxito y hay callback, llamarlo después de 2 segundos
       if (result.success && result.importados > 0 && onSuccess) {
-        setTimeout(() => {
-          onSuccess(result)
-        }, 2000)
+        onSuccess(result);
       }
+    } catch (error) {
+      setProcesando(false);
+      setResultado({ success: false, error: 'Error en la sincronización' });
     }
-    reader.onerror = () => {
-      setProcesando(false)
-      setResultado({ success: false, error: 'Error al leer el archivo' })
-    }
-    reader.readAsText(archivo)
-  }
+  };
+  reader.readAsText(archivo);
+};
 
   // Reset para importar otro archivo
   const handleReset = () => {
