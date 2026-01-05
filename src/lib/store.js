@@ -2431,22 +2431,21 @@ function parseCSVLine(line) {
   return result
 }
 
-export async function importarLeadsCSV(csvData, userId) {
+export async function importarLeadsCSV(csvData, userId, asignarA = null) {
   console.log("🚀 Iniciando importación de CSV...");
   
   const institucionId = getInstitucionIdFromStore();
-  const lineas = csvData.split('\n').filter(l => l.trim() !== '');
+  // Limpiar líneas vacías
+  const lineas = csvData.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   
   if (lineas.length < 2) {
     return { success: false, error: 'El archivo está vacío o no tiene datos suficientes' };
   }
 
   const headers = lineas[0].split(',').map(h => h.trim().toLowerCase());
-  let importados = 0;
-  let errores = 0;
-
-  // 1. Mapeo de columnas
-  const col = {
+  
+  // 1. Mapeo de columnas (Consistente)
+  const mapeo = {
     nombre: headers.indexOf('nombre'),
     email: headers.indexOf('email'),
     telefono: headers.indexOf('telefono'),
@@ -2455,248 +2454,107 @@ export async function importarLeadsCSV(csvData, userId) {
     nota: headers.indexOf('nota')
   };
 
-  // 2. Procesar cada línea
+  if (mapeo.nombre === -1) {
+    return { success: false, error: 'No se encontró la columna "nombre".' };
+  }
+
+  const resultados = { importados: 0, errores: [], duplicados: 0, detalles: [] };
+
+  // 2. Procesar cada línea (UN SOLO BUCLE)
   for (let i = 1; i < lineas.length; i++) {
     try {
-      const valores = lineas[i].split(',').map(v => v.trim());
-      if (valores.length < 2) continue;
+      // Reemplazo simple de parseCSVLine si no la tienes definida
+      const valores = lineas[i].split(',').map(v => v.replace(/^["']|["']$/g, '').trim());
+      
+      const getValue = (idx) => (idx !== -1 && idx < valores.length) ? valores[idx] : '';
+      
+      const nombre = getValue(mapeo.nombre);
+      const email = getValue(mapeo.email);
+      const telefono = getValue(mapeo.telefono);
+      const carreraTexto = getValue(mapeo.carrera);
+      const medioTexto = getValue(mapeo.medio);
+      const notas = getValue(mapeo.nota);
 
+      if (!nombre || nombre.length < 2) {
+        resultados.errores.push(`Línea ${i + 1}: Nombre inválido`);
+        continue;
+      }
+
+      // Validar Duplicados
+      const existe = store.consultas.find(c => 
+        (email && c.email?.toLowerCase() === email.toLowerCase()) ||
+        (telefono && c.telefono?.replace(/\D/g, '') === telefono.replace(/\D/g, ''))
+      );
+
+      if (existe) {
+        resultados.duplicados++;
+        continue;
+      }
+
+      // Matching de Carrera (Lógica optimizada)
+      let carrera_id = null;
+      if (carreraTexto) {
+        const busqueda = carreraTexto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const encontrada = store.carreras.find(c => 
+          c.nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(busqueda)
+        );
+        if (encontrada) carrera_id = encontrada.id;
+      }
+
+      // 3. Crear Lead Único
       const leadData = {
-        nombre: valores[col.nombre] || 'Sin nombre',
-        email: valores[col.email] || '',
-        telefono: valores[col.telefono] || '',
-        carrera_nombre: valores[col.carrera] || '',
-        medio: valores[col.medio] || 'importacion',
-        notas: valores[col.nota] || 'Importado via CSV'
+        nombre,
+        email,
+        telefono,
+        carrera_id,
+        medio_id: medioTexto || 'importacion',
+        notas: notas || 'Importado via CSV',
+        asignado_a: asignarA || 'En cola'
       };
 
-      // Crear localmente (genera ID temporal c-...)
-      const localLead = createConsulta(leadData, userId, 'admin');
+      // Crear Localmente
+      const nuevoLead = createConsulta(leadData, userId, 'keymaster');
 
-      // Sincronizar inmediatamente si hay institucionId
+      // 4. Sincronizar con Supabase (Esperar ID real)
       if (institucionId) {
         try {
-          // Usamos la función de sincronización directa que espera a Supabase
-          const supabaseLead = await syncActualizarLeadDirecto(institucionId, localLead);
-          
-          if (supabaseLead && supabaseLead.id) {
-            // Reemplazamos el ID local por el ID real de Supabase
-            const index = store.consultas.findIndex(c => c.id === localLead.id);
-            if (index !== -1) {
-              store.consultas[index].id = supabaseLead.id;
-              store.consultas[index].sincronizado = true;
-              console.log(`✅ Sincronizado: ${leadData.nombre} -> ID: ${supabaseLead.id}`);
+          const supabaseLead = await syncActualizarLeadDirecto(institucionId, nuevoLead);
+          if (supabaseLead?.id) {
+            const idx = store.consultas.findIndex(c => c.id === nuevoLead.id);
+            if (idx !== -1) {
+              store.consultas[idx].id = supabaseLead.id;
+              store.consultas[idx].sincronizado = true;
             }
           }
-        } catch (syncErr) {
-          console.error(`⚠️ Error sincronizando línea ${i}:`, syncErr);
+        } catch (sErr) {
+          console.error("Error Sync Supabase:", sErr);
         }
       }
 
-      importados++;
+      resultados.importados++;
+      resultados.detalles.push({ linea: i + 1, nombre, id: nuevoLead.id });
+
     } catch (err) {
-      console.error(`❌ Error en línea ${i}:`, err);
-      errores++;
+      resultados.errores.push(`Línea ${i + 1}: ${err.message}`);
     }
   }
-  
-  console.log('🗺️ Mapeo de columnas:', mapeo)
-  
-  // DEBUG: Mostrar carreras disponibles
-  const carrerasActivas = store.carreras.filter(c => c.activa !== false)
-  console.log('🎸 Carreras disponibles para matching:', carrerasActivas.map(c => ({ id: c.id, nombre: c.nombre, activa: c.activa })))
-  
-  // Validar que al menos tengamos nombre
-  if (mapeo.nombre === -1) {
-    return { 
-      success: false, 
-      error: 'No se encontró columna de "nombre". Asegúrate de que tu CSV tenga una columna llamada "nombre".' 
-    }
-  }
-  
-  const resultados = { 
-    importados: 0, 
-    errores: [], 
-    duplicados: 0,
-    detalles: []
-  }
-  
-  // Procesar cada línea
-  for (let i = 1; i < lineas.length; i++) {
-    try {
-      const valores = parseCSVLine(lineas[i])
-      
-      // Extraer valores con validación de índice
-      const getValue = (idx) => {
-        if (idx === -1 || idx >= valores.length) return ''
-        return valores[idx]?.replace(/^["']|["']$/g, '').trim() || ''
-      }
-      
-      const nombre = getValue(mapeo.nombre)
-      const email = getValue(mapeo.email)
-      const telefono = getValue(mapeo.telefono)
-      const carreraTexto = getValue(mapeo.carrera)
-      const medioTexto = getValue(mapeo.medio)
-      const notas = getValue(mapeo.notas)
-      
-      // Validar nombre
-      if (!nombre || nombre.length < 2) {
-        resultados.errores.push(`Línea ${i + 1}: Nombre vacío o inválido`)
-        continue
-      }
-      
-      // Verificar duplicado por email o teléfono (más confiable que nombre)
-      let esDuplicado = false
-      if (email) {
-        const existeEmail = store.consultas.find(c => 
-          c.email?.toLowerCase() === email.toLowerCase()
-        )
-        if (existeEmail) {
-          esDuplicado = true
-          resultados.duplicados++
-          resultados.errores.push(`Línea ${i + 1}: Email "${email}" ya existe (${existeEmail.nombre})`)
-          continue
-        }
-      }
-      
-      if (telefono && !esDuplicado) {
-        const telLimpio = telefono.replace(/\D/g, '')
-        if (telLimpio.length >= 8) {
-          const existeTel = store.consultas.find(c => 
-            c.telefono?.replace(/\D/g, '') === telLimpio
-          )
-          if (existeTel) {
-            esDuplicado = true
-            resultados.duplicados++
-            resultados.errores.push(`Línea ${i + 1}: Teléfono "${telefono}" ya existe (${existeTel.nombre})`)
-            continue
-          }
-        }
-      }
-      
-      // Buscar carrera que coincida con matching inteligente
-      let carrera_id = null // NO usar default, dejar null si no encuentra
-      if (carreraTexto) {
-        const carreraTextoNorm = carreraTexto.toLowerCase()
-          .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Quitar acentos
-          .trim()
-        
-        // Extraer palabra base (primer palabra): "guitarra electrica" -> "guitarra"
-        const palabraBase = carreraTextoNorm.split(/\s+/)[0]
-        
-        // Filtrar solo carreras activas
-        const carrerasActivas = store.carreras.filter(c => c.activa !== false)
-        
-        // Ordenar por longitud de nombre (más cortos primero = más genéricos)
-        const carrerasOrdenadas = [...carrerasActivas].sort((a, b) => a.nombre.length - b.nombre.length)
-        
-        // 1. Primero: coincidencia EXACTA (ignorando case y acentos)
-        let carreraEncontrada = carrerasOrdenadas.find(c => {
-          const nombreNorm = c.nombre.toLowerCase()
-            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-            .trim()
-          return nombreNorm === carreraTextoNorm
-        })
-        
-        // 2. Si no hay exacta, buscar por palabra base al INICIO del nombre
-        // "guitarra" matchea con "Guitarra" pero NO con "Bajo Guitarra"
-        if (!carreraEncontrada) {
-          carreraEncontrada = carrerasOrdenadas.find(c => {
-            const nombreNorm = c.nombre.toLowerCase()
-              .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-            const primeraPalabra = nombreNorm.split(/\s+/)[0]
-            return primeraPalabra === palabraBase
-          })
-        }
-        
-        // 3. Si aún no hay, buscar que el nombre EMPIECE con el texto buscado
-        if (!carreraEncontrada) {
-          carreraEncontrada = carrerasOrdenadas.find(c => {
-            const nombreNorm = c.nombre.toLowerCase()
-              .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-            return nombreNorm.startsWith(palabraBase)
-          })
-        }
-        
-        if (carreraEncontrada) {
-          carrera_id = carreraEncontrada.id
-          console.log(`🎸 Carrera mapeada: "${carreraTexto}" → "${carreraEncontrada.nombre}"`)
-        } else {
-          console.warn(`⚠️ Carrera no encontrada: "${carreraTexto}"`)
-          resultados.errores.push(`Línea ${i + 1}: Carrera "${carreraTexto}" no existe en el sistema`)
-        }
-      }
-      
-      // Si no se encontró carrera, saltar este lead (no usar default)
-      if (!carrera_id) {
-        console.warn(`⚠️ Línea ${i + 1}: Sin carrera válida, omitiendo`)
-        continue
-      }
-      
-      // Medio: guardar texto directo del CSV
-      const medio_id = medioTexto || 'importacion'
-      console.log(`📱 Medio: "${medio_id}"`)
-      
-      // Crear el lead
-      const nuevoLead = createConsulta({
-        nombre,
-        email: email || '',
-        telefono: telefono || '',
-        carrera_id,
-        medio_id,
-        tipo_alumno: 'nuevo',
-        notas: notas || 'Importado desde CSV',
-        origen_entrada: 'importacion',
-        asignado_a: asignarA || null // Asignar al encargado seleccionado
-      }, userId, 'keymaster')
-      
-      resultados.importados++
-      resultados.detalles.push({
-        linea: i + 1,
-        nombre,
-        id: nuevoLead.id
-      })
-      
-      console.log(`✅ Línea ${i + 1}: ${nombre} importado`)
-      
-    } catch (err) {
-      console.error(`❌ Error en línea ${i + 1}:`, err)
-      resultados.errores.push(`Línea ${i + 1}: Error de formato - ${err.message}`)
-    }
-  }
-  
-  console.log('📊 Resultado importación:', {
-    importados: resultados.importados,
-    duplicados: resultados.duplicados,
-    errores: resultados.errores.length
-  })
-  
-  // Registrar la importación en el historial
-  const usuario = store.usuarios.find(u => u.id === userId)
+
+  // 5. Registro de historial
   const registroImportacion = {
     id: `imp_${Date.now()}`,
     fecha: new Date().toISOString(),
     usuario_id: userId,
-    usuario_nombre: usuario?.nombre || 'Sistema',
-    archivo: 'CSV importado',
-    total_procesados: lineas.length - 1,
     importados: resultados.importados,
     duplicados: resultados.duplicados,
     errores: resultados.errores.length,
-    detalles_errores: resultados.errores.slice(0, 10), // Solo primeros 10 errores
     leads_creados: resultados.detalles.map(d => ({ id: d.id, nombre: d.nombre }))
-  }
-  
-  if (!store.importaciones) {
-    store.importaciones = []
-  }
-  store.importaciones.unshift(registroImportacion) // Agregar al inicio
-  saveStore()
-  
-  console.log('📝 Importación registrada:', registroImportacion.id)
-  
-  return { success: true, ...resultados, registro: registroImportacion }
+  };
 
+  if (!store.importaciones) store.importaciones = [];
+  store.importaciones.unshift(registroImportacion);
+  
+  saveStore();
+  return { success: true, ...resultados, registro: registroImportacion };
 }
 
 // ============================================
