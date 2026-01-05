@@ -643,7 +643,7 @@ export function syncImportarLeads(institucionId, leads) {
     
     if (error) throw error;
   });
-}
+
 
 // ============================================
 // VERIFICAR ESTADO DE SINCRONIZACIÓN
