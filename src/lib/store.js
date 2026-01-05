@@ -2435,6 +2435,7 @@ export async function importarLeadsCSV(csvData, userId) {
   const institucionId = getInstitucionIdFromStore();
   const lineas = csvData.split('\n').filter(l => l.trim());
   const headers = lineas[0].split(',').map(h => h.trim().toLowerCase());
+}
   
   // Tu lógica de mapeo de columnas aquí...
   
@@ -2468,7 +2469,7 @@ export async function importarLeadsCSV(csvData, userId) {
   }
 
   return { success: true, importados, errores };
-}
+
   
   // Opciones de importación
   const { asignarA = null } = opciones // ID del encargado al que asignar todos los leads
