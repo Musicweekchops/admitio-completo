@@ -517,7 +517,8 @@ export function AuthProvider({ children }) {
           { id: 'otro', nombre: 'Otro', icono: 'MoreHorizontal', color: 'text-gray-500' }
         ],
         recordatorios: [],
-        lastSync: new Date().toISOString()
+        lastSync: new Date().toISOString(),
+        _institucion_id: institucionId
       }
 
       localStorage.setItem('admitio_data', JSON.stringify(storeData))
