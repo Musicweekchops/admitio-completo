@@ -4202,11 +4202,12 @@ export default function Dashboard() {
     }
     
     const handleSaveUser = async () => {
+      console.log('🔘 handleSaveUser llamado', { userFormData, inviteUser: typeof inviteUser })
       if (!userFormData.nombre || !userFormData.email) {
         alert('Nombre y email son requeridos')
         return
       }
-      
+
       // Validar email
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
       if (!emailRegex.test(userFormData.email)) {
