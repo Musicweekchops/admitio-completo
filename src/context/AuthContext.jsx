@@ -648,8 +648,7 @@ export function AuthProvider({ children }) {
           nombre,
           rol,
           activo: true,
-          email_verificado: true,
-          creado_por: user.id
+          email_verificado: true
         })
 
       if (userError) {
