@@ -29,12 +29,16 @@ export function useLockLead(leadId, user, isKeyMaster = false) {
     }
 
     try {
-      // Primero limpiar locks expirados de este lead
-      await supabase
-        .from('lead_locks')
-        .delete()
-        .eq('lead_id', leadId)
-        .lt('expires_at', new Date().toISOString())
+      // Primero limpiar locks expirados de este lead (ignorar errores)
+      try {
+        await supabase
+          .from('lead_locks')
+          .delete()
+          .eq('lead_id', leadId)
+          .lt('expires_at', new Date().toISOString())
+      } catch (e) {
+        // Ignorar errores de limpieza
+      }
 
       // Buscar lock activo
       const { data, error: fetchError } = await supabase
@@ -42,11 +46,16 @@ export function useLockLead(leadId, user, isKeyMaster = false) {
         .select('*')
         .eq('lead_id', leadId)
         .gt('expires_at', new Date().toISOString())
-        .single()
+        .maybeSingle()
 
-      if (fetchError && fetchError.code !== 'PGRST116') {
-        // PGRST116 = no rows returned (no hay lock)
-        throw fetchError
+      if (fetchError) {
+        console.warn('⚠️ Error consultando lock:', fetchError.message)
+        // No lanzar error, asumir que no hay lock
+        setLockInfo(null)
+        setIsLocked(false)
+        setIsMyLock(false)
+        setLoading(false)
+        return null
       }
 
       if (data) {

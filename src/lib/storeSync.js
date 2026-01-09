@@ -412,14 +412,21 @@ export async function syncActualizarLeadDirecto(leadId, updates) {
   console.log('📤 Sync directo a Supabase:', leadId, Object.keys(supabaseUpdates));
 
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('leads')
       .update(supabaseUpdates)
-      .eq('id', leadId);
+      .eq('id', leadId)
+      .select()
+      .maybeSingle();
     
     if (error) {
       console.error('❌ Error en sync directo:', error);
       return { success: false, error: error.message };
+    }
+    
+    if (!data) {
+      console.warn('⚠️ Update no afectó ninguna fila. ¿El lead existe?', leadId);
+      return { success: false, error: 'Lead no encontrado o sin permisos' };
     }
     
     console.log('✅ Sync directo exitoso:', leadId);
