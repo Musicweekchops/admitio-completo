@@ -362,15 +362,28 @@ export function AuthProvider({ children }) {
 
   // ========== SIGN OUT ==========
   async function signOut() {
-    if (isSupabaseConfigured()) {
-      await supabase.auth.signOut()
+    try {
+      if (isSupabaseConfigured()) {
+        // Timeout de 3 segundos para signOut
+        const signOutPromise = supabase.auth.signOut()
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout')), 3000)
+        )
+        await Promise.race([signOutPromise, timeoutPromise]).catch(() => {
+          console.warn('⚠️ signOut tardó demasiado, continuando...')
+        })
+      }
+    } catch (error) {
+      console.warn('⚠️ Error en signOut:', error)
+    } finally {
+      // Siempre limpiar estado local
+      setUser(null)
+      setInstitucion(null)
+      localStorage.removeItem('admitio_user')
+      localStorage.removeItem('admitio_data')
+      localStorage.removeItem('admitio_pending_email')
+      console.log('👋 Sesión cerrada')
     }
-    setUser(null)
-    setInstitucion(null)
-    localStorage.removeItem('admitio_user')
-    localStorage.removeItem('admitio_data')
-    localStorage.removeItem('admitio_pending_email')
-    console.log('👋 Sesión cerrada')
   }
 
   // ========== RESET PASSWORD ==========

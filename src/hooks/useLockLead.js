@@ -298,6 +298,16 @@ export function useLockLead(leadId, user, isKeyMaster = false) {
   useEffect(() => {
     if (leadId && user?.id) {
       checkLock()
+      
+      // Timeout de seguridad: si después de 5 segundos sigue loading, forzar false
+      const timeout = setTimeout(() => {
+        setLoading(false)
+      }, 5000)
+      
+      return () => {
+        clearTimeout(timeout)
+        stopHeartbeat()
+      }
     }
 
     return () => {

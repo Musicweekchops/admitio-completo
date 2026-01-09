@@ -268,6 +268,8 @@ export function syncCrearLead(institucionId, leadData) {
 }
 
 export function syncActualizarLead(leadId, updates) {
+  console.log('🔄 syncActualizarLead llamado:', { leadId, updates: Object.keys(updates) });
+  
   // Si el leadId es local (no UUID), no podemos actualizar en Supabase
   if (!leadId || !leadId.includes('-') || leadId.startsWith('c-')) {
     console.log('⚠️ Lead con ID local, no se sincroniza actualización:', leadId);

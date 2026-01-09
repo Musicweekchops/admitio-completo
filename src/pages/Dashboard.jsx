@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Icon from '../components/Icon'
@@ -683,6 +683,13 @@ export default function Dashboard() {
   }
 
   // Supabase Realtime - Solo escucha cambios, no hace polling
+  const selectedConsultaRef = useRef(selectedConsulta)
+  
+  // Mantener ref actualizado
+  useEffect(() => {
+    selectedConsultaRef.current = selectedConsulta
+  }, [selectedConsulta])
+  
   useEffect(() => {
     if (!isSupabaseConfigured() || !user?.institucion_id) return
 
@@ -695,7 +702,7 @@ export default function Dashboard() {
         async (payload) => {
           console.log('📡 Cambio en leads:', payload.eventType)
           // Solo actualizar si NO hay ficha abierta (evita parpadeo del botón editar)
-          if (!selectedConsulta) {
+          if (!selectedConsultaRef.current) {
             await reloadFromSupabase()
             loadData()
             setLastUpdate(new Date())
@@ -706,7 +713,7 @@ export default function Dashboard() {
         { event: '*', schema: 'public', table: 'usuarios', filter: `institucion_id=eq.${user.institucion_id}` },
         async (payload) => {
           console.log('📡 Cambio en usuarios:', payload.eventType)
-          if (!selectedConsulta) {
+          if (!selectedConsultaRef.current) {
             await reloadFromSupabase()
             loadData()
           }
@@ -723,7 +730,7 @@ export default function Dashboard() {
       console.log('🔌 Desconectando Realtime...')
       supabase.removeChannel(channel)
     }
-  }, [user?.institucion_id, selectedConsulta])
+  }, [user?.institucion_id])
   // ========================================
 
   // Cargar importaciones pendientes (solo Enterprise)
@@ -1837,8 +1844,6 @@ export default function Dashboard() {
       releaseLock,
       forceAcquireLock
     } = useLockLead(c.id, user, isKeyMaster)
-    console.log('🔒 Lock status:', { lockLoading, isLocked, isMyLock, canEdit })
-    
     
     const [isEditing, setIsEditing] = useState(false)
     const [saveStatus, setSaveStatus] = useState(null) // 'saving', 'saved', 'error'
@@ -4204,12 +4209,11 @@ export default function Dashboard() {
     }
     
     const handleSaveUser = async () => {
-      console.log('🔘 handleSaveUser llamado', { userFormData, inviteUser: typeof inviteUser })
       if (!userFormData.nombre || !userFormData.email) {
         alert('Nombre y email son requeridos')
         return
       }
-
+      
       // Validar email
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
       if (!emailRegex.test(userFormData.email)) {
