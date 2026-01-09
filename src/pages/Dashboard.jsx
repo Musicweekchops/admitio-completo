@@ -700,12 +700,16 @@ export default function Dashboard() {
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'leads', filter: `institucion_id=eq.${user.institucion_id}` },
         async (payload) => {
-          console.log('📡 Cambio en leads:', payload.eventType)
+          console.log('📡 Cambio en leads:', payload.eventType, payload.new?.nombre || payload.old?.id)
           // Solo actualizar si NO hay ficha abierta (evita parpadeo del botón editar)
           if (!selectedConsultaRef.current) {
             await reloadFromSupabase()
+            store.reloadStore() // Actualizar store en memoria
             loadData()
             setLastUpdate(new Date())
+            console.log('✅ Dashboard actualizado con cambios de Supabase')
+          } else {
+            console.log('⏸️ Lead abierto, actualización pendiente')
           }
         }
       )
@@ -715,6 +719,7 @@ export default function Dashboard() {
           console.log('📡 Cambio en usuarios:', payload.eventType)
           if (!selectedConsultaRef.current) {
             await reloadFromSupabase()
+            store.reloadStore() // Actualizar store en memoria
             loadData()
           }
         }
@@ -1962,6 +1967,10 @@ export default function Dashboard() {
       }
       setSelectedConsulta(null)
       setActiveTab('consultas')
+      
+      // Recargar datos por si hubo cambios mientras el lead estaba abierto
+      store.reloadStore()
+      loadData()
     }
 
     return (

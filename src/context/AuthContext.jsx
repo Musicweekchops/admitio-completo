@@ -45,6 +45,9 @@ export function AuthProvider({ children }) {
     limites: PLANES_DEFAULT.free,
     uso: { leads: 0, usuarios: 0, formularios: 0 }
   })
+  
+  // Guard para evitar llamadas duplicadas a loadUserFromAuth
+  const isLoadingUser = React.useRef(false)
 
   useEffect(() => {
     // Limpiar datos viejos de localStorage al iniciar
@@ -74,7 +77,8 @@ export function AuthProvider({ children }) {
           return
         }
         
-        if (event === 'SIGNED_IN' && session?.user) {
+        // Solo procesar SIGNED_IN si no hay usuario cargado (evita duplicados en refresh)
+        if (event === 'SIGNED_IN' && session?.user && !user) {
           await loadUserFromAuth(session.user)
         } else if (event === 'SIGNED_OUT') {
           setUser(null)
@@ -103,7 +107,16 @@ export function AuthProvider({ children }) {
         return
       }
 
+      // Timeout de seguridad: si tarda más de 10 segundos, continuar sin usuario
+      const timeoutId = setTimeout(() => {
+        console.warn('⚠️ Timeout en checkSession, continuando...')
+        isLoadingUser.current = false
+        setLoading(false)
+      }, 10000)
+
       const { data: { session } } = await supabase.auth.getSession()
+      
+      clearTimeout(timeoutId)
       
       if (session?.user) {
         await loadUserFromAuth(session.user)
@@ -119,18 +132,31 @@ export function AuthProvider({ children }) {
   }
 
   async function loadUserFromAuth(authUser) {
+    // Guard: evitar llamadas simultáneas
+    if (isLoadingUser.current) {
+      console.log('⏸️ Ya cargando usuario, ignorando llamada duplicada')
+      return
+    }
+    isLoadingUser.current = true
+    
     try {
+      console.log('🔍 Cargando usuario:', authUser.email)
+      
       const { data: usuario, error } = await supabase
         .from('usuarios')
         .select('*, instituciones(id, nombre, tipo, pais, ciudad, region, sitio_web, plan)')
         .eq('auth_id', authUser.id)
         .eq('activo', true)
-        .single()
+        .maybeSingle()
 
-      if (error || !usuario) {
+      if (error) {
+        console.error('❌ Error consultando usuario:', error)
+        return // finally se encarga de cleanup
+      }
+      
+      if (!usuario) {
         console.log('⚠️ Usuario no encontrado en tabla usuarios')
-        setLoading(false)
-        return
+        return // finally se encarga de cleanup
       }
 
       const rol = ROLES[usuario.rol] || ROLES.asistente
@@ -159,6 +185,8 @@ export function AuthProvider({ children }) {
     } catch (error) {
       console.error('Error cargando usuario:', error)
     } finally {
+      // Siempre resetear el guard y loading
+      isLoadingUser.current = false
       setLoading(false)
     }
   }
