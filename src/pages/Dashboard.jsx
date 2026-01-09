@@ -1837,6 +1837,8 @@ export default function Dashboard() {
       releaseLock,
       forceAcquireLock
     } = useLockLead(c.id, user, isKeyMaster)
+    console.log('🔒 Lock status:', { lockLoading, isLocked, isMyLock, canEdit })
+    
     
     const [isEditing, setIsEditing] = useState(false)
     const [saveStatus, setSaveStatus] = useState(null) // 'saving', 'saved', 'error'
