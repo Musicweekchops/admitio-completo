@@ -587,7 +587,7 @@ const PieChart = ({ data, size = 200 }) => {
 }
 
 export default function Dashboard() {
-  const { user, institucion, signOut, isKeyMaster, isRector, isEncargado, isAsistente, canViewAll, canEdit, canConfig, canCreateLeads, canReasignar, reloadFromSupabase, planInfo, actualizarUso, puedeCrearLead, puedeCrearUsuario, puedeCrearFormulario, inviteUser } = useAuth()
+  const { user, institucion, signOut, isKeyMaster, isRector, isEncargado, isAsistente, canViewAll, canEdit, canConfig, canCreateLeads, canReasignar, reloadFromSupabase, planInfo, actualizarUso, puedeCrearLead, puedeCrearUsuario, puedeCrearFormulario, inviteUser, resendVerification } = useAuth()
   
   // Nombre dinámico de la institución
   const nombreInstitucion = institucion?.nombre || user?.institucion_nombre || store.getConfig()?.nombre || 'Mi Institución'
@@ -4427,7 +4427,22 @@ export default function Dashboard() {
                         </div>
                       </div>
                     </td>
-                    <td className="p-4 text-slate-600">{u.email}</td>
+                    <td className="p-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-600">{u.email}</span>
+                        {u.email_verificado ? (
+                          <span className="flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-xs" title="Email verificado">
+                            <Icon name="CheckCircle" size={12} />
+                            <span className="hidden sm:inline">Verificado</span>
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-600 rounded-full text-xs" title="Pendiente de verificación">
+                            <Icon name="Clock" size={12} />
+                            <span className="hidden sm:inline">Pendiente</span>
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="p-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                         u.rol_id === 'keymaster' ? 'bg-violet-100 text-violet-700' :
@@ -4459,6 +4474,29 @@ export default function Dashboard() {
                     </td>
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center gap-2">
+                        {/* Reenviar invitación si no está verificado */}
+                        {!u.email_verificado && u.id !== user?.id && (
+                          <button
+                            onClick={async () => {
+                              setNotification({ type: 'info', message: 'Reenviando invitación...' })
+                              try {
+                                const result = await resendVerification(u.email)
+                                if (result.success) {
+                                  setNotification({ type: 'success', message: 'Invitación reenviada correctamente' })
+                                } else {
+                                  setNotification({ type: 'error', message: result.error || 'Error al reenviar' })
+                                }
+                              } catch (err) {
+                                setNotification({ type: 'error', message: 'Error al reenviar invitación' })
+                              }
+                              setTimeout(() => setNotification(null), 4000)
+                            }}
+                            className="p-2 text-amber-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                            title="Reenviar invitación"
+                          >
+                            <Icon name="Mail" size={18} />
+                          </button>
+                        )}
                         <button
                           onClick={() => openEditUser(u)}
                           className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -4504,7 +4542,7 @@ export default function Dashboard() {
                     <Icon name="Info" className="text-blue-600 mt-0.5" size={18} />
                     <div className="text-sm text-blue-700">
                       <p className="font-medium">Crear nuevo usuario</p>
-                      <p className="text-blue-600">Deberás comunicarle las credenciales al usuario.</p>
+                      <p className="text-blue-600">El usuario recibirá un email de verificación. Una vez verificado, podrá ingresar con las credenciales que definas aquí.</p>
                     </div>
                   </div>
                 </div>

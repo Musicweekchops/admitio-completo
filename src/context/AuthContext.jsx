@@ -126,6 +126,11 @@ export function AuthProvider({ children }) {
         setLoading(false)
       }
     } catch (error) {
+      // Ignorar AbortError - ocurre cuando el componente se desmonta (React StrictMode)
+      if (error.name === 'AbortError') {
+        console.log('⏸️ Solicitud cancelada (normal en desarrollo)')
+        return
+      }
       console.error('Error checking session:', error)
       setLoading(false)
     } finally {
@@ -153,6 +158,11 @@ export function AuthProvider({ children }) {
         .maybeSingle()
 
       if (error) {
+        // Ignorar AbortError
+        if (error.name === 'AbortError') {
+          console.log('⏸️ Consulta cancelada (normal en desarrollo)')
+          return
+        }
         console.error('❌ Error consultando usuario:', error)
         return // finally se encarga de cleanup
       }
@@ -186,6 +196,11 @@ export function AuthProvider({ children }) {
 
       console.log('✅ Usuario cargado:', enrichedUser.nombre)
     } catch (error) {
+      // Ignorar AbortError - ocurre cuando el componente se desmonta
+      if (error.name === 'AbortError') {
+        console.log('⏸️ Solicitud cancelada (normal en desarrollo)')
+        return
+      }
       console.error('Error cargando usuario:', error)
     } finally {
       // Siempre resetear el guard y loading
@@ -201,6 +216,8 @@ export function AuthProvider({ children }) {
     }
 
     try {
+      console.log('🔐 Iniciando login para:', email)
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.toLowerCase().trim(),
         password
@@ -211,12 +228,21 @@ export function AuthProvider({ children }) {
         if (error.message.includes('Invalid login')) {
           return { success: false, error: 'Credenciales inválidas' }
         }
+        if (error.message.includes('Email not confirmed')) {
+          return { success: false, error: 'Debes verificar tu email antes de iniciar sesión. Revisa tu bandeja de entrada.' }
+        }
         return { success: false, error: error.message }
       }
 
+      console.log('✅ Login exitoso, cargando datos del usuario...')
       return { success: true, user: data.user }
 
     } catch (error) {
+      // Ignorar AbortError
+      if (error.name === 'AbortError') {
+        console.log('⏸️ Login cancelado')
+        return { success: false, error: 'Solicitud cancelada, intenta de nuevo' }
+      }
       console.error('Error en signIn:', error)
       return { success: false, error: 'Error de conexión' }
     }
@@ -523,6 +549,7 @@ export function AuthProvider({ children }) {
           nombre: u.nombre,
           rol_id: u.rol,
           activo: u.activo,
+          email_verificado: u.email_verificado || false,
           avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.nombre)}&background=7c3aed&color=fff`
         })),
         carreras: (carreras || []).map(c => ({
@@ -580,6 +607,11 @@ export function AuthProvider({ children }) {
       await loadPlanInfo(institucionId, storeData.consultas.length, storeData.usuarios.length)
 
     } catch (error) {
+      // Ignorar AbortError - ocurre cuando el componente se desmonta
+      if (error.name === 'AbortError') {
+        console.log('⏸️ Carga de datos cancelada (normal en desarrollo)')
+        return
+      }
       console.error('Error cargando datos de institución:', error)
     }
   }
@@ -611,6 +643,8 @@ export function AuthProvider({ children }) {
       })
 
     } catch (error) {
+      // Ignorar AbortError
+      if (error.name === 'AbortError') return
       console.error('Error cargando info del plan:', error)
     }
   }
@@ -634,6 +668,8 @@ export function AuthProvider({ children }) {
       await loadInstitucionData(user.institucion_id)
       return true
     } catch (error) {
+      // Ignorar AbortError
+      if (error.name === 'AbortError') return false
       console.error('Error recargando:', error)
       return false
     }
