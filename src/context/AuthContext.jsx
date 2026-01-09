@@ -46,8 +46,9 @@ export function AuthProvider({ children }) {
     uso: { leads: 0, usuarios: 0, formularios: 0 }
   })
   
-  // Guard para evitar llamadas duplicadas a loadUserFromAuth
+  // Guards para evitar llamadas duplicadas
   const isLoadingUser = React.useRef(false)
+  const initialCheckDone = React.useRef(false)
 
   useEffect(() => {
     // Limpiar datos viejos de localStorage al iniciar
@@ -69,7 +70,7 @@ export function AuthProvider({ children }) {
 
     if (isSupabaseConfigured()) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-        console.log('🔔 Auth event:', event)
+        console.log('🔔 Auth event:', event, '| initialCheckDone:', initialCheckDone.current)
         
         // No procesar si estamos en /auth/callback (AuthCallback lo maneja)
         if (window.location.pathname === '/auth/callback') {
@@ -77,8 +78,14 @@ export function AuthProvider({ children }) {
           return
         }
         
-        // Solo procesar SIGNED_IN si no hay usuario cargado (evita duplicados en refresh)
-        if (event === 'SIGNED_IN' && session?.user && !user) {
+        // Ignorar SIGNED_IN durante la carga inicial (checkSession lo maneja)
+        if (event === 'SIGNED_IN' && !initialCheckDone.current) {
+          console.log('⏸️ Ignorando SIGNED_IN - checkSession lo está manejando')
+          return
+        }
+        
+        // Solo procesar SIGNED_IN después de la carga inicial (para login manual)
+        if (event === 'SIGNED_IN' && session?.user && initialCheckDone.current) {
           await loadUserFromAuth(session.user)
         } else if (event === 'SIGNED_OUT') {
           setUser(null)
@@ -98,25 +105,18 @@ export function AuthProvider({ children }) {
       if (window.location.pathname === '/auth/callback') {
         console.log('⏸️ checkSession saltado - AuthCallback lo maneja')
         setLoading(false)
+        initialCheckDone.current = true
         return
       }
 
       if (!isSupabaseConfigured()) {
         console.log('⚠️ Supabase no configurado')
         setLoading(false)
+        initialCheckDone.current = true
         return
       }
 
-      // Timeout de seguridad: si tarda más de 10 segundos, continuar sin usuario
-      const timeoutId = setTimeout(() => {
-        console.warn('⚠️ Timeout en checkSession, continuando...')
-        isLoadingUser.current = false
-        setLoading(false)
-      }, 10000)
-
       const { data: { session } } = await supabase.auth.getSession()
-      
-      clearTimeout(timeoutId)
       
       if (session?.user) {
         await loadUserFromAuth(session.user)
@@ -128,6 +128,9 @@ export function AuthProvider({ children }) {
     } catch (error) {
       console.error('Error checking session:', error)
       setLoading(false)
+    } finally {
+      // Marcar que la carga inicial terminó
+      initialCheckDone.current = true
     }
   }
 
