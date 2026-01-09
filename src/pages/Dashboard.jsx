@@ -622,6 +622,9 @@ export default function Dashboard() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [lastUpdate, setLastUpdate] = useState(new Date())
+  
+  // Protecciones para arrays que pueden ser undefined durante la carga
+  const safeLeadsHoy = leadsHoy || []
 
   // ============================================
   // FUNCIÓN PARA FORMATEAR TIEMPO PROGRESIVO
@@ -787,29 +790,36 @@ export default function Dashboard() {
   function loadData() {
     console.log('📊 loadData() - Rol:', user?.rol_id, 'isRector:', isRector)
     
+    // Protección: verificar que el store esté listo
+    const storeReady = store.getConsultas && typeof store.getConsultas === 'function'
+    if (!storeReady) {
+      console.warn('⚠️ loadData: store no está listo')
+      return
+    }
+    
     // Para Rector: cargar TODOS los leads de la institución (para reportes)
     // Para otros roles: usar filtro normal
     let data
     if (isRector) {
-      data = store.getConsultasParaReportes()
-      console.log('📊 Rector - Leads cargados:', data.length)
+      data = store.getConsultasParaReportes() || []
+      console.log('📊 Rector - Leads cargados:', data?.length || 0)
       console.log('📊 Rector - Usuarios:', store.getTodosLosUsuarios()?.length || 0)
       console.log('📊 Rector - Encargados:', store.getEncargadosActivos()?.length || 0)
     } else {
-      data = store.getConsultas(user?.id, user?.rol_id)
+      data = store.getConsultas(user?.id, user?.rol_id) || []
     }
     
-    setConsultas(data)
+    setConsultas(data || [])
     
-    if (isEncargado) {
+    if (isEncargado && user?.id) {
       setMetricas(store.getMetricasEncargado(user.id))
-      setLeadsHoy(store.getLeadsContactarHoy(user.id, user.rol_id))
+      setLeadsHoy(store.getLeadsContactarHoy(user.id, user.rol_id) || [])
     } else if (isKeyMaster || isRector) {
       // Rector también ve los leads a contactar hoy (para tener contexto)
-      setLeadsHoy(store.getLeadsContactarHoy())
+      setLeadsHoy(store.getLeadsContactarHoy() || [])
     }
     setMetricasGlobales(store.getMetricasGlobales())
-    setFormularios(store.getFormularios())
+    setFormularios(store.getFormularios() || [])
   }
 
   // Cargar datos inicial y escuchar eventos de datos cargados
@@ -1241,7 +1251,7 @@ export default function Dashboard() {
           />
           <StatCard 
             title={esAdmin ? "Examen Adm." : "Contactar Hoy"} 
-            value={esAdmin ? examenAdm : leadsHoy.length} 
+            value={esAdmin ? examenAdm : safeLeadsHoy.length} 
             icon={esAdmin ? "ClipboardCheck" : "Phone"} 
             color="cyan" 
             sub={esAdmin ? "Agendados" : "Requieren atención"}
@@ -1308,7 +1318,7 @@ export default function Dashboard() {
         )}
         
         {/* Leads para Hoy */}
-        {leadsHoy.length > 0 && (
+        {safeLeadsHoy.length > 0 && (
           <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl p-6 border border-amber-200">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600">
@@ -1316,11 +1326,11 @@ export default function Dashboard() {
               </div>
               <div>
                 <h3 className="font-semibold text-slate-800">Para Contactar Hoy</h3>
-                <p className="text-sm text-slate-500">{leadsHoy.length} lead{leadsHoy.length !== 1 ? 's' : ''} requiere{leadsHoy.length === 1 ? '' : 'n'} tu atención</p>
+                <p className="text-sm text-slate-500">{safeLeadsHoy.length} lead{safeLeadsHoy.length !== 1 ? 's' : ''} requiere{safeLeadsHoy.length === 1 ? '' : 'n'} tu atención</p>
               </div>
             </div>
             <div className="space-y-2">
-              {leadsHoy.slice(0, 5).map(c => (
+              {safeLeadsHoy.slice(0, 5).map(c => (
                 <div key={c.id} 
                      onClick={() => selectConsulta(c.id)}
                      className={`flex items-center justify-between p-3 bg-white rounded-lg cursor-pointer hover:shadow-md transition-all ${
@@ -1351,9 +1361,9 @@ export default function Dashboard() {
                   </div>
                 </div>
               ))}
-              {leadsHoy.length > 5 && (
+              {safeLeadsHoy.length > 5 && (
                 <button onClick={() => setActiveTab('consultas')} className="w-full text-center py-2 text-sm text-amber-600 hover:text-amber-700 font-medium">
-                  Ver todos ({leadsHoy.length}) →
+                  Ver todos ({safeLeadsHoy.length}) →
                 </button>
               )}
             </div>
@@ -7015,7 +7025,7 @@ const handleImportCSV = async () => {
                   </div>
                   <div>
                     <h3 className="text-xl font-bold text-slate-800">Para Contactar Hoy</h3>
-                    <p className="text-slate-500 text-sm">{leadsHoy.length} lead{leadsHoy.length !== 1 ? 's' : ''} requiere{leadsHoy.length === 1 ? '' : 'n'} tu atención</p>
+                    <p className="text-slate-500 text-sm">{safeLeadsHoy.length} lead{safeLeadsHoy.length !== 1 ? 's' : ''} requiere{safeLeadsHoy.length === 1 ? '' : 'n'} tu atención</p>
                   </div>
                 </div>
                 <button onClick={() => setShowLeadsHoyModal(false)} className="p-2 text-red-500 hover:text-white hover:bg-red-500 rounded-lg transition-colors">
@@ -7025,7 +7035,7 @@ const handleImportCSV = async () => {
             </div>
             
             <div className="p-6 overflow-y-auto max-h-[calc(80vh-120px)]">
-              {leadsHoy.length === 0 ? (
+              {safeLeadsHoy.length === 0 ? (
                 <div className="text-center py-8">
                   <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Icon name="CheckCircle" className="text-emerald-600" size={32} />
@@ -7035,7 +7045,7 @@ const handleImportCSV = async () => {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {leadsHoy.map(c => (
+                  {safeLeadsHoy.map(c => (
                     <div
                       key={c.id}
                       onClick={() => {

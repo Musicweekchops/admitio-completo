@@ -1446,15 +1446,15 @@ export function getCorreosEnviados(leadId = null) {
 // FORMULARIOS
 // ============================================
 export function getFormularios() {
-  return store.formularios
+  return store.formularios || []
 }
 
 export function getFormularioById(id) {
-  return store.formularios.find(f => f.id === id)
+  return (store.formularios || []).find(f => f.id === id)
 }
 
 export function getFormularioBySlug(slug) {
-  return store.formularios.find(f => f.slug === slug)
+  return (store.formularios || []).find(f => f.slug === slug)
 }
 
 export function createFormulario(data) {
@@ -1562,6 +1562,17 @@ function calcularDiasEntre(fechaInicio, fechaFin) {
 }
 
 export function getMetricasGlobales() {
+  // Protección: asegurar que store.consultas existe
+  if (!store.consultas || !Array.isArray(store.consultas)) {
+    console.warn('⚠️ getMetricasGlobales: store.consultas no disponible')
+    return {
+      total: 0, nuevas: 0, contactados: 0, seguimiento: 0, examen_admision: 0,
+      enProceso: 0, matriculados: 0, descartados: 0, enCola: 0,
+      alumnos_nuevos: 0, alumnos_antiguos: 0, tasaConversion: 0,
+      tasa_conversion: 0, tiempo_respuesta_promedio: 0, tiempo_cierre_promedio: 0
+    }
+  }
+  
   const leads = store.consultas
   const total = leads.length
   const nuevas = leads.filter(c => c.estado === 'nueva' && !c.matriculado && !c.descartado).length
@@ -1571,7 +1582,7 @@ export function getMetricasGlobales() {
   const enProceso = contactados + seguimiento + examen_admision
   const matriculados = leads.filter(c => c.matriculado).length
   const descartados = leads.filter(c => c.descartado).length
-  const enCola = store.cola_leads.length
+  const enCola = (store.cola_leads || []).length
   const alumnos_nuevos = leads.filter(c => c.tipo_alumno === 'nuevo').length
   const alumnos_antiguos = leads.filter(c => c.tipo_alumno === 'antiguo').length
   
@@ -1608,6 +1619,17 @@ export function getMetricasGlobales() {
 }
 
 export function getMetricasEncargado(userId) {
+  // Protección: asegurar que store.consultas existe
+  if (!store.consultas || !Array.isArray(store.consultas)) {
+    console.warn('⚠️ getMetricasEncargado: store.consultas no disponible')
+    return {
+      total: 0, activos: 0, matriculados: 0, descartados: 0, contactarHoy: 0,
+      sinContactar: 0, alumnos_nuevos: 0, alumnos_antiguos: 0, tasaConversion: 0,
+      tiempoRespuestaPromedio: 0, tiempo_respuesta_promedio: 0,
+      tiempoCierrePromedio: 0, tiempo_cierre_promedio: 0
+    }
+  }
+  
   // Solo leads asignados a este encargado
   const leads = store.consultas.filter(c => c.asignado_a === userId)
   
@@ -1805,6 +1827,12 @@ export function getEmbudoConversion() {
 }
 
 export function getLeadsContactarHoy(userId = null, rol = null) {
+  // Protección: asegurar que store.consultas existe
+  if (!store.consultas || !Array.isArray(store.consultas)) {
+    console.warn('⚠️ getLeadsContactarHoy: store.consultas no disponible')
+    return []
+  }
+  
   const ahora = new Date()
   const hace24Horas = new Date(ahora.getTime() - 24 * 60 * 60 * 1000)
   
@@ -1819,7 +1847,7 @@ export function getLeadsContactarHoy(userId = null, rol = null) {
     if (c.estado === 'nueva') return true
     
     // Para otros estados, verificar si hay actividad en las últimas 24 horas
-    const actividadLead = store.actividad.filter(a => a.lead_id === c.id)
+    const actividadLead = (store.actividad || []).filter(a => a.lead_id === c.id)
     if (actividadLead.length === 0) return true // Sin actividad = mostrar
     
     // Obtener la última actividad
