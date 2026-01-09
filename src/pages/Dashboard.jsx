@@ -849,7 +849,7 @@ export default function Dashboard() {
     setShowModal(true)
   }
 
-  const filteredConsultas = consultas.filter(c => {
+  const filteredConsultas = (consultas || []).filter(c => {
     const matchCarrera = filterCarrera === 'todas' || c.carrera?.nombre === filterCarrera
     
     // Manejar estados especiales (matriculado/descartado)
@@ -866,8 +866,8 @@ export default function Dashboard() {
     }
     
     const matchTipo = filterTipoAlumno === 'todos' || c.tipo_alumno === filterTipoAlumno
-    const matchSearch = c.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        c.email.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchSearch = (c.nombre || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        (c.email || '').toLowerCase().includes(searchTerm.toLowerCase())
     return matchCarrera && matchEstado && matchTipo && matchSearch
   })
 
@@ -958,7 +958,7 @@ export default function Dashboard() {
     
     const navItems = [
       { id: 'dashboard', icon: 'Home', label: 'Dashboard', show: !esRector },
-      { id: 'consultas', icon: 'Users', label: 'Consultas', show: !esRector, badge: consultas.filter(c => c.estado === 'nueva').length },
+      { id: 'consultas', icon: 'Users', label: 'Consultas', show: !esRector, badge: (consultas || []).filter(c => c.estado === 'nueva').length },
       { id: 'historial', icon: 'Archive', label: 'Historial', show: !esRector },
       { id: 'reportes', icon: 'BarChart', label: esRector ? 'Dashboard' : 'Reportes', show: esAdmin || esRector || esEncargado },
       { id: 'formularios', icon: 'FileCode', label: 'Formularios', show: esAdmin },
@@ -1155,16 +1155,19 @@ export default function Dashboard() {
     
     const stats = esAdmin ? metricasGlobales : metricas
     
+    // Protección: asegurar que consultas sea array
+    const safeConsultas = consultas || []
+    
     // Valores por defecto si no hay stats
     const defaultStats = {
-      total: consultas.length || 0,
-      nuevas: consultas.filter(c => c.estado === 'nueva').length || 0,
-      contactados: consultas.filter(c => c.estado === 'contactado').length || 0,
-      seguimiento: consultas.filter(c => c.estado === 'seguimiento').length || 0,
-      examen_admision: consultas.filter(c => c.estado === 'examen_admision').length || 0,
-      matriculados: consultas.filter(c => c.matriculado).length || 0,
-      sinContactar: consultas.filter(c => c.estado === 'nueva' && !c.matriculado).length || 0,
-      activos: consultas.filter(c => !c.matriculado && !c.descartado).length || 0,
+      total: safeConsultas.length || 0,
+      nuevas: safeConsultas.filter(c => c.estado === 'nueva').length || 0,
+      contactados: safeConsultas.filter(c => c.estado === 'contactado').length || 0,
+      seguimiento: safeConsultas.filter(c => c.estado === 'seguimiento').length || 0,
+      examen_admision: safeConsultas.filter(c => c.estado === 'examen_admision').length || 0,
+      matriculados: safeConsultas.filter(c => c.matriculado).length || 0,
+      sinContactar: safeConsultas.filter(c => c.estado === 'nueva' && !c.matriculado).length || 0,
+      activos: safeConsultas.filter(c => !c.matriculado && !c.descartado).length || 0,
       tasaConversion: 0
     }
     
@@ -1702,8 +1705,8 @@ export default function Dashboard() {
   // HISTORIAL VIEW
   // ============================================
   const HistorialView = () => {
-    const matriculados = consultas.filter(c => c.matriculado)
-    const descartados = consultas.filter(c => c.descartado)
+    const matriculados = (consultas || []).filter(c => c.matriculado)
+    const descartados = (consultas || []).filter(c => c.descartado)
     const [historialTab, setHistorialTab] = useState('matriculados')
     
     const lista = historialTab === 'matriculados' ? matriculados : descartados
@@ -2497,9 +2500,9 @@ export default function Dashboard() {
     const leadsReporte = useMemo(() => {
       // Para Rector: cargar todos los leads directamente del store
       // Para otros: usar las consultas ya filtradas del dashboard
-      let leads = isRector ? store.getConsultasParaReportes() : [...consultas]
+      let leads = isRector ? store.getConsultasParaReportes() : [...(consultas || [])]
       
-      console.log('📊 leadsReporte useMemo - isRector:', isRector, 'leads iniciales:', leads.length, 'consultas estado:', consultas.length)
+      console.log('📊 leadsReporte useMemo - isRector:', isRector, 'leads iniciales:', leads?.length || 0, 'consultas estado:', (consultas || []).length)
       
       // Si no hay consultas en el dashboard pero hay en el store, cargar del store
       if (leads.length === 0 && !isRector) {
@@ -5633,7 +5636,7 @@ function getSupabaseAnonKey() {
     
     // Contar leads por carrera
     const leadsCount = (carreraId) => {
-      return consultas.filter(c => c.carrera_id === carreraId).length
+      return (consultas || []).filter(c => c.carrera_id === carreraId).length
     }
     
     // Colores disponibles para carreras
@@ -5998,7 +6001,7 @@ function getSupabaseAnonKey() {
           </div>
           <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
             <p className="text-slate-500 text-sm">Total leads</p>
-            <p className="text-2xl font-bold text-blue-600">{consultas.length}</p>
+            <p className="text-2xl font-bold text-blue-600">{(consultas || []).length}</p>
           </div>
         </div>
         
