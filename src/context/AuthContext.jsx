@@ -623,45 +623,57 @@ export function AuthProvider({ children }) {
     }
 
     try {
+      console.log('📝 Creando usuario:', email)
+      
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: email.toLowerCase().trim(),
         password: password,
         options: {
-          data: { nombre, rol }
+          data: { nombre, rol },
+          emailRedirectTo: `${window.location.origin}/auth/callback?type=invite`
         }
       })
 
       if (authError) {
+        console.error('Error en auth.signUp:', authError)
         if (authError.message.includes('already registered')) {
           return { success: false, error: 'Este correo ya está registrado' }
         }
-        throw authError
+        return { success: false, error: authError.message }
       }
+
+      if (!authData.user) {
+        return { success: false, error: 'No se pudo crear el usuario en Auth' }
+      }
+
+      console.log('✅ Usuario creado en Auth:', authData.user.id)
 
       // Crear usuario en nuestra tabla
       const { error: userError } = await supabase
         .from('usuarios')
         .insert({
           institucion_id: user.institucion_id,
-          auth_id: authData.user?.id,
+          auth_id: authData.user.id,
           email: email.toLowerCase().trim(),
           nombre,
           rol,
           activo: true,
-          email_verificado: true
+          email_verificado: false
         })
 
       if (userError) {
-        console.error('Error creando usuario:', userError)
-        return { success: false, error: 'Error al crear el usuario' }
+        console.error('Error creando usuario en tabla:', userError)
+        return { success: false, error: 'Error al crear el usuario: ' + userError.message }
       }
+
+      console.log('✅ Usuario creado en tabla usuarios')
 
       // Actualizar uso
       actualizarUso('usuarios', 1)
 
       return {
         success: true,
-        message: `Usuario ${nombre} creado correctamente.`
+        message: `Usuario ${nombre} creado. Se envió email de verificación a ${email}.`
       }
 
     } catch (error) {

@@ -144,11 +144,28 @@ const AuthCallback = () => {
 
     if (type === 'invite') {
       setTipo('invite');
+      
+      // Actualizar email_verificado en nuestra tabla usuarios
+      try {
+        const { error: updateError } = await supabase
+          .from('usuarios')
+          .update({ email_verificado: true })
+          .eq('auth_id', user.id);
+
+        if (updateError) {
+          console.warn('⚠️ No se pudo actualizar email_verificado:', updateError);
+        } else {
+          console.log('✅ email_verificado actualizado para usuario invitado');
+        }
+      } catch (err) {
+        console.warn('⚠️ Error actualizando usuario:', err);
+      }
+      
       setEstado('exito');
-      setMensaje('Invitación aceptada. Configura tu contraseña.');
+      setMensaje('¡Tu cuenta ha sido verificada! Ya puedes iniciar sesión.');
       
       setTimeout(() => {
-        navigate('/establecer-password', { replace: true });
+        navigate('/login', { replace: true });
       }, 2000);
       return;
     }
