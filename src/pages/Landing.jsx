@@ -141,16 +141,16 @@ const Hero = () => (
         </h1>
 
         <p className="text-lg md:text-xl text-slate-600 mb-8 max-w-xl leading-relaxed">
-          El sistema de gestión de admisiones más inteligente para instituciones educativas. Captura leads, automatiza seguimientos y aumenta tu tasa de conversión.
+          Deja de perder postulantes. Captura, gestiona y convierte. Simple.
         </p>
 
         <div className="flex flex-wrap gap-4 mb-10">
           <Link to="/signup" className="btn btn-primary btn-large">
             <ChevronRight className="w-5 h-5" />
-            Comenzar Gratis
+            Inicia Gratis
           </Link>
           <a href="#como-funciona" className="btn btn-secondary btn-large">
-            Ver Demo
+            Cómo Funciona
           </a>
         </div>
 
@@ -318,10 +318,10 @@ const Features = () => {
   const features = [
     { icon: '📊', title: 'Dashboard Inteligente', desc: 'Métricas en tiempo real. Revisa tu embudo de conversión de un vistazo.', color: 'violet' },
     { icon: '✅', title: 'Detección de Duplicados', desc: 'Algoritmo que detecta leads duplicados automáticamente para mantener tu base de datos limpia.', color: 'emerald' },
-    { icon: '📝', title: 'Formularios Web', desc: 'Crea formularios personalizados y pégalos en tu sitio con un simple código.', color: 'amber' },
-    { icon: '📧', title: 'Emails Automáticos', desc: 'Notificaciones a tu equipo cuando llegan nuevos leads. Nunca pierdas una oportunidad.', color: 'rose' },
+    { icon: '📝', title: 'Formularios Web', desc: 'Crea formularios, pega el código y los leads llegan directo a tu dashboard.', color: 'amber' },
+    { icon: '📧', title: 'Multi interés', desc: 'Gestiona postulantes interesados en varias carreras sin duplicar registros.', color: 'rose' },
     { icon: '📥', title: 'Importación CSV', desc: 'Migra tus datos existentes con facilidad.', color: 'blue' },
-    { icon: '👥', title: 'Roles y Permisos', desc: 'KeyMaster, Encargados, Asistentes y más. Cada rol ve sólo lo que necesita.', color: 'teal' },
+    { icon: '👥', title: 'Roles y Permisos', desc: 'Control total sobre tu equipo. Cada persona accede solo a lo que le corresponde', color: 'teal' },
   ];
 
   const colorClasses = {
