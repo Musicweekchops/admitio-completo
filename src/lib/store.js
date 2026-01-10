@@ -408,33 +408,63 @@ export function marcarReporteLeido(reporteId) {
 
 // Eliminar usuario (con opción de migrar primero)
 export async function deleteUsuario(id) {
-  console.log('🗑️ Eliminando usuario de Supabase:', id)
+  console.log('🗑️ Iniciando eliminación de usuario:', id)
+  
+  // Verificar que el usuario existe
+  const usuario = store.usuarios.find(u => u.id === id)
+  if (!usuario) {
+    console.error('❌ Usuario no encontrado en store:', id)
+    return { success: false, error: 'Usuario no encontrado' }
+  }
+  
+  console.log('👤 Usuario a eliminar:', usuario.nombre, usuario.email)
   
   // Verificar que no tenga leads asignados
-  const leadsDelUsuario = store.consultas.filter(c => c.asignado_a === id)
+  const leadsDelUsuario = (store.consultas || []).filter(c => c.asignado_a === id)
   if (leadsDelUsuario.length > 0) {
+    console.warn('⚠️ Usuario tiene leads asignados:', leadsDelUsuario.length)
     return { success: false, error: 'El usuario tiene leads asignados', leadsCount: leadsDelUsuario.length }
   }
   
   try {
-    const { error } = await supabase
+    // 1. Eliminar de nuestra tabla usuarios
+    console.log('🗑️ Eliminando de tabla usuarios...')
+    const { error: deleteError } = await supabase
       .from('usuarios')
       .delete()
       .eq('id', id)
     
-    if (error) {
-      console.error('❌ Error eliminando usuario:', error)
-      return { success: false, error: error.message }
+    if (deleteError) {
+      console.error('❌ Error eliminando de tabla usuarios:', deleteError)
+      return { success: false, error: deleteError.message }
     }
     
-    console.log('✅ Usuario eliminado de Supabase')
+    console.log('✅ Usuario eliminado de tabla usuarios')
     
-    // Eliminar del store local
+    // 2. Intentar eliminar de Supabase Auth (requiere service_role key, puede fallar)
+    // Esto es opcional - el usuario no podrá entrar porque no está en nuestra tabla
+    if (usuario.auth_id) {
+      console.log('🔐 Intentando eliminar de Supabase Auth:', usuario.auth_id)
+      try {
+        // Nota: Esta llamada requiere permisos de admin, puede fallar silenciosamente
+        const { error: authError } = await supabase.auth.admin.deleteUser(usuario.auth_id)
+        if (authError) {
+          console.warn('⚠️ No se pudo eliminar de Auth (normal si no tienes service_role):', authError.message)
+        } else {
+          console.log('✅ Usuario eliminado de Supabase Auth')
+        }
+      } catch (authErr) {
+        console.warn('⚠️ Auth delete no disponible:', authErr.message)
+      }
+    }
+    
+    // 3. Eliminar del store local
     store.usuarios = store.usuarios.filter(u => u.id !== id)
+    console.log('✅ Usuario eliminado del store local')
     
     return { success: true }
   } catch (err) {
-    console.error('❌ Error:', err)
+    console.error('❌ Error inesperado:', err)
     return { success: false, error: err.message }
   }
 }

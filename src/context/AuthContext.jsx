@@ -229,12 +229,34 @@ export function AuthProvider({ children }) {
           return { success: false, error: 'Credenciales inválidas' }
         }
         if (error.message.includes('Email not confirmed')) {
+          // Intentar verificar automáticamente si el usuario existe en nuestra tabla
+          // (el admin lo creó, así que confiamos en el email)
           return { success: false, error: 'Debes verificar tu email antes de iniciar sesión. Revisa tu bandeja de entrada.' }
         }
         return { success: false, error: error.message }
       }
 
-      console.log('✅ Login exitoso, cargando datos del usuario...')
+      console.log('✅ Login exitoso, verificando email automáticamente...')
+      
+      // ========== VERIFICACIÓN AUTOMÁTICA ==========
+      // Si el usuario pudo hacer login, su email es válido
+      // Marcarlo como verificado en nuestra tabla
+      try {
+        const { error: updateError } = await supabase
+          .from('usuarios')
+          .update({ email_verificado: true })
+          .eq('auth_id', data.user.id)
+        
+        if (updateError) {
+          console.warn('⚠️ No se pudo actualizar email_verificado:', updateError)
+        } else {
+          console.log('✅ Email verificado automáticamente en primer login')
+        }
+      } catch (verifyErr) {
+        console.warn('⚠️ Error en verificación automática:', verifyErr)
+        // No bloqueamos el login por esto
+      }
+      
       return { success: true, user: data.user }
 
     } catch (error) {
@@ -545,6 +567,7 @@ export function AuthProvider({ children }) {
         })),
         usuarios: (usuarios || []).map(u => ({
           id: u.id,
+          auth_id: u.auth_id,
           email: u.email,
           nombre: u.nombre,
           rol_id: u.rol,
@@ -705,11 +728,25 @@ export function AuthProvider({ children }) {
     try {
       console.log('📝 Creando usuario:', email)
       
+      // Mapear rol a nombre legible
+      const rolesNombres = {
+        'keymaster': 'Administrador',
+        'rector': 'Rector/Director',
+        'encargado': 'Encargado de Admisión',
+        'asistente': 'Asistente'
+      }
+      const rolNombre = rolesNombres[rol] || rol
+      
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: email.toLowerCase().trim(),
         password: password,
         options: {
-          data: { nombre, rol },
+          data: { 
+            nombre, 
+            rol,
+            rol_nombre: rolNombre,
+            institucion_nombre: institucion?.nombre || 'tu institución'
+          },
           emailRedirectTo: `${window.location.origin}/auth/callback?type=invite`
         }
       })
@@ -729,6 +766,7 @@ export function AuthProvider({ children }) {
       console.log('✅ Usuario creado en Auth:', authData.user.id)
 
       // Crear usuario en nuestra tabla
+      // email_verificado: true porque el admin está invitando (confía en el email)
       const { error: userError } = await supabase
         .from('usuarios')
         .insert({
@@ -738,7 +776,7 @@ export function AuthProvider({ children }) {
           nombre,
           rol,
           activo: true,
-          email_verificado: false
+          email_verificado: true  // El admin confía en este email
         })
 
       if (userError) {
@@ -753,7 +791,7 @@ export function AuthProvider({ children }) {
 
       return {
         success: true,
-        message: `Usuario ${nombre} creado. Se envió email de verificación a ${email}.`
+        message: `Usuario ${nombre} creado exitosamente. Credenciales: ${email} / (la contraseña que definiste)`
       }
 
     } catch (error) {
