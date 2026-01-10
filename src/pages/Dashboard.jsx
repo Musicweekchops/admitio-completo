@@ -4324,17 +4324,31 @@ export default function Dashboard() {
       
       // Migrar leads si es necesario
       if (leadsCount > 0 && migrateToUser) {
-        const resultado = store.migrarLeads(localShowDeleteModal.user.id, migrateToUser, user?.id)
-        if (resultado) {
+        setNotification({ type: 'info', message: 'Migrando leads...' })
+        
+        const resultado = await store.migrarLeads(localShowDeleteModal.user.id, migrateToUser, user?.id)
+        
+        if (!resultado || resultado.success === false) {
           setNotification({ 
-            type: 'success', 
-            message: `${resultado.migrados} leads migrados. Se generó reporte para el nuevo encargado.` 
+            type: 'error', 
+            message: resultado?.error || 'Error al migrar leads' 
           })
+          return // No continuar si falla la migración
         }
+        
+        setNotification({ 
+          type: 'success', 
+          message: `${resultado.migrados} leads migrados correctamente` 
+        })
+        
+        // Pequeña pausa para que el usuario vea el mensaje
+        await new Promise(resolve => setTimeout(resolve, 500))
       }
       
       // Eliminar usuario
+      setNotification({ type: 'info', message: 'Eliminando usuario...' })
       const result = await store.deleteUsuario(targetUser.id)
+      
       if (result.success) {
         setNotification({ type: 'success', message: 'Usuario eliminado correctamente' })
         // Recargar desde Supabase
@@ -4542,7 +4556,7 @@ export default function Dashboard() {
                     <Icon name="Info" className="text-blue-600 mt-0.5" size={18} />
                     <div className="text-sm text-blue-700">
                       <p className="font-medium">Crear nuevo usuario</p>
-                      <p className="text-blue-600">El usuario recibirá un email de verificación. Una vez verificado, podrá ingresar con las credenciales que definas aquí.</p>
+                      <p className="text-blue-600">El usuario podrá ingresar inmediatamente con las credenciales que definas. Comunícale el email y contraseña.</p>
                     </div>
                   </div>
                 </div>

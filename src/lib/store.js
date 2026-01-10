@@ -305,87 +305,118 @@ export function getLeadsPorUsuario(userId) {
 }
 
 // Migrar leads de un usuario a otro con reporte
-export function migrarLeads(fromUserId, toUserId, adminUserId) {
+export async function migrarLeads(fromUserId, toUserId, adminUserId) {
   const fromUser = store.usuarios.find(u => u.id === fromUserId)
   const toUser = store.usuarios.find(u => u.id === toUserId)
   
-  if (!fromUser || !toUser) return null
+  if (!fromUser || !toUser) {
+    console.error('❌ Usuarios no encontrados para migración')
+    return null
+  }
   
   const leadsAMigrar = store.consultas.filter(c => c.asignado_a === fromUserId)
   
-  if (leadsAMigrar.length === 0) return { migrados: 0, reporte: null }
-  
-  // Crear reporte de migración
-  const reporte = {
-    id: `rep-${Date.now()}`,
-    tipo: 'migracion_leads',
-    fecha: new Date().toISOString(),
-    desde: {
-      id: fromUser.id,
-      nombre: fromUser.nombre,
-      email: fromUser.email
-    },
-    hacia: {
-      id: toUser.id,
-      nombre: toUser.nombre,
-      email: toUser.email
-    },
-    realizado_por: adminUserId,
-    leads: leadsAMigrar.map(lead => ({
-      id: lead.id,
-      nombre: lead.nombre,
-      estado: lead.estado,
-      carrera_id: lead.carrera_id,
-      carrera_nombre: store.carreras.find(ca => ca.id === lead.carrera_id)?.nombre || '',
-      matriculado: lead.matriculado,
-      descartado: lead.descartado,
-      fecha_primer_contacto: lead.fecha_primer_contacto,
-      notas: lead.notas
-    })),
-    total_leads: leadsAMigrar.length,
-    estados: {
-      nueva: leadsAMigrar.filter(l => l.estado === 'nueva' && !l.matriculado && !l.descartado).length,
-      contactado: leadsAMigrar.filter(l => l.estado === 'contactado' && !l.matriculado && !l.descartado).length,
-      seguimiento: leadsAMigrar.filter(l => l.estado === 'seguimiento' && !l.matriculado && !l.descartado).length,
-      examen_admision: leadsAMigrar.filter(l => l.estado === 'examen_admision' && !l.matriculado && !l.descartado).length,
-      matriculado: leadsAMigrar.filter(l => l.matriculado).length,
-      descartado: leadsAMigrar.filter(l => l.descartado).length
-    },
-    leido: false
+  if (leadsAMigrar.length === 0) {
+    console.log('ℹ️ No hay leads para migrar')
+    return { migrados: 0, reporte: null }
   }
   
-  // Guardar reporte
-  if (!store.reportes_migracion) {
-    store.reportes_migracion = []
-  }
-  store.reportes_migracion.push(reporte)
+  console.log(`🔄 Migrando ${leadsAMigrar.length} leads de ${fromUser.nombre} a ${toUser.nombre}`)
   
-  // Migrar los leads
-  leadsAMigrar.forEach(lead => {
-    lead.asignado_a = toUserId
-    // Registrar actividad
-    addActividad(
-      lead.id,
-      adminUserId,
-      'migracion',
-      `Lead migrado de ${fromUser.nombre} a ${toUser.nombre} (eliminación de encargado)`
+  try {
+    // ========== SINCRONIZAR CON SUPABASE PRIMERO ==========
+    const leadIds = leadsAMigrar.map(l => l.id)
+    
+    const { error: updateError } = await supabase
+      .from('leads')
+      .update({ asignado_a: toUserId })
+      .in('id', leadIds)
+    
+    if (updateError) {
+      console.error('❌ Error migrando leads en Supabase:', updateError)
+      return { success: false, error: updateError.message }
+    }
+    
+    console.log(`✅ ${leadsAMigrar.length} leads actualizados en Supabase`)
+    
+    // ========== ACTUALIZAR STORE LOCAL ==========
+    leadsAMigrar.forEach(lead => {
+      lead.asignado_a = toUserId
+      // Registrar actividad
+      addActividad(
+        lead.id,
+        adminUserId,
+        'migracion',
+        `Lead migrado de ${fromUser.nombre} a ${toUser.nombre} (eliminación de encargado)`
+      )
+    })
+    
+    // Crear reporte de migración
+    const reporte = {
+      id: `rep-${Date.now()}`,
+      tipo: 'migracion_leads',
+      fecha: new Date().toISOString(),
+      desde: {
+        id: fromUser.id,
+        nombre: fromUser.nombre,
+        email: fromUser.email
+      },
+      hacia: {
+        id: toUser.id,
+        nombre: toUser.nombre,
+        email: toUser.email
+      },
+      realizado_por: adminUserId,
+      leads: leadsAMigrar.map(lead => ({
+        id: lead.id,
+        nombre: lead.nombre,
+        estado: lead.estado,
+        carrera_id: lead.carrera_id,
+        carrera_nombre: store.carreras.find(ca => ca.id === lead.carrera_id)?.nombre || '',
+        matriculado: lead.matriculado,
+        descartado: lead.descartado,
+        fecha_primer_contacto: lead.fecha_primer_contacto,
+        notas: lead.notas
+      })),
+      total_leads: leadsAMigrar.length,
+      estados: {
+        nueva: leadsAMigrar.filter(l => l.estado === 'nueva' && !l.matriculado && !l.descartado).length,
+        contactado: leadsAMigrar.filter(l => l.estado === 'contactado' && !l.matriculado && !l.descartado).length,
+        seguimiento: leadsAMigrar.filter(l => l.estado === 'seguimiento' && !l.matriculado && !l.descartado).length,
+        examen_admision: leadsAMigrar.filter(l => l.estado === 'examen_admision' && !l.matriculado && !l.descartado).length,
+        matriculado: leadsAMigrar.filter(l => l.matriculado).length,
+        descartado: leadsAMigrar.filter(l => l.descartado).length
+      },
+      leido: false
+    }
+    
+    // Guardar reporte
+    if (!store.reportes_migracion) {
+      store.reportes_migracion = []
+    }
+    store.reportes_migracion.push(reporte)
+    
+    // Crear notificación para el nuevo encargado
+    crearNotificacion(
+      toUserId,
+      'migracion_leads',
+      `Se te han asignado ${leadsAMigrar.length} leads de ${fromUser.nombre}`,
+      null,
+      reporte.id
     )
-  })
-  
-  // Crear notificación para el nuevo encargado
-  crearNotificacion(
-    toUserId,
-    'migracion_leads',
-    `Se te han asignado ${leadsAMigrar.length} leads de ${fromUser.nombre}`,
-    null,
-    reporte.id
-  )
-  
-  saveStore()
-  
-  return {
-    migrados: leadsAMigrar.length,
-    reporte
+    
+    saveStore()
+    
+    console.log(`✅ Migración completada: ${leadsAMigrar.length} leads`)
+    
+    return {
+      success: true,
+      migrados: leadsAMigrar.length,
+      reporte
+    }
+  } catch (err) {
+    console.error('❌ Error en migración:', err)
+    return { success: false, error: err.message }
   }
 }
 
