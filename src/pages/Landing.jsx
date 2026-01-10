@@ -470,8 +470,8 @@ const FAQ = () => {
   const [openIndex, setOpenIndex] = useState(0);
 
   const faqs = [
-    { q: '¿Puedo probar Admitio antes de pagar?', a: '¡Por supuesto! Ofrecemos un plan gratuito con todas las funcionalidades básicas para que pruebes el sistema sin compromiso. Además, los planes de pago tienen 14 días de prueba gratis.' },
-    { q: '¿Mis datos están seguros?', a: 'Absolutamente. Utilizamos encriptación SSL, backups automáticos diarios y servidores con certificación de seguridad. Cada institución tiene sus datos completamente aislados.' },
+    { q: '¿Puedo probar Admitio antes de pagar?', a: '¡Por supuesto! Ofrecemos un plan gratuito con todas las funcionalidades básicas para que pruebes el sistema sin compromiso.' },
+    { q: '¿Mis datos están seguros?', a: 'Absolutamente. Cada institución tiene sus datos completamente aislados.' },
     { q: '¿Puedo importar mis datos actuales?', a: 'Sí, puedes importar tus leads existentes desde archivos Excel o CSV. El sistema detecta automáticamente las columnas y te guía en el proceso de importación.' },
     { q: '¿Cómo integro el formulario en mi web?', a: 'Muy simple: creas tu formulario en Admitio, personalizas los campos y colores, y copias un código que pegas en cualquier página de tu sitio web. Los leads llegan automáticamente.' },
     { q: '¿Qué pasa si supero el límite de leads?', a: 'Te avisamos cuando estés cerca del límite. Puedes hacer upgrade al siguiente plan o archivar leads antiguos para liberar espacio. Nunca perdemos tus datos.' },
