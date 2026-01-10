@@ -378,14 +378,14 @@ const Pricing = () => {
     {
       name: 'Profesional',
       tagline: 'Para instituciones en crecimiento',
-      price: '$119.990/mes',
+      price: '$119.990',
       features: ['15 usuarios', '500 leads activos', '10 formularios web', '200 emails/mes', 'Reportes avanzados', '5GB almacenamiento'],
       featured: true,
     },
     {
       name: 'Institución',
       tagline: 'Para grandes equipos',
-      price: '$249.990/mes',
+      price: '$249.990',
       features: ['50 usuarios', '5,000 leads activos', '30 formularios web', '30,000 emails/mes', 'Reportes avanzados', '20GB almacenamiento'],
       featured: false,
     },
