@@ -264,7 +264,7 @@ const Signup = () => {
 
   // Función para obtener clases del input según estado
   const getInstitucionInputClasses = () => {
-    const baseClasses = "form-input pl-12 pr-12 transition-colors"
+    const baseClasses = "form-input pl-11 pr-12 transition-colors"
     switch (institucionStatus) {
       case 'available':
         return `${baseClasses} border-emerald-400 focus:border-emerald-500 focus:ring-emerald-200`
@@ -387,7 +387,7 @@ const Signup = () => {
                   Nombre de la institución *
                 </label>
                 <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                     <Icon name="Building" size={20} />
                   </div>
                   <input
@@ -425,14 +425,14 @@ const Signup = () => {
                   Tipo de institución *
                 </label>
                 <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                     <Icon name="GraduationCap" size={20} />
                   </div>
                   <select
                     name="tipo"
                     value={formData.tipo}
                     onChange={handleChange}
-                    className="form-input pl-12 appearance-none"
+                    className="form-input pl-11 appearance-none"
                     required
                   >
                     <option value="">Selecciona el tipo</option>
@@ -504,7 +504,7 @@ const Signup = () => {
                   Sitio web (opcional)
                 </label>
                 <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                     <Icon name="Globe" size={20} />
                   </div>
                   <input
@@ -512,7 +512,7 @@ const Signup = () => {
                     name="sitioWeb"
                     value={formData.sitioWeb}
                     onChange={handleChange}
-                    className="form-input pl-12"
+                    className="form-input pl-11"
                     placeholder="https://www.tuinstitucion.cl"
                   />
                 </div>
@@ -550,7 +550,7 @@ const Signup = () => {
                   Tu nombre completo *
                 </label>
                 <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                     <Icon name="User" size={20} />
                   </div>
                   <input
@@ -558,7 +558,7 @@ const Signup = () => {
                     name="nombre"
                     value={formData.nombre}
                     onChange={handleChange}
-                    className="form-input pl-12"
+                    className="form-input pl-11"
                     placeholder="Tu nombre"
                     required
                     autoFocus
@@ -571,7 +571,7 @@ const Signup = () => {
                   Correo electrónico *
                 </label>
                 <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                     <Icon name="Mail" size={20} />
                   </div>
                   <input
@@ -579,7 +579,7 @@ const Signup = () => {
                     name="email"
                     value={formData.email}
                     onChange={handleChange}
-                    className="form-input pl-12"
+                    className="form-input pl-11"
                     placeholder="tu@institucion.com"
                     required
                   />
@@ -591,7 +591,7 @@ const Signup = () => {
                   Contraseña *
                 </label>
                 <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                     <Icon name="Lock" size={20} />
                   </div>
                   <input
@@ -599,7 +599,7 @@ const Signup = () => {
                     name="password"
                     value={formData.password}
                     onChange={handleChange}
-                    className="form-input pl-12"
+                    className="form-input pl-11"
                     placeholder="Mínimo 6 caracteres"
                     required
                   />
@@ -611,7 +611,7 @@ const Signup = () => {
                   Confirmar contraseña *
                 </label>
                 <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                     <Icon name="Lock" size={20} />
                   </div>
                   <input
@@ -619,7 +619,7 @@ const Signup = () => {
                     name="confirmPassword"
                     value={formData.confirmPassword}
                     onChange={handleChange}
-                    className="form-input pl-12"
+                    className="form-input pl-11"
                     placeholder="Repite tu contraseña"
                     required
                   />

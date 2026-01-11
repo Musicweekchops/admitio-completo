@@ -127,14 +127,14 @@ export default function Login() {
                 Correo electrónico
               </label>
               <div className="relative">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                   <Icon name="Mail" size={20} />
                 </div>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="form-input pl-12"
+                  className="form-input pl-11"
                   placeholder="tu@institucion.com"
                   required
                   disabled={loading}
@@ -156,14 +156,14 @@ export default function Login() {
                 </Link>
               </div>
               <div className="relative">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                   <Icon name="Lock" size={20} />
                 </div>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="form-input pl-12"
+                  className="form-input pl-11"
                   placeholder="Tu contraseña"
                   required
                   disabled={loading}

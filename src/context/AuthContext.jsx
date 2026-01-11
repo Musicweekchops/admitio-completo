@@ -150,26 +150,36 @@ export function AuthProvider({ children }) {
     try {
       console.log('🔍 Cargando usuario:', authUser.email)
       
+      // Buscar usuario SIN filtrar por activo para detectar desactivados
       const { data: usuario, error } = await supabase
         .from('usuarios')
         .select('*, instituciones(id, nombre, tipo, pais, ciudad, region, sitio_web, plan)')
         .eq('auth_id', authUser.id)
-        .eq('activo', true)
         .maybeSingle()
 
       if (error) {
         // Ignorar AbortError
         if (error.name === 'AbortError') {
           console.log('⏸️ Consulta cancelada (normal en desarrollo)')
-          return
+          return { success: false, error: 'cancelled' }
         }
         console.error('❌ Error consultando usuario:', error)
-        return // finally se encarga de cleanup
+        return { success: false, error: 'Error al cargar usuario' }
       }
       
       if (!usuario) {
         console.log('⚠️ Usuario no encontrado en tabla usuarios')
-        return // finally se encarga de cleanup
+        // Cerrar sesión de Auth si el usuario no existe en nuestra tabla
+        await supabase.auth.signOut()
+        return { success: false, error: 'Usuario no encontrado' }
+      }
+      
+      // Verificar si está desactivado
+      if (!usuario.activo) {
+        console.log('🚫 Usuario desactivado:', authUser.email)
+        // Cerrar sesión de Auth
+        await supabase.auth.signOut()
+        return { success: false, error: 'Tu cuenta ha sido desactivada. Contacta al administrador.' }
       }
 
       const rol = ROLES[usuario.rol] || ROLES.asistente
@@ -195,13 +205,15 @@ export function AuthProvider({ children }) {
       await loadInstitucionData(usuario.institucion_id)
 
       console.log('✅ Usuario cargado:', enrichedUser.nombre)
+      return { success: true }
     } catch (error) {
       // Ignorar AbortError - ocurre cuando el componente se desmonta
       if (error.name === 'AbortError') {
         console.log('⏸️ Solicitud cancelada (normal en desarrollo)')
-        return
+        return { success: false, error: 'cancelled' }
       }
       console.error('Error cargando usuario:', error)
+      return { success: false, error: 'Error al cargar usuario' }
     } finally {
       // Siempre resetear el guard y loading
       isLoadingUser.current = false
@@ -229,32 +241,53 @@ export function AuthProvider({ children }) {
           return { success: false, error: 'Credenciales inválidas' }
         }
         if (error.message.includes('Email not confirmed')) {
-          // Intentar verificar automáticamente si el usuario existe en nuestra tabla
-          // (el admin lo creó, así que confiamos en el email)
           return { success: false, error: 'Debes verificar tu email antes de iniciar sesión. Revisa tu bandeja de entrada.' }
         }
         return { success: false, error: error.message }
       }
 
-      console.log('✅ Login exitoso, verificando email automáticamente...')
+      console.log('✅ Login Auth exitoso, verificando estado del usuario...')
       
-      // ========== VERIFICACIÓN AUTOMÁTICA ==========
-      // Si el usuario pudo hacer login, su email es válido
-      // Marcarlo como verificado en nuestra tabla
-      try {
-        const { error: updateError } = await supabase
-          .from('usuarios')
-          .update({ email_verificado: true })
-          .eq('auth_id', data.user.id)
-        
-        if (updateError) {
-          console.warn('⚠️ No se pudo actualizar email_verificado:', updateError)
-        } else {
-          console.log('✅ Email verificado automáticamente en primer login')
+      // ========== VERIFICAR SI USUARIO ESTÁ ACTIVO ==========
+      const { data: usuario, error: userError } = await supabase
+        .from('usuarios')
+        .select('id, activo, email_verificado')
+        .eq('auth_id', data.user.id)
+        .maybeSingle()
+      
+      if (userError) {
+        console.error('Error verificando usuario:', userError)
+        await supabase.auth.signOut()
+        return { success: false, error: 'Error al verificar usuario' }
+      }
+      
+      if (!usuario) {
+        console.log('⚠️ Usuario no existe en tabla')
+        await supabase.auth.signOut()
+        return { success: false, error: 'Usuario no encontrado. Contacta al administrador.' }
+      }
+      
+      if (!usuario.activo) {
+        console.log('🚫 Usuario desactivado:', email)
+        await supabase.auth.signOut()
+        return { success: false, error: 'Tu cuenta ha sido desactivada. Contacta al administrador.' }
+      }
+      // =====================================================
+      
+      // ========== VERIFICACIÓN AUTOMÁTICA DE EMAIL ==========
+      if (!usuario.email_verificado) {
+        try {
+          const { error: updateError } = await supabase
+            .from('usuarios')
+            .update({ email_verificado: true })
+            .eq('auth_id', data.user.id)
+          
+          if (!updateError) {
+            console.log('✅ Email verificado automáticamente en primer login')
+          }
+        } catch (verifyErr) {
+          console.warn('⚠️ Error en verificación automática:', verifyErr)
         }
-      } catch (verifyErr) {
-        console.warn('⚠️ Error en verificación automática:', verifyErr)
-        // No bloqueamos el login por esto
       }
       
       return { success: true, user: data.user }
