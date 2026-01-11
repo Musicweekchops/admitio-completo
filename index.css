@@ -1,0 +1,278 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   BASE STYLES
+============================================ */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Outfit', sans-serif;
+  background: #f8fafc;
+  color: #1e293b;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* ============================================
+   TYPOGRAPHY
+============================================ */
+.font-display {
+  font-family: 'Fraunces', serif;
+}
+
+.font-body {
+  font-family: 'Outfit', sans-serif;
+}
+
+/* ============================================
+   GRADIENT BACKGROUNDS
+============================================ */
+.gradient-text {
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-text-emerald {
+  background: linear-gradient(135deg, #34d399, #10b981);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-bg {
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+}
+
+.gradient-bg-dark {
+  background: linear-gradient(135deg, #6d28d9, #4c1d95);
+}
+
+/* ============================================
+   BUTTONS
+============================================ */
+.btn {
+  @apply inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all duration-300 cursor-pointer border-none;
+}
+
+.btn-primary {
+  @apply bg-gradient-to-br from-violet-500 to-violet-700 text-white shadow-lg shadow-violet-500/35;
+}
+
+.btn-primary:hover {
+  @apply -translate-y-0.5 shadow-xl shadow-violet-500/45;
+}
+
+.btn-secondary {
+  @apply bg-white text-violet-600 border-2 border-violet-200;
+}
+
+.btn-secondary:hover {
+  @apply border-violet-400 bg-violet-50;
+}
+
+.btn-ghost {
+  @apply bg-transparent text-slate-700;
+}
+
+.btn-ghost:hover {
+  @apply bg-slate-100;
+}
+
+.btn-large {
+  @apply px-8 py-4 text-base rounded-2xl;
+}
+
+/* ============================================
+   INPUTS
+============================================ */
+.form-input {
+  @apply w-full pl-4 pr-4 py-3.5 border-2 border-slate-200 rounded-xl text-base transition-all duration-300 bg-slate-50;
+}
+
+.form-input.with-icon {
+  padding-left: 2.75rem !important;
+}
+
+.form-input:focus {
+  @apply outline-none border-violet-400 bg-white ring-4 ring-violet-500/10;
+}
+
+.form-input::placeholder {
+  @apply text-slate-400;
+}
+
+.form-label {
+  @apply block text-sm font-semibold text-slate-700 mb-2;
+}
+
+/* ============================================
+   CARDS
+============================================ */
+.card {
+  @apply bg-white rounded-2xl border border-slate-200 transition-all duration-300;
+}
+
+.card:hover {
+  @apply -translate-y-1 shadow-xl border-violet-200;
+}
+
+/* ============================================
+   ANIMATIONS
+============================================ */
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-60px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(60px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-in-left {
+  animation: slide-in-left 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: 0.2s;
+  opacity: 0;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s ease forwards;
+}
+
+/* Scroll animations */
+.animate-on-scroll {
+  opacity: 0;
+  transform: translateY(40px);
+  transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-on-scroll.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ============================================
+   NAVBAR
+============================================ */
+.navbar {
+  @apply fixed top-0 left-0 right-0 z-50 p-4 transition-all duration-300;
+}
+
+.navbar.scrolled {
+  @apply bg-white/90 backdrop-blur-xl shadow-lg shadow-black/5;
+}
+
+/* ============================================
+   HERO SHAPES
+============================================ */
+.hero-gradient {
+  position: absolute;
+  top: -50%;
+  right: -20%;
+  width: 80%;
+  height: 150%;
+  background: radial-gradient(ellipse at center, rgba(139, 92, 246, 0.15) 0%, transparent 70%);
+  animation: morph 15s ease-in-out infinite;
+}
+
+.hero-gradient-2 {
+  position: absolute;
+  bottom: -30%;
+  left: -10%;
+  width: 60%;
+  height: 100%;
+  background: radial-gradient(ellipse at center, rgba(52, 211, 153, 0.1) 0%, transparent 70%);
+  animation: morph 12s ease-in-out infinite reverse;
+}
+
+.hero-grid {
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(139, 92, 246, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(139, 92, 246, 0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* ============================================
+   MOCKUP
+============================================ */
+.mockup-3d {
+  transform: perspective(1000px) rotateY(-5deg) rotateX(2deg);
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mockup-3d:hover {
+  transform: perspective(1000px) rotateY(0deg) rotateX(0deg);
+}
+
+/* ============================================
+   LOADING SPINNER
+============================================ */
+.spinner {
+  @apply w-5 h-5 border-2 border-white/30 border-t-white rounded-full;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================
+   TOAST NOTIFICATIONS
+============================================ */
+.toast {
+  @apply fixed bottom-4 right-4 px-6 py-4 rounded-xl shadow-2xl z-50 flex items-center gap-3;
+  animation: slide-up 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.toast-success {
+  @apply bg-emerald-500 text-white;
+}
+
+.toast-error {
+  @apply bg-red-500 text-white;
+}
+
+.toast-info {
+  @apply bg-violet-500 text-white;
+}
