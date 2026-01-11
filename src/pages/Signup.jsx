@@ -264,7 +264,7 @@ const Signup = () => {
 
   // Función para obtener clases del input según estado
   const getInstitucionInputClasses = () => {
-    const baseClasses = "form-input pl-11 pr-12 transition-colors"
+    const baseClasses = "form-input with-icon pr-12 transition-colors"
     switch (institucionStatus) {
       case 'available':
         return `${baseClasses} border-emerald-400 focus:border-emerald-500 focus:ring-emerald-200`
@@ -432,7 +432,7 @@ const Signup = () => {
                     name="tipo"
                     value={formData.tipo}
                     onChange={handleChange}
-                    className="form-input pl-11 appearance-none"
+                    className="form-input with-icon appearance-none"
                     required
                   >
                     <option value="">Selecciona el tipo</option>
@@ -512,7 +512,7 @@ const Signup = () => {
                     name="sitioWeb"
                     value={formData.sitioWeb}
                     onChange={handleChange}
-                    className="form-input pl-11"
+                    className="form-input with-icon"
                     placeholder="https://www.tuinstitucion.cl"
                   />
                 </div>
@@ -558,7 +558,7 @@ const Signup = () => {
                     name="nombre"
                     value={formData.nombre}
                     onChange={handleChange}
-                    className="form-input pl-11"
+                    className="form-input with-icon"
                     placeholder="Tu nombre"
                     required
                     autoFocus
@@ -579,7 +579,7 @@ const Signup = () => {
                     name="email"
                     value={formData.email}
                     onChange={handleChange}
-                    className="form-input pl-11"
+                    className="form-input with-icon"
                     placeholder="tu@institucion.com"
                     required
                   />
@@ -599,7 +599,7 @@ const Signup = () => {
                     name="password"
                     value={formData.password}
                     onChange={handleChange}
-                    className="form-input pl-11"
+                    className="form-input with-icon"
                     placeholder="Mínimo 6 caracteres"
                     required
                   />
@@ -619,7 +619,7 @@ const Signup = () => {
                     name="confirmPassword"
                     value={formData.confirmPassword}
                     onChange={handleChange}
-                    className="form-input pl-11"
+                    className="form-input with-icon"
                     placeholder="Repite tu contraseña"
                     required
                   />

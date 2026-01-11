@@ -134,7 +134,7 @@ export default function Login() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="form-input pl-11"
+                  className="form-input with-icon"
                   placeholder="tu@institucion.com"
                   required
                   disabled={loading}
@@ -163,7 +163,7 @@ export default function Login() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="form-input pl-11"
+                  className="form-input with-icon"
                   placeholder="Tu contraseña"
                   required
                   disabled={loading}
