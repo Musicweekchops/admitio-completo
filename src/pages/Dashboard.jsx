@@ -4184,6 +4184,7 @@ export default function Dashboard() {
     const [localEditingUser, setLocalEditingUser] = useState(null)
     const [localShowUserModal, setLocalShowUserModal] = useState(false)
     const [localShowDeleteModal, setLocalShowDeleteModal] = useState(null)
+    const [localShowDeactivateModal, setLocalShowDeactivateModal] = useState(null)
     const [migrateToUser, setMigrateToUser] = useState('')
     const [inviteLoading, setInviteLoading] = useState(false)
     const [userFormData, setUserFormData] = useState({
@@ -4300,11 +4301,62 @@ export default function Dashboard() {
       setTimeout(() => setNotification(null), 4000)
     }
     
-    const handleToggleActivo = (userId) => {
-      store.toggleUsuarioActivo(userId)
+    const handleToggleActivo = (targetUser) => {
+      // Si se va a desactivar (está activo) y tiene leads, mostrar modal
+      if (targetUser.activo) {
+        const leads = store.getLeadsPorUsuario(targetUser.id)
+        if (leads.length > 0) {
+          setLocalShowDeactivateModal({ user: targetUser, leadsCount: leads.length })
+          setMigrateToUser('')
+          return
+        }
+      }
+      
+      // Si no tiene leads o se está reactivando, hacer toggle directo
+      store.toggleUsuarioActivo(targetUser.id)
       refreshUsuarios()
-      setNotification({ type: 'info', message: 'Estado actualizado' })
+      setNotification({ type: 'info', message: targetUser.activo ? 'Usuario desactivado' : 'Usuario reactivado' })
       setTimeout(() => setNotification(null), 2000)
+    }
+    
+    const handleDeactivateUser = async () => {
+      const { user: targetUser, leadsCount } = localShowDeactivateModal
+      
+      // Si tiene leads y no seleccionó migración
+      if (leadsCount > 0 && !migrateToUser) {
+        alert('Debes seleccionar un encargado para migrar los leads')
+        return
+      }
+      
+      // Migrar leads
+      if (leadsCount > 0 && migrateToUser) {
+        setNotification({ type: 'info', message: 'Migrando leads...' })
+        
+        const resultado = await store.migrarLeads(targetUser.id, migrateToUser, user?.id)
+        
+        if (!resultado || resultado.success === false) {
+          setNotification({ 
+            type: 'error', 
+            message: resultado?.error || 'Error al migrar leads' 
+          })
+          return
+        }
+        
+        setNotification({ 
+          type: 'success', 
+          message: `${resultado.migrados} leads migrados correctamente` 
+        })
+        
+        await new Promise(resolve => setTimeout(resolve, 500))
+      }
+      
+      // Desactivar usuario
+      store.toggleUsuarioActivo(targetUser.id)
+      setNotification({ type: 'success', message: 'Usuario desactivado correctamente' })
+      
+      setLocalShowDeactivateModal(null)
+      refreshUsuarios()
+      setTimeout(() => setNotification(null), 3000)
     }
     
     const openDeleteModal = (user) => {
@@ -4365,7 +4417,8 @@ export default function Dashboard() {
     const encargadosParaMigrar = usuarios.filter(u => 
       u.rol_id === 'encargado' && 
       u.activo && 
-      u.id !== localShowDeleteModal?.user?.id
+      u.id !== localShowDeleteModal?.user?.id &&
+      u.id !== localShowDeactivateModal?.user?.id
     )
     
     const ROLES_DISPONIBLES = [
@@ -4476,7 +4529,7 @@ export default function Dashboard() {
                     </td>
                     <td className="p-4 text-center">
                       <button
-                        onClick={() => handleToggleActivo(u.id)}
+                        onClick={() => handleToggleActivo(u)}
                         className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                           u.activo 
                             ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' 
@@ -4734,6 +4787,74 @@ export default function Dashboard() {
                 >
                   <Icon name="Trash2" size={18} />
                   {localShowDeleteModal.leadsCount > 0 ? 'Migrar y Eliminar' : 'Eliminar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Modal Desactivar Usuario con Migración */}
+        {localShowDeactivateModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-14 h-14 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Icon name="UserMinus" className="text-amber-600" size={28} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-slate-800">Desactivar Usuario</h3>
+                  <p className="text-slate-500 text-sm">El usuario no podrá acceder al sistema</p>
+                </div>
+              </div>
+              
+              <div className="bg-slate-50 rounded-xl p-4 mb-4">
+                <p className="font-semibold text-slate-800">{localShowDeactivateModal.user.nombre}</p>
+                <p className="text-sm text-slate-500">{localShowDeactivateModal.user.email}</p>
+              </div>
+              
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Icon name="AlertCircle" className="text-amber-600" size={20} />
+                  <p className="font-medium text-amber-800">
+                    Este usuario tiene {localShowDeactivateModal.leadsCount} lead{localShowDeactivateModal.leadsCount !== 1 ? 's' : ''} asignado{localShowDeactivateModal.leadsCount !== 1 ? 's' : ''}
+                  </p>
+                </div>
+                
+                <p className="text-sm text-amber-700 mb-3">
+                  Antes de desactivar, debes migrar los leads a otro encargado para que sigan siendo atendidos.
+                </p>
+                
+                <label className="block text-sm font-medium text-amber-800 mb-2">
+                  Migrar leads a: *
+                </label>
+                <select
+                  value={migrateToUser}
+                  onChange={e => setMigrateToUser(e.target.value)}
+                  className="w-full px-4 py-2 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white"
+                >
+                  <option value="">Selecciona un encargado...</option>
+                  {encargadosParaMigrar.map(enc => (
+                    <option key={enc.id} value={enc.id}>
+                      {enc.nombre} ({store.getLeadsPorUsuario(enc.id).length} leads actuales)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setLocalShowDeactivateModal(null)}
+                  className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 rounded-xl font-medium hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDeactivateUser}
+                  disabled={!migrateToUser}
+                  className="flex-1 px-4 py-3 bg-amber-600 text-white rounded-xl font-medium hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <Icon name="UserMinus" size={18} />
+                  Migrar y Desactivar
                 </button>
               </div>
             </div>

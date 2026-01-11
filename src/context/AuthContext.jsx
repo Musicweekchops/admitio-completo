@@ -737,6 +737,23 @@ export function AuthProvider({ children }) {
       }
       const rolNombre = rolesNombres[rol] || rol
       
+      // ========== VERIFICAR SI YA EXISTE EN NUESTRA TABLA ==========
+      const { data: existingUser } = await supabase
+        .from('usuarios')
+        .select('id, email, activo')
+        .eq('email', email.toLowerCase().trim())
+        .eq('institucion_id', user.institucion_id)
+        .maybeSingle()
+      
+      if (existingUser) {
+        if (existingUser.activo) {
+          return { success: false, error: 'Este correo ya está registrado en tu institución' }
+        } else {
+          return { success: false, error: 'Este usuario existe pero está desactivado. Puedes reactivarlo desde la lista de usuarios.' }
+        }
+      }
+      
+      // ========== CREAR EN SUPABASE AUTH ==========
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: email.toLowerCase().trim(),
         password: password,
@@ -754,7 +771,7 @@ export function AuthProvider({ children }) {
       if (authError) {
         console.error('Error en auth.signUp:', authError)
         if (authError.message.includes('already registered')) {
-          return { success: false, error: 'Este correo ya está registrado' }
+          return { success: false, error: 'Este correo ya está registrado en el sistema' }
         }
         return { success: false, error: authError.message }
       }
@@ -765,8 +782,7 @@ export function AuthProvider({ children }) {
 
       console.log('✅ Usuario creado en Auth:', authData.user.id)
 
-      // Crear usuario en nuestra tabla
-      // email_verificado: true porque el admin está invitando (confía en el email)
+      // ========== CREAR EN NUESTRA TABLA ==========
       const { error: userError } = await supabase
         .from('usuarios')
         .insert({
@@ -776,12 +792,25 @@ export function AuthProvider({ children }) {
           nombre,
           rol,
           activo: true,
-          email_verificado: true  // El admin confía en este email
+          email_verificado: true
         })
 
       if (userError) {
         console.error('Error creando usuario en tabla:', userError)
-        return { success: false, error: 'Error al crear el usuario: ' + userError.message }
+        
+        // Si falla, intentar limpiar el usuario de Auth
+        try {
+          await supabase.auth.admin.deleteUser(authData.user.id)
+          console.log('🧹 Usuario limpiado de Auth después de error')
+        } catch (cleanupErr) {
+          console.warn('⚠️ No se pudo limpiar usuario de Auth:', cleanupErr)
+        }
+        
+        // Mensaje más amigable según el error
+        if (userError.code === '23505') { // Unique violation
+          return { success: false, error: 'Este correo ya está registrado' }
+        }
+        return { success: false, error: 'Error al crear el usuario. Intenta de nuevo.' }
       }
 
       console.log('✅ Usuario creado en tabla usuarios')
@@ -791,7 +820,7 @@ export function AuthProvider({ children }) {
 
       return {
         success: true,
-        message: `Usuario ${nombre} creado exitosamente. Credenciales: ${email} / (la contraseña que definiste)`
+        message: `Usuario ${nombre} creado exitosamente. Comunícale sus credenciales.`
       }
 
     } catch (error) {
