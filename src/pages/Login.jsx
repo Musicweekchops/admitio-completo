@@ -134,7 +134,8 @@ export default function Login() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="form-input with-icon"
+                  className="form-input"
+                  style={{ paddingLeft: '2.75rem' }}
                   placeholder="tu@institucion.com"
                   required
                   disabled={loading}
@@ -163,7 +164,8 @@ export default function Login() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="form-input with-icon"
+                  className="form-input"
+                  style={{ paddingLeft: '2.75rem' }}
                   placeholder="Tu contraseña"
                   required
                   disabled={loading}

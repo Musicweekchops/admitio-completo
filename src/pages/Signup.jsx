@@ -264,7 +264,7 @@ const Signup = () => {
 
   // Función para obtener clases del input según estado
   const getInstitucionInputClasses = () => {
-    const baseClasses = "form-input with-icon pr-12 transition-colors"
+    const baseClasses = "form-input pr-12 transition-colors"
     switch (institucionStatus) {
       case 'available':
         return `${baseClasses} border-emerald-400 focus:border-emerald-500 focus:ring-emerald-200`
@@ -396,6 +396,7 @@ const Signup = () => {
                     value={formData.institucion}
                     onChange={handleChange}
                     className={getInstitucionInputClasses()}
+                    style={{ paddingLeft: '2.75rem' }}
                     placeholder="Ej: Instituto Técnico Profesional"
                     required
                     autoFocus
@@ -432,7 +433,8 @@ const Signup = () => {
                     name="tipo"
                     value={formData.tipo}
                     onChange={handleChange}
-                    className="form-input with-icon appearance-none"
+                    className="form-input appearance-none"
+                    style={{ paddingLeft: '2.75rem' }}
                     required
                   >
                     <option value="">Selecciona el tipo</option>
@@ -512,7 +514,7 @@ const Signup = () => {
                     name="sitioWeb"
                     value={formData.sitioWeb}
                     onChange={handleChange}
-                    className="form-input with-icon"
+                    className="form-input" style={{ paddingLeft: '2.75rem' }}
                     placeholder="https://www.tuinstitucion.cl"
                   />
                 </div>
@@ -558,7 +560,7 @@ const Signup = () => {
                     name="nombre"
                     value={formData.nombre}
                     onChange={handleChange}
-                    className="form-input with-icon"
+                    className="form-input" style={{ paddingLeft: '2.75rem' }}
                     placeholder="Tu nombre"
                     required
                     autoFocus
@@ -579,7 +581,7 @@ const Signup = () => {
                     name="email"
                     value={formData.email}
                     onChange={handleChange}
-                    className="form-input with-icon"
+                    className="form-input" style={{ paddingLeft: '2.75rem' }}
                     placeholder="tu@institucion.com"
                     required
                   />
@@ -599,7 +601,7 @@ const Signup = () => {
                     name="password"
                     value={formData.password}
                     onChange={handleChange}
-                    className="form-input with-icon"
+                    className="form-input" style={{ paddingLeft: '2.75rem' }}
                     placeholder="Mínimo 6 caracteres"
                     required
                   />
@@ -619,7 +621,7 @@ const Signup = () => {
                     name="confirmPassword"
                     value={formData.confirmPassword}
                     onChange={handleChange}
-                    className="form-input with-icon"
+                    className="form-input" style={{ paddingLeft: '2.75rem' }}
                     placeholder="Repite tu contraseña"
                     required
                   />
