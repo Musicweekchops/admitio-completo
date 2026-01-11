@@ -99,6 +99,73 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
+  // ========== SISTEMA DE PRESENCIA ==========
+  // Heartbeat: actualiza ultimo_activo cada 2 minutos si el usuario está logueado
+  useEffect(() => {
+    if (!user?.id) return
+    
+    // Actualizar inmediatamente al cargar
+    actualizarPresencia()
+    
+    // Actualizar cada 2 minutos
+    const heartbeatInterval = setInterval(() => {
+      actualizarPresencia()
+    }, 2 * 60 * 1000) // 2 minutos
+    
+    // Actualizar en eventos de actividad
+    const handleActivity = () => {
+      actualizarPresencia()
+    }
+    
+    // Escuchar eventos de actividad (throttled)
+    let lastActivity = Date.now()
+    const throttledActivity = () => {
+      const now = Date.now()
+      if (now - lastActivity > 30000) { // Max cada 30 segundos
+        lastActivity = now
+        handleActivity()
+      }
+    }
+    
+    window.addEventListener('click', throttledActivity)
+    window.addEventListener('keydown', throttledActivity)
+    window.addEventListener('scroll', throttledActivity)
+    
+    // Marcar offline al cerrar/salir
+    const handleBeforeUnload = () => {
+      // Usar sendBeacon para enviar antes de cerrar
+      if (user?.id && isSupabaseConfigured()) {
+        const url = `${supabase.supabaseUrl}/rest/v1/usuarios?id=eq.${user.id}`
+        const data = JSON.stringify({ ultimo_activo: new Date(0).toISOString() })
+        navigator.sendBeacon(url, data)
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    
+    return () => {
+      clearInterval(heartbeatInterval)
+      window.removeEventListener('click', throttledActivity)
+      window.removeEventListener('keydown', throttledActivity)
+      window.removeEventListener('scroll', throttledActivity)
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [user?.id])
+  
+  async function actualizarPresencia() {
+    if (!user?.id || !isSupabaseConfigured()) return
+    
+    try {
+      await supabase
+        .from('usuarios')
+        .update({ ultimo_activo: new Date().toISOString() })
+        .eq('id', user.id)
+    } catch (err) {
+      // Silenciar errores de presencia
+      console.debug('Error actualizando presencia:', err)
+    }
+  }
+  // ==========================================
+
   async function checkSession() {
     try {
       // No verificar si estamos en /auth/callback (AuthCallback lo maneja)
@@ -606,6 +673,7 @@ export function AuthProvider({ children }) {
           rol_id: u.rol,
           activo: u.activo,
           email_verificado: u.email_verificado || false,
+          ultimo_activo: u.ultimo_activo,
           avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.nombre)}&background=7c3aed&color=fff`
         })),
         carreras: (carreras || []).map(c => ({

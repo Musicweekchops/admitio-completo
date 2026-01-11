@@ -4195,6 +4195,18 @@ export default function Dashboard() {
       activo: true
     })
     
+    // Auto-refresh para actualizar estados de presencia cada 30 segundos
+    useEffect(() => {
+      const refreshPresencia = async () => {
+        await reloadFromSupabase()
+        setUsuarios(store.getUsuarios(user?.id, isSuperAdmin))
+      }
+      
+      const interval = setInterval(refreshPresencia, 30 * 1000) // 30 segundos
+      
+      return () => clearInterval(interval)
+    }, [isSuperAdmin])
+    
     const refreshUsuarios = async () => {
       // Recargar desde Supabase para obtener usuarios actualizados
       await reloadFromSupabase()
@@ -4302,6 +4314,23 @@ export default function Dashboard() {
     }
     
     const handleToggleActivo = (targetUser) => {
+      // ========== VALIDACIONES CRÍTICAS ==========
+      // No puede desactivarse a sí mismo
+      if (targetUser.id === user?.id || targetUser.email === user?.email) {
+        setNotification({ type: 'error', message: 'No puedes desactivarte a ti mismo' })
+        return
+      }
+      
+      // Si se va a desactivar, verificar que no sea el único keymaster
+      if (targetUser.activo && targetUser.rol_id === 'keymaster') {
+        const keymasters = usuarios.filter(u => u.rol_id === 'keymaster' && u.activo)
+        if (keymasters.length <= 1) {
+          setNotification({ type: 'error', message: 'No puedes desactivar al único administrador' })
+          return
+        }
+      }
+      // ============================================
+      
       // Si se va a desactivar (está activo) y tiene leads, mostrar modal
       if (targetUser.activo) {
         const leads = store.getLeadsPorUsuario(targetUser.id)
@@ -4321,6 +4350,23 @@ export default function Dashboard() {
     
     const handleDeactivateUser = async () => {
       const { user: targetUser, leadsCount } = localShowDeactivateModal
+      
+      // ========== VALIDACIONES CRÍTICAS ==========
+      // No puede desactivarse a sí mismo
+      if (targetUser.id === user?.id || targetUser.email === user?.email) {
+        setNotification({ type: 'error', message: 'No puedes desactivarte a ti mismo' })
+        setLocalShowDeactivateModal(null)
+        return
+      }
+      
+      // No puede desactivar al único keymaster
+      const keymasters = usuarios.filter(u => u.rol_id === 'keymaster' && u.activo)
+      if (targetUser.rol_id === 'keymaster' && keymasters.length <= 1) {
+        setNotification({ type: 'error', message: 'No puedes desactivar al único administrador' })
+        setLocalShowDeactivateModal(null)
+        return
+      }
+      // ============================================
       
       // Si tiene leads y no seleccionó migración
       if (leadsCount > 0 && !migrateToUser) {
@@ -4368,6 +4414,23 @@ export default function Dashboard() {
     const handleDeleteUser = async () => {
       const { user: targetUser, leadsCount } = localShowDeleteModal
       
+      // ========== VALIDACIONES CRÍTICAS ==========
+      // No puede eliminarse a sí mismo
+      if (targetUser.id === user?.id || targetUser.email === user?.email) {
+        setNotification({ type: 'error', message: 'No puedes eliminarte a ti mismo' })
+        setLocalShowDeleteModal(null)
+        return
+      }
+      
+      // No puede eliminar al único keymaster
+      const keymasters = usuarios.filter(u => u.rol_id === 'keymaster' && u.activo)
+      if (targetUser.rol_id === 'keymaster' && keymasters.length <= 1) {
+        setNotification({ type: 'error', message: 'No puedes eliminar al único administrador' })
+        setLocalShowDeleteModal(null)
+        return
+      }
+      // ============================================
+      
       // Si tiene leads y no seleccionó migración
       if (leadsCount > 0 && !migrateToUser) {
         alert('Debes seleccionar un encargado para migrar los leads')
@@ -4399,7 +4462,7 @@ export default function Dashboard() {
       
       // Eliminar usuario
       setNotification({ type: 'info', message: 'Eliminando usuario...' })
-      const result = await store.deleteUsuario(targetUser.id)
+      const result = await store.deleteUsuario(targetUser.id, user?.id)
       
       if (result.success) {
         setNotification({ type: 'success', message: 'Usuario eliminado correctamente' })
@@ -4431,12 +4494,20 @@ export default function Dashboard() {
     
     // Verificar si puede eliminar un usuario
     const puedeEliminar = (targetUser) => {
-      // No puede eliminarse a sí mismo
+      // CRÍTICO: No puede eliminarse a sí mismo
       if (targetUser.id === user?.id) return false
+      if (targetUser.email === user?.email) return false
+      if (targetUser.auth_id === user?.auth_id) return false
+      
+      // No puede eliminar al único keymaster
+      const keymasters = usuarios.filter(u => u.rol_id === 'keymaster' && u.activo)
+      if (targetUser.rol_id === 'keymaster' && keymasters.length <= 1) return false
+      
       // Solo superadmin puede eliminar keymaster
       if (targetUser.rol_id === 'keymaster' && !isSuperAdmin) return false
       // Solo superadmin puede eliminar superadmin
       if (targetUser.rol_id === 'superadmin' && !isSuperAdmin) return false
+      
       return true
     }
     
@@ -4480,13 +4551,32 @@ export default function Dashboard() {
                   <tr key={u.id} className="border-b border-slate-50 hover:bg-slate-50">
                     <td className="p-4">
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${
-                          u.rol_id === 'keymaster' ? 'bg-violet-500' :
-                          u.rol_id === 'rector' ? 'bg-amber-500' :
-                          u.rol_id === 'encargado' ? 'bg-blue-500' :
-                          'bg-slate-400'
-                        }`}>
-                          {u.nombre?.charAt(0)?.toUpperCase()}
+                        <div className="relative">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${
+                            u.rol_id === 'keymaster' ? 'bg-violet-500' :
+                            u.rol_id === 'rector' ? 'bg-amber-500' :
+                            u.rol_id === 'encargado' ? 'bg-blue-500' :
+                            'bg-slate-400'
+                          }`}>
+                            {u.nombre?.charAt(0)?.toUpperCase()}
+                          </div>
+                          {/* Indicador de presencia */}
+                          {u.activo && (
+                            <span 
+                              className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white ${
+                                u.ultimo_activo && (Date.now() - new Date(u.ultimo_activo).getTime()) < 10 * 60 * 1000
+                                  ? 'bg-emerald-500' 
+                                  : 'bg-slate-300'
+                              }`}
+                              title={
+                                u.ultimo_activo && (Date.now() - new Date(u.ultimo_activo).getTime()) < 10 * 60 * 1000
+                                  ? 'En línea'
+                                  : u.ultimo_activo 
+                                    ? `Última actividad: ${new Date(u.ultimo_activo).toLocaleString('es-CL')}`
+                                    : 'Sin actividad'
+                              }
+                            />
+                          )}
                         </div>
                         <div>
                           <p className="font-medium text-slate-800">{u.nombre}</p>
