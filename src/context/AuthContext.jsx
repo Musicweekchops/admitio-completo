@@ -315,10 +315,10 @@ export function AuthProvider({ children }) {
 
       console.log('✅ Login Auth exitoso, verificando estado del usuario...')
       
-      // ========== VERIFICAR SI USUARIO ESTÁ ACTIVO ==========
+      // ========== VERIFICAR ESTADO DEL USUARIO ==========
       const { data: usuario, error: userError } = await supabase
         .from('usuarios')
-        .select('id, activo, email_verificado')
+        .select('id, activo, email_verificado, rol')
         .eq('auth_id', data.user.id)
         .maybeSingle()
       
@@ -341,8 +341,25 @@ export function AuthProvider({ children }) {
       }
       // =====================================================
       
-      // ========== VERIFICACIÓN AUTOMÁTICA DE EMAIL ==========
+      // ========== VERIFICACIÓN DE EMAIL ==========
       if (!usuario.email_verificado) {
+        // Si es keymaster (creador de institución) → requiere verificación
+        if (usuario.rol === 'keymaster') {
+          console.log('🚫 Keymaster sin verificar:', email)
+          await supabase.auth.signOut()
+          
+          // Guardar email para reenvío
+          localStorage.setItem('admitio_pending_email', email.toLowerCase().trim())
+          
+          return { 
+            success: false, 
+            error: 'Debes verificar tu email antes de iniciar sesión. Revisa tu bandeja de entrada.',
+            needsVerification: true,
+            email: email.toLowerCase().trim()
+          }
+        }
+        
+        // Si es invitado (otro rol) → verificar automáticamente en primer login
         try {
           const { error: updateError } = await supabase
             .from('usuarios')
@@ -350,12 +367,13 @@ export function AuthProvider({ children }) {
             .eq('auth_id', data.user.id)
           
           if (!updateError) {
-            console.log('✅ Email verificado automáticamente en primer login')
+            console.log('✅ Email verificado automáticamente en primer login (invitado)')
           }
         } catch (verifyErr) {
           console.warn('⚠️ Error en verificación automática:', verifyErr)
         }
       }
+      // =====================================================
       
       return { success: true, user: data.user }
 
@@ -509,13 +527,35 @@ export function AuthProvider({ children }) {
           nombre: nombreUsuario,
           rol: 'keymaster',
           activo: true,
-          email_verificado: true
+          email_verificado: false // Requiere verificación
         })
 
       if (userError) {
         console.error('Error creando usuario:', userError)
         await supabase.from('instituciones').delete().eq('id', nuevaInst.id)
         return { success: false, error: 'Error al crear el usuario. Por favor intenta de nuevo.' }
+      }
+
+      // ========== ENVIAR EMAIL DE VERIFICACIÓN ==========
+      // Guardamos email para poder reenviar si es necesario
+      localStorage.setItem('admitio_pending_email', emailNormalizado)
+      
+      try {
+        const { error: resendError } = await supabase.auth.resend({
+          type: 'signup',
+          email: emailNormalizado,
+          options: {
+            emailRedirectTo: `${window.location.origin}/auth/callback`
+          }
+        })
+        
+        if (resendError) {
+          console.warn('⚠️ No se pudo enviar email de verificación:', resendError)
+        } else {
+          console.log('✅ Email de verificación enviado')
+        }
+      } catch (emailErr) {
+        console.warn('⚠️ Error enviando verificación:', emailErr)
       }
 
       console.log('✅ Cuenta creada:', {
@@ -526,10 +566,13 @@ export function AuthProvider({ children }) {
         email: emailNormalizado
       })
 
+      // Cerrar sesión para que verifique primero
+      await supabase.auth.signOut()
+
       return { 
         success: true, 
-        requiresVerification: false,
-        message: 'Cuenta creada exitosamente.',
+        requiresVerification: true,
+        message: 'Cuenta creada. Revisa tu correo para verificar tu email.',
         email: emailNormalizado
       }
 
@@ -827,7 +870,7 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      console.log('📝 Creando usuario:', email)
+      console.log('📝 Creando usuario via Edge Function:', email)
       
       // Mapear rol a nombre legible
       const rolesNombres = {
@@ -838,90 +881,37 @@ export function AuthProvider({ children }) {
       }
       const rolNombre = rolesNombres[rol] || rol
       
-      // ========== VERIFICAR SI YA EXISTE EN NUESTRA TABLA ==========
-      const { data: existingUser } = await supabase
-        .from('usuarios')
-        .select('id, email, activo')
-        .eq('email', email.toLowerCase().trim())
-        .eq('institucion_id', user.institucion_id)
-        .maybeSingle()
-      
-      if (existingUser) {
-        if (existingUser.activo) {
-          return { success: false, error: 'Este correo ya está registrado en tu institución' }
-        } else {
-          return { success: false, error: 'Este usuario existe pero está desactivado. Puedes reactivarlo desde la lista de usuarios.' }
-        }
-      }
-      
-      // ========== CREAR EN SUPABASE AUTH ==========
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: email.toLowerCase().trim(),
-        password: password,
-        options: {
-          data: { 
-            nombre, 
-            rol,
-            rol_nombre: rolNombre,
-            institucion_nombre: institucion?.nombre || 'tu institución'
-          },
-          emailRedirectTo: `${window.location.origin}/auth/callback?type=invite`
+      // ========== LLAMAR A EDGE FUNCTION ==========
+      const { data, error } = await supabase.functions.invoke('invite-user', {
+        body: {
+          email: email.toLowerCase().trim(),
+          nombre,
+          password,
+          rol,
+          rol_nombre: rolNombre,
+          institucion_id: user.institucion_id,
+          institucion_nombre: institucion?.nombre || 'tu institución',
+          invitado_por: user.id
         }
       })
 
-      if (authError) {
-        console.error('Error en auth.signUp:', authError)
-        if (authError.message.includes('already registered')) {
-          return { success: false, error: 'Este correo ya está registrado en el sistema' }
-        }
-        return { success: false, error: authError.message }
+      if (error) {
+        console.error('Error en Edge Function:', error)
+        return { success: false, error: error.message || 'Error al crear usuario' }
       }
 
-      if (!authData.user) {
-        return { success: false, error: 'No se pudo crear el usuario en Auth' }
+      if (!data?.success) {
+        return { success: false, error: data?.error || 'Error al crear usuario' }
       }
 
-      console.log('✅ Usuario creado en Auth:', authData.user.id)
-
-      // ========== CREAR EN NUESTRA TABLA ==========
-      const { error: userError } = await supabase
-        .from('usuarios')
-        .insert({
-          institucion_id: user.institucion_id,
-          auth_id: authData.user.id,
-          email: email.toLowerCase().trim(),
-          nombre,
-          rol,
-          activo: true,
-          email_verificado: true
-        })
-
-      if (userError) {
-        console.error('Error creando usuario en tabla:', userError)
-        
-        // Si falla, intentar limpiar el usuario de Auth
-        try {
-          await supabase.auth.admin.deleteUser(authData.user.id)
-          console.log('🧹 Usuario limpiado de Auth después de error')
-        } catch (cleanupErr) {
-          console.warn('⚠️ No se pudo limpiar usuario de Auth:', cleanupErr)
-        }
-        
-        // Mensaje más amigable según el error
-        if (userError.code === '23505') { // Unique violation
-          return { success: false, error: 'Este correo ya está registrado' }
-        }
-        return { success: false, error: 'Error al crear el usuario. Intenta de nuevo.' }
-      }
-
-      console.log('✅ Usuario creado en tabla usuarios')
+      console.log('✅ Usuario creado via Edge Function:', data.user?.email)
 
       // Actualizar uso
       actualizarUso('usuarios', 1)
 
       return {
         success: true,
-        message: `Usuario ${nombre} creado exitosamente. Comunícale sus credenciales.`
+        message: `Usuario ${nombre} creado exitosamente. Se le envió un email de bienvenida.`
       }
 
     } catch (error) {
