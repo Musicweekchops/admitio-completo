@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  GraduationCap, 
-  ChevronRight, 
-  Users, 
-  BarChart3, 
-  FileText, 
-  Mail, 
-  Upload, 
+import {
+  GraduationCap,
+  ChevronRight,
+  Users,
+  BarChart3,
+  FileText,
+  Mail,
+  Upload,
   Shield,
   Check,
   Phone,
@@ -74,7 +74,7 @@ const Navbar = () => {
         </div>
 
         {/* Mobile Menu Button */}
-        <button 
+        <button
           className="md:hidden p-2 text-slate-700"
           onClick={() => setMobileOpen(!mobileOpen)}
         >
@@ -120,7 +120,7 @@ const Hero = () => (
       <div className="hero-gradient"></div>
       <div className="hero-gradient-2"></div>
       <div className="hero-grid"></div>
-      
+
       {/* Floating Shapes */}
       <div className="absolute top-[10%] right-[5%] w-72 h-72 bg-gradient-to-br from-violet-200 to-violet-100 rounded-full opacity-60 animate-float" style={{ animationDelay: '-2s' }}></div>
       <div className="absolute top-[60%] right-[15%] w-36 h-36 bg-gradient-to-br from-emerald-400 to-emerald-500 rounded-full opacity-30 animate-float" style={{ animationDelay: '-4s' }}></div>
@@ -179,7 +179,7 @@ const Hero = () => (
             <div className="w-3 h-3 rounded-full bg-amber-400"></div>
             <div className="w-3 h-3 rounded-full bg-emerald-400"></div>
           </div>
-          
+
           {/* Content */}
           <div className="p-6 bg-gradient-to-b from-slate-50 to-white">
             <div className="flex gap-5">
@@ -195,7 +195,7 @@ const Hero = () => (
                   <FileText className="w-5 h-5 text-slate-400" />
                 </div>
               </div>
-              
+
               {/* Main Content */}
               <div className="flex-1 space-y-4">
                 {/* Stats Cards */}
@@ -213,12 +213,12 @@ const Hero = () => (
                     <div className="text-xs text-slate-500">Conversión</div>
                   </div>
                 </div>
-                
+
                 {/* Chart */}
                 <div className="bg-white rounded-xl border border-slate-200 p-4 h-32 flex items-end gap-2">
                   {[40, 65, 45, 80, 55, 90, 70].map((h, i) => (
-                    <div 
-                      key={i} 
+                    <div
+                      key={i}
                       className="flex-1 bg-gradient-to-t from-violet-600 to-violet-400 rounded-t-md"
                       style={{ height: `${h}%` }}
                     ></div>
@@ -372,21 +372,21 @@ const Pricing = () => {
       name: 'Gratuito',
       tagline: 'Para empezar a probar',
       price: '$0',
-      features: ['1 usuario', '10 leads activos', '1 formulario activo', 'Dashboard',],
+      features: ['1 operador', '10 leads activos', '1 formulario activo', 'Dashboard',],
       featured: false,
     },
     {
       name: 'Profesional',
       tagline: 'Para instituciones en crecimiento',
       price: '$119.990',
-      features: ['15 usuarios', '500 leads activos', '10 formularios web', '200 emails/mes', 'Reportes avanzados', '5GB almacenamiento'],
+      features: ['15 operadores', '500 leads activos', '10 formularios web', '200 emails/mes', 'Reportes avanzados', '5GB almacenamiento'],
       featured: true,
     },
     {
       name: 'Institución',
       tagline: 'Para grandes equipos',
       price: '$249.990',
-      features: ['50 usuarios', '5,000 leads activos', '30 formularios web', '30,000 emails/mes', 'Reportes avanzados', '20GB almacenamiento'],
+      features: ['25 operadores', '2,000 leads activos', '20 formularios web', '2,000 emails/mes', 'Reportes avanzados', '15GB almacenamiento'],
       featured: false,
     },
   ];
@@ -416,11 +416,10 @@ const Pricing = () => {
           {plans.map((plan, i) => (
             <div
               key={i}
-              className={`rounded-3xl p-8 transition-all duration-300 hover:-translate-y-2 ${
-                plan.featured
+              className={`rounded-3xl p-8 transition-all duration-300 hover:-translate-y-2 ${plan.featured
                   ? 'bg-white scale-105 shadow-2xl'
                   : 'bg-white/5 backdrop-blur border border-white/10'
-              }`}
+                }`}
             >
               {plan.featured && (
                 <span className="inline-block px-3 py-1 bg-gradient-to-r from-violet-500 to-violet-600 text-white text-xs font-semibold uppercase tracking-wide rounded-full mb-4">
@@ -449,11 +448,10 @@ const Pricing = () => {
               </ul>
               <Link
                 to="/signup"
-                className={`btn w-full justify-center ${
-                  plan.featured
+                className={`btn w-full justify-center ${plan.featured
                     ? 'btn-primary'
                     : 'bg-white/10 text-white border border-white/20 hover:bg-white/20'
-                }`}
+                  }`}
               >
                 {plan.price === '$0' ? 'Comenzar Gratis' : 'Contactar'}
               </Link>
@@ -497,20 +495,18 @@ const FAQ = () => {
           {faqs.map((faq, i) => (
             <div
               key={i}
-              className={`rounded-2xl border transition-all duration-300 ${
-                openIndex === i
+              className={`rounded-2xl border transition-all duration-300 ${openIndex === i
                   ? 'bg-white border-violet-300 shadow-lg shadow-violet-500/10'
                   : 'bg-slate-50 border-slate-200 hover:border-violet-200'
-              }`}
+                }`}
             >
               <button
                 className="w-full p-6 flex items-center justify-between gap-4 text-left"
                 onClick={() => setOpenIndex(openIndex === i ? -1 : i)}
               >
                 <span className="font-display text-lg font-semibold text-slate-800">{faq.q}</span>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                  openIndex === i ? 'bg-violet-600 rotate-180' : 'bg-violet-100'
-                }`}>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${openIndex === i ? 'bg-violet-600 rotate-180' : 'bg-violet-100'
+                  }`}>
                   <ChevronDown className={`w-5 h-5 ${openIndex === i ? 'text-white' : 'text-violet-600'}`} />
                 </div>
               </button>
@@ -567,7 +563,7 @@ const Footer = () => (
             El sistema de gestión de admisión que transparenta y agiliza tu proceso de admisión.
           </p>
         </div>
-        
+
         <div>
           <h4 className="font-semibold text-white mb-4">Producto</h4>
           <ul className="space-y-2">
@@ -578,7 +574,7 @@ const Footer = () => (
             ))}
           </ul>
         </div>
-        
+
         <div>
           <h4 className="font-semibold text-white mb-4">Soporte</h4>
           <ul className="space-y-2">
@@ -589,7 +585,7 @@ const Footer = () => (
             ))}
           </ul>
         </div>
-        
+
         <div>
           <h4 className="font-semibold text-white mb-4">Legal</h4>
           <ul className="space-y-2">
@@ -601,7 +597,7 @@ const Footer = () => (
           </ul>
         </div>
       </div>
-      
+
       <div className="pt-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4">
         <p className="text-slate-500 text-sm">© 2025 Admitio. Todos los derechos reservados. Hecho con 💜 en Chile.</p>
         <div className="flex gap-4">
