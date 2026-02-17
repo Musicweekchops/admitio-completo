@@ -417,8 +417,8 @@ const Pricing = () => {
             <div
               key={i}
               className={`rounded-3xl p-8 transition-all duration-300 hover:-translate-y-2 ${plan.featured
-                  ? 'bg-white scale-105 shadow-2xl'
-                  : 'bg-white/5 backdrop-blur border border-white/10'
+                ? 'bg-white scale-105 shadow-2xl'
+                : 'bg-white/5 backdrop-blur border border-white/10'
                 }`}
             >
               {plan.featured && (
@@ -449,8 +449,8 @@ const Pricing = () => {
               <Link
                 to="/signup"
                 className={`btn w-full justify-center ${plan.featured
-                    ? 'btn-primary'
-                    : 'bg-white/10 text-white border border-white/20 hover:bg-white/20'
+                  ? 'btn-primary'
+                  : 'bg-white/10 text-white border border-white/20 hover:bg-white/20'
                   }`}
               >
                 {plan.price === '$0' ? 'Comenzar Gratis' : 'Contactar'}
@@ -470,10 +470,10 @@ const FAQ = () => {
   const faqs = [
     { q: '¿Puedo probar Admitio antes de pagar?', a: '¡Por supuesto! Ofrecemos un plan gratuito con todas las funcionalidades básicas para que pruebes el sistema sin compromiso.' },
     { q: '¿Mis datos están seguros?', a: 'Absolutamente. Cada institución tiene sus datos completamente aislados.' },
-    { q: '¿Puedo importar mis datos actuales?', a: 'Sí, puedes importar tus leads existentes desde archivos Excel o CSV. El sistema detecta automáticamente las columnas y te guía en el proceso de importación.' },
+    { q: '¿Puedo importar mis datos actuales?', a: 'Sí, puedes importar tus leads existentes desde archivos Excel o CSV.' },
     { q: '¿Cómo integro el formulario en mi web?', a: 'Muy simple: creas tu formulario en Admitio, personalizas los campos y colores, y copias un código que pegas en cualquier página de tu sitio web. Los leads llegan automáticamente.' },
-    { q: '¿Qué pasa si supero el límite de leads?', a: 'Te avisamos cuando estés cerca del límite. Puedes hacer upgrade al siguiente plan o archivar leads antiguos para liberar espacio. Nunca perdemos tus datos.' },
-    { q: '¿Ofrecen soporte técnico?', a: 'Todos los planes incluyen soporte por email. Los planes Profesional e Institución incluyen chat en vivo y el plan Institución tiene soporte telefónico prioritario.' },
+    { q: '¿Qué pasa si supero el límite de leads?', a: 'Te avisamos cuando estés cerca del límite. Puedes hacer upgrade al siguiente plan' },
+    { q: '¿Ofrecen soporte técnico?', a: 'Todos los planes incluyen soporte por email. Los planes Profesional e Institución incluyen chat.' },
   ];
 
   return (
@@ -496,8 +496,8 @@ const FAQ = () => {
             <div
               key={i}
               className={`rounded-2xl border transition-all duration-300 ${openIndex === i
-                  ? 'bg-white border-violet-300 shadow-lg shadow-violet-500/10'
-                  : 'bg-slate-50 border-slate-200 hover:border-violet-200'
+                ? 'bg-white border-violet-300 shadow-lg shadow-violet-500/10'
+                : 'bg-slate-50 border-slate-200 hover:border-violet-200'
                 }`}
             >
               <button
@@ -599,7 +599,7 @@ const Footer = () => (
       </div>
 
       <div className="pt-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4">
-        <p className="text-slate-500 text-sm">© 2025 Admitio. Todos los derechos reservados. Hecho con 💜 en Chile.</p>
+        <p className="text-slate-500 text-sm">© 2026 Admitio. Todos los derechos reservados. Hecho con 💜 en Chile.</p>
         <div className="flex gap-4">
           {[Instagram, Linkedin, Twitter].map((Icon, i) => (
             <a key={i} href="#" className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-slate-400 hover:bg-violet-600 hover:text-white transition-all">
