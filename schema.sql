@@ -6,8 +6,11 @@
 -- Limpiar tablas si existen (solo para desarrollo)
 DROP TABLE IF EXISTS acciones_lead CASCADE;
 DROP TABLE IF EXISTS leads CASCADE;
+DROP TABLE IF EXISTS formularios CASCADE;
+DROP TABLE IF EXISTS carreras CASCADE;
 DROP TABLE IF EXISTS usuarios CASCADE;
 DROP TABLE IF EXISTS instituciones CASCADE;
+DROP TABLE IF EXISTS planes_config CASCADE;
 
 -- =============================================
 -- 1. INSTITUCIONES (con planes)
@@ -48,8 +51,8 @@ CREATE TABLE usuarios (
   institucion_id UUID REFERENCES instituciones(id) ON DELETE CASCADE,
   
   -- Auth
+  auth_id UUID UNIQUE,
   email VARCHAR(255) NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
   
   -- Perfil
   nombre VARCHAR(255) NOT NULL,
@@ -70,7 +73,21 @@ CREATE TABLE usuarios (
 );
 
 -- =============================================
--- 3. LEADS
+-- 3. CARRERAS (por institución)
+-- =============================================
+CREATE TABLE carreras (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  institucion_id UUID REFERENCES instituciones(id) ON DELETE CASCADE,
+  
+  nombre VARCHAR(255) NOT NULL,
+  color VARCHAR(50) DEFAULT 'bg-blue-500',
+  activa BOOLEAN DEFAULT true,
+  
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- =============================================
+-- 4. LEADS
 -- =============================================
 CREATE TABLE leads (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -107,7 +124,7 @@ CREATE TABLE leads (
 );
 
 -- =============================================
--- 4. ACCIONES DE LEAD (historial de contacto)
+-- 5. ACCIONES DE LEAD (historial de contacto)
 -- =============================================
 CREATE TABLE acciones_lead (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -116,20 +133,6 @@ CREATE TABLE acciones_lead (
   
   tipo VARCHAR(50) NOT NULL,  -- 'llamada', 'email', 'whatsapp', 'reunion', 'nota'
   descripcion TEXT,
-  
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- =============================================
--- 5. CARRERAS (por institución)
--- =============================================
-CREATE TABLE carreras (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  institucion_id UUID REFERENCES instituciones(id) ON DELETE CASCADE,
-  
-  nombre VARCHAR(255) NOT NULL,
-  color VARCHAR(50) DEFAULT 'bg-blue-500',
-  activa BOOLEAN DEFAULT true,
   
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -206,13 +209,12 @@ VALUES (
 );
 
 -- Crear SuperOwner (TÚ)
--- Password: Admitio2024! (hasheada con bcrypt)
-INSERT INTO usuarios (id, institucion_id, email, password_hash, nombre, rol, activo, email_verificado)
+INSERT INTO usuarios (id, institucion_id, auth_id, email, nombre, rol, activo, email_verificado)
 VALUES (
   '00000000-0000-0000-0000-000000000002',
   '00000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000000', -- ATENCIÓN: Rellenar con tu auth.uid() real después
   'owner@admitio.cl',
-  '$2a$10$xQEq0xT5YQfKxOJUJKEK0OqH8VZJzJqYpQE5E5XkKqXKqXKqXKqXK',
   'Super Owner',
   'superowner',
   true,
@@ -284,14 +286,42 @@ ALTER TABLE carreras ENABLE ROW LEVEL SECURITY;
 ALTER TABLE formularios ENABLE ROW LEVEL SECURITY;
 
 -- Políticas básicas (se refinan después)
--- Por ahora permitimos todo para desarrollo
-CREATE POLICY "Allow all for dev" ON instituciones FOR ALL USING (true);
-CREATE POLICY "Allow all for dev" ON usuarios FOR ALL USING (true);
-CREATE POLICY "Allow all for dev" ON leads FOR ALL USING (true);
-CREATE POLICY "Allow all for dev" ON acciones_lead FOR ALL USING (true);
-CREATE POLICY "Allow all for dev" ON carreras FOR ALL USING (true);
-CREATE POLICY "Allow all for dev" ON formularios FOR ALL USING (true);
-CREATE POLICY "Allow all for dev" ON planes_config FOR ALL USING (true);
+-- Aislamiento por Institución con super-acceso para arnaldoallendeb@gmail.com
+CREATE POLICY "Institucion aislada" ON instituciones FOR ALL USING (
+  id = (SELECT institucion_id FROM usuarios WHERE auth_id = auth.uid() LIMIT 1)
+  OR auth.jwt()->>'email' = 'arnaldoallendeb@gmail.com'
+);
+
+CREATE POLICY "Usuarios aislados" ON usuarios FOR ALL USING (
+  institucion_id = (SELECT institucion_id FROM usuarios WHERE auth_id = auth.uid() LIMIT 1)
+  OR auth.jwt()->>'email' = 'arnaldoallendeb@gmail.com'
+);
+
+CREATE POLICY "Leads aislados" ON leads FOR ALL USING (
+  institucion_id = (SELECT institucion_id FROM usuarios WHERE auth_id = auth.uid() LIMIT 1)
+  OR auth.jwt()->>'email' = 'arnaldoallendeb@gmail.com'
+);
+
+CREATE POLICY "Permitir insercion publica de Leads" ON leads FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Acciones leads aisladas" ON acciones_lead FOR ALL USING (
+  EXISTS (SELECT 1 FROM leads WHERE leads.id = acciones_lead.lead_id AND leads.institucion_id = (SELECT institucion_id FROM usuarios WHERE auth_id = auth.uid() LIMIT 1))
+  OR auth.jwt()->>'email' = 'arnaldoallendeb@gmail.com'
+);
+
+CREATE POLICY "Carreras aisladas" ON carreras FOR ALL USING (
+  institucion_id = (SELECT institucion_id FROM usuarios WHERE auth_id = auth.uid() LIMIT 1)
+  OR auth.jwt()->>'email' = 'arnaldoallendeb@gmail.com'
+);
+
+CREATE POLICY "Formularios publicos lectura" ON formularios FOR SELECT USING (true);
+CREATE POLICY "Formularios aislados edicion" ON formularios FOR ALL USING (
+  institucion_id = (SELECT institucion_id FROM usuarios WHERE auth_id = auth.uid() LIMIT 1)
+  OR auth.jwt()->>'email' = 'arnaldoallendeb@gmail.com'
+);
+
+CREATE POLICY "Lectura de Planes publica" ON planes_config FOR SELECT USING (true);
+CREATE POLICY "Edicion de Planes admin" ON planes_config FOR ALL USING (auth.jwt()->>'email' = 'arnaldoallendeb@gmail.com');
 
 -- =============================================
 -- 12. DATOS DE PRUEBA (Institución Demo)
@@ -309,11 +339,11 @@ VALUES (
 );
 
 -- KeyMaster de ProJazz
-INSERT INTO usuarios (institucion_id, email, password_hash, nombre, rol, activo, email_verificado)
+INSERT INTO usuarios (institucion_id, auth_id, email, nombre, rol, activo, email_verificado)
 VALUES (
   '00000000-0000-0000-0000-000000000010',
+  '00000000-0000-0000-0000-111111111111',
   'admin@projazz.cl',
-  '$2a$10$xQEq0xT5YQfKxOJUJKEK0OqH8VZJzJqYpQE5E5XkKqXKqXKqXKqXK',
   'Administrador ProJazz',
   'keymaster',
   true,

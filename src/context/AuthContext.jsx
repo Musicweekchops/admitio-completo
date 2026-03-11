@@ -220,7 +220,7 @@ export function AuthProvider({ children }) {
       // Buscar usuario SIN filtrar por activo para detectar desactivados
       const { data: usuario, error } = await supabase
         .from('usuarios')
-        .select('*, instituciones(id, nombre, tipo, pais, ciudad, region, sitio_web, plan)')
+        .select('*, instituciones(id, nombre, plan)')
         .eq('auth_id', authUser.id)
         .maybeSingle()
 
@@ -756,10 +756,22 @@ export function AuthProvider({ children }) {
         ],
         recordatorios: [],
         lastSync: new Date().toISOString(),
-        _institucion_id: institucionId
       }
 
-      localStorage.setItem('admitio_data', JSON.stringify(storeData))
+      try {
+        localStorage.setItem('admitio_data', JSON.stringify(storeData))
+      } catch (err) {
+        if (err.name === 'QuotaExceededError' || err.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+          console.warn('⚠️ Límite de Storage excedido en carga inicial, truncando historiales a últimos 1000 leads...');
+          storeData.consultas = storeData.consultas.slice(0, 1000);
+          storeData.actividad = storeData.actividad.slice(0, 50);
+          try {
+            localStorage.setItem('admitio_data', JSON.stringify(storeData));
+          } catch(e) {
+             console.error('Storage full even with truncated slice', e);
+          }
+        }
+      }
       
       // Disparar evento para que el Dashboard recargue
       window.dispatchEvent(new Event('admitio-data-loaded'))
