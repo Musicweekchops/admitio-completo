@@ -218,11 +218,13 @@ export function AuthProvider({ children }) {
       console.log('🔍 Cargando usuario:', authUser.email)
       
       // Buscar usuario SIN filtrar por activo para detectar desactivados
-      const { data: usuario, error } = await supabase
+      const { data: initialUser, error } = await supabase
         .from('usuarios')
         .select('*, instituciones(id, nombre, tipo, pais, ciudad, region, sitio_web, plan)')
         .eq('auth_id', authUser.id)
         .maybeSingle()
+
+      let usuario = initialUser;
 
       if (error) {
         // Ignorar AbortError
@@ -232,6 +234,32 @@ export function AuthProvider({ children }) {
         }
         console.error('❌ Error consultando usuario:', error)
         return { success: false, error: 'Error al cargar usuario' }
+      }
+      
+      // Lógica de VINCULACIÓN: Si no se encuentra por auth_id, buscar por email
+      if (!usuario) {
+        console.log('🔗 Buscando usuario por email para vinculación:', authUser.email)
+        const { data: usuarioPorEmail } = await supabase
+          .from('usuarios')
+          .select('*, instituciones(id, nombre, tipo, pais, ciudad, region, sitio_web, plan)')
+          .eq('email', authUser.email)
+          .maybeSingle()
+        
+        if (usuarioPorEmail) {
+          console.log('✅ Usuario encontrado por email, vinculando auth_id...')
+          // Vincular auth_id para futuras sesiones
+          const { data: usuarioVinculado, error: linkError } = await supabase
+            .from('usuarios')
+            .update({ auth_id: authUser.id })
+            .eq('id', usuarioPorEmail.id)
+            .select('*, instituciones(id, nombre, tipo, pais, ciudad, region, sitio_web, plan)')
+            .single()
+          
+          if (!linkError) {
+            usuario = usuarioVinculado
+            console.log('🎊 Usuario vinculado exitosamente')
+          }
+        }
       }
       
       if (!usuario) {
