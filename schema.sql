@@ -4,13 +4,10 @@
 -- =============================================
 
 -- Limpiar tablas si existen (solo para desarrollo)
-DROP TABLE IF EXISTS formularios CASCADE;
 DROP TABLE IF EXISTS acciones_lead CASCADE;
 DROP TABLE IF EXISTS leads CASCADE;
-DROP TABLE IF EXISTS carreras CASCADE;
 DROP TABLE IF EXISTS usuarios CASCADE;
 DROP TABLE IF EXISTS instituciones CASCADE;
-DROP TABLE IF EXISTS planes_config CASCADE;
 
 -- =============================================
 -- 1. INSTITUCIONES (con planes)
@@ -28,15 +25,9 @@ CREATE TABLE instituciones (
   fecha_inicio DATE DEFAULT CURRENT_DATE,
   fecha_vencimiento DATE,
   
-  -- Contacto y Perfil
+  -- Contacto
   email_contacto VARCHAR(255),
   telefono VARCHAR(50),
-  tipo VARCHAR(50),
-  pais VARCHAR(100),
-  ciudad VARCHAR(100),
-  region VARCHAR(100),
-  sitio_web VARCHAR(255),
-  logo_url TEXT,
   
   -- Contadores (se actualizan con triggers)
   leads_count INTEGER DEFAULT 0,
@@ -57,8 +48,8 @@ CREATE TABLE usuarios (
   institucion_id UUID REFERENCES instituciones(id) ON DELETE CASCADE,
   
   -- Auth
-  auth_id UUID UNIQUE,
   email VARCHAR(255) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
   
   -- Perfil
   nombre VARCHAR(255) NOT NULL,
@@ -71,7 +62,6 @@ CREATE TABLE usuarios (
   
   -- Metadata
   ultimo_acceso TIMESTAMP WITH TIME ZONE,
-  ultimo_activo TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   
@@ -80,21 +70,7 @@ CREATE TABLE usuarios (
 );
 
 -- =============================================
--- 3. CARRERAS (por institución)
--- =============================================
-CREATE TABLE carreras (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  institucion_id UUID REFERENCES instituciones(id) ON DELETE CASCADE,
-  
-  nombre VARCHAR(255) NOT NULL,
-  color VARCHAR(50) DEFAULT 'bg-blue-500',
-  activa BOOLEAN DEFAULT true,
-  
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- =============================================
--- 4. LEADS
+-- 3. LEADS
 -- =============================================
 CREATE TABLE leads (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -131,7 +107,7 @@ CREATE TABLE leads (
 );
 
 -- =============================================
--- 5. ACCIONES DE LEAD (historial de contacto)
+-- 4. ACCIONES DE LEAD (historial de contacto)
 -- =============================================
 CREATE TABLE acciones_lead (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -140,6 +116,20 @@ CREATE TABLE acciones_lead (
   
   tipo VARCHAR(50) NOT NULL,  -- 'llamada', 'email', 'whatsapp', 'reunion', 'nota'
   descripcion TEXT,
+  
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- =============================================
+-- 5. CARRERAS (por institución)
+-- =============================================
+CREATE TABLE carreras (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  institucion_id UUID REFERENCES instituciones(id) ON DELETE CASCADE,
+  
+  nombre VARCHAR(255) NOT NULL,
+  color VARCHAR(50) DEFAULT 'bg-blue-500',
+  activa BOOLEAN DEFAULT true,
   
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -201,7 +191,36 @@ INSERT INTO planes_config (id, nombre, max_leads, max_usuarios, max_emails_mes, 
 ('enterprise', 'Enterprise', 999999, 999, 999999, 102400, 999, true, true, true, true, true, true, NULL);
 
 -- =============================================
--- 8. ÍNDICES PARA PERFORMANCE
+-- 8. SUPER OWNER (tu usuario admin)
+-- =============================================
+
+-- Crear institución del sistema
+INSERT INTO instituciones (id, nombre, codigo, plan, estado, email_contacto)
+VALUES (
+  '00000000-0000-0000-0000-000000000001',
+  'Admitio Admin',
+  'admitio-system',
+  'enterprise',
+  'activo',
+  'owner@admitio.cl'
+);
+
+-- Crear SuperOwner (TÚ)
+-- Password: Admitio2024! (hasheada con bcrypt)
+INSERT INTO usuarios (id, institucion_id, email, password_hash, nombre, rol, activo, email_verificado)
+VALUES (
+  '00000000-0000-0000-0000-000000000002',
+  '00000000-0000-0000-0000-000000000001',
+  'owner@admitio.cl',
+  '$2a$10$xQEq0xT5YQfKxOJUJKEK0OqH8VZJzJqYpQE5E5XkKqXKqXKqXKqXK',
+  'Super Owner',
+  'superowner',
+  true,
+  true
+);
+
+-- =============================================
+-- 9. ÍNDICES PARA PERFORMANCE
 -- =============================================
 CREATE INDEX idx_leads_institucion ON leads(institucion_id);
 CREATE INDEX idx_leads_estado ON leads(estado);
@@ -211,7 +230,7 @@ CREATE INDEX idx_usuarios_email ON usuarios(email);
 CREATE INDEX idx_acciones_lead ON acciones_lead(lead_id);
 
 -- =============================================
--- 9. TRIGGERS PARA CONTADORES
+-- 10. TRIGGERS PARA CONTADORES
 -- =============================================
 
 -- Trigger: Actualizar contador de leads
@@ -253,7 +272,7 @@ AFTER INSERT OR DELETE ON usuarios
 FOR EACH ROW EXECUTE FUNCTION update_usuarios_count();
 
 -- =============================================
--- 10. ROW LEVEL SECURITY (RLS)
+-- 11. ROW LEVEL SECURITY (RLS)
 -- =============================================
 
 -- Habilitar RLS
@@ -275,7 +294,7 @@ CREATE POLICY "Allow all for dev" ON formularios FOR ALL USING (true);
 CREATE POLICY "Allow all for dev" ON planes_config FOR ALL USING (true);
 
 -- =============================================
--- 11. DATOS DE PRUEBA (Institución Demo)
+-- 12. DATOS DE PRUEBA (Institución Demo)
 -- =============================================
 
 -- Institución demo: ProJazz
@@ -290,11 +309,11 @@ VALUES (
 );
 
 -- KeyMaster de ProJazz
-INSERT INTO usuarios (institucion_id, email, auth_id, nombre, rol, activo, email_verificado)
+INSERT INTO usuarios (institucion_id, email, password_hash, nombre, rol, activo, email_verificado)
 VALUES (
   '00000000-0000-0000-0000-000000000010',
   'admin@projazz.cl',
-  '00000000-0000-0000-0000-000000000011', -- UUID dummy para dev
+  '$2a$10$xQEq0xT5YQfKxOJUJKEK0OqH8VZJzJqYpQE5E5XkKqXKqXKqXKqXK',
   'Administrador ProJazz',
   'keymaster',
   true,
@@ -317,34 +336,6 @@ INSERT INTO leads (institucion_id, nombre, email, telefono, carrera_nombre, medi
 ('00000000-0000-0000-0000-000000000010', 'Ana Muñoz', 'ana@test.com', '+56911112222', 'Batería', 'referido', 'seguimiento'),
 ('00000000-0000-0000-0000-000000000010', 'Carlos Ruiz', 'carlos@demo.cl', '+56933334444', 'Producción Musical', 'facebook', 'nueva'),
 ('00000000-0000-0000-0000-000000000010', 'Laura Díaz', 'laura@prueba.cl', '+56955556666', 'Piano/Teclado', 'instagram', 'examen');
-
--- =============================================
--- 12. SUPER OWNER (tu usuario admin)
--- =============================================
-
--- Crear institución del sistema
-INSERT INTO instituciones (id, nombre, codigo, plan, estado, email_contacto)
-VALUES (
-  '00000000-0000-0000-0000-000000000001',
-  'Admitio Admin',
-  'admitio-system',
-  'enterprise',
-  'activo',
-  'arnaldoallendeb@gmail.com'
-);
-
--- Crear SuperOwner (Arnaldo)
-INSERT INTO usuarios (id, institucion_id, email, auth_id, nombre, rol, activo, email_verificado)
-VALUES (
-  '00000000-0000-0000-0000-000000000002',
-  '00000000-0000-0000-0000-000000000001',
-  'arnaldoallendeb@gmail.com',
-  NULL, -- Se vinculará al loguear por email
-  'Arnaldo Allende',
-  'superowner',
-  true,
-  true
-);
 
 -- =============================================
 -- ¡SCHEMA COMPLETO!

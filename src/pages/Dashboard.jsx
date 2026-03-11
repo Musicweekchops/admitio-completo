@@ -962,7 +962,7 @@ export default function Dashboard() {
   // ============================================
   const Sidebar = () => {
     // Fallback: verificar rol directamente si isKeyMaster no está definido
-    const esAdmin = isKeyMaster || user?.rol_id === 'keymaster' || user?.rol_id === 'superadmin' || user?.rol_id === 'superowner'
+    const esAdmin = isKeyMaster || user?.rol_id === 'keymaster' || user?.rol_id === 'superadmin'
     const esRector = isRector || user?.rol_id === 'rector'
     const esEncargado = isEncargado || user?.rol_id === 'encargado'
     
