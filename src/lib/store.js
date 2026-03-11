@@ -132,23 +132,7 @@ function initStore() {
 let store = initStore()
 
 function saveStore() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(store))
-  } catch (err) {
-    if (err.name === 'QuotaExceededError' || err.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
-      console.warn('⚠️ Límite de Storage excedido. Guardando versión simplificada...');
-      const liteStore = {
-        ...store,
-        consultas: store.consultas.slice(0, 1000),
-        actividad: store.actividad.slice(0, 100)
-      };
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(liteStore))
-      } catch (e) {
-        console.error('El Storage falló incluso con versión ligera', e);
-      }
-    }
-  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(store))
 }
 
 export function resetStore() {

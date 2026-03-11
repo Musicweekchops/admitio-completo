@@ -160,18 +160,8 @@ export async function cargarDatosInstitucion(institucionId) {
     };
 
     // Guardar en localStorage
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(storeData));
-      localStorage.setItem('admitio_version', '2.6');
-    } catch (err) {
-      if (err.name === 'QuotaExceededError' || err.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
-        console.warn('⚠️ Límite de Storage excedido, guardando leads activos...');
-        storeData.consultas = storeData.consultas.slice(0, 1000);
-        storeData.historial = storeData.historial?.slice(0, 100);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(storeData));
-        localStorage.setItem('admitio_version', '2.6');
-      }
-    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(storeData));
+    localStorage.setItem('admitio_version', '2.6');
     
     // Disparar evento para que el Dashboard recargue
     window.dispatchEvent(new CustomEvent('admitio-store-updated', { 
@@ -520,6 +510,7 @@ export function syncCrearUsuario(institucionId, userData) {
         institucion_id: institucionId,
         nombre: userData.nombre,
         email: userData.email,
+        password_hash: userData.password || '123456',
         rol: userData.rol_id || 'encargado',
         activo: true,
         password_temporal: true
