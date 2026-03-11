@@ -4,10 +4,13 @@
 -- =============================================
 
 -- Limpiar tablas si existen (solo para desarrollo)
+DROP TABLE IF EXISTS formularios CASCADE;
 DROP TABLE IF EXISTS acciones_lead CASCADE;
 DROP TABLE IF EXISTS leads CASCADE;
+DROP TABLE IF EXISTS carreras CASCADE;
 DROP TABLE IF EXISTS usuarios CASCADE;
 DROP TABLE IF EXISTS instituciones CASCADE;
+DROP TABLE IF EXISTS planes_config CASCADE;
 
 -- =============================================
 -- 1. INSTITUCIONES (con planes)
@@ -15,7 +18,7 @@ DROP TABLE IF EXISTS instituciones CASCADE;
 CREATE TABLE instituciones (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   nombre VARCHAR(255) NOT NULL,
-  codigo VARCHAR(50) UNIQUE NOT NULL,  -- 'projazz', 'ems', etc.
+  codigo VARCHAR(50) UNIQUE NOT NULL,  -- 'slug' para URL
   
   -- Plan y límites
   plan VARCHAR(20) DEFAULT 'prueba' CHECK (plan IN ('prueba', 'inicial', 'profesional', 'premium', 'enterprise')),
@@ -25,11 +28,17 @@ CREATE TABLE instituciones (
   fecha_inicio DATE DEFAULT CURRENT_DATE,
   fecha_vencimiento DATE,
   
-  -- Contacto
+  -- Contacto y Perfil (Requerido por el Frontend)
   email_contacto VARCHAR(255),
   telefono VARCHAR(50),
+  tipo VARCHAR(50),
+  pais VARCHAR(100),
+  ciudad VARCHAR(100),
+  region VARCHAR(100),
+  sitio_web VARCHAR(255),
+  logo_url TEXT,
   
-  -- Contadores (se actualizan con triggers)
+  -- Contadores
   leads_count INTEGER DEFAULT 0,
   usuarios_count INTEGER DEFAULT 1,
   storage_usado_mb DECIMAL(10,2) DEFAULT 0,
@@ -47,9 +56,9 @@ CREATE TABLE usuarios (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   institucion_id UUID REFERENCES instituciones(id) ON DELETE CASCADE,
   
-  -- Auth
+  -- Auth (Link con Supabase Auth)
+  auth_id UUID UNIQUE,
   email VARCHAR(255) NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
   
   -- Perfil
   nombre VARCHAR(255) NOT NULL,
@@ -62,6 +71,7 @@ CREATE TABLE usuarios (
   
   -- Metadata
   ultimo_acceso TIMESTAMP WITH TIME ZONE,
+  ultimo_activo TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   
@@ -70,7 +80,21 @@ CREATE TABLE usuarios (
 );
 
 -- =============================================
--- 3. LEADS
+-- 3. CARRERAS (por institución)
+-- =============================================
+CREATE TABLE carreras (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  institucion_id UUID REFERENCES instituciones(id) ON DELETE CASCADE,
+  
+  nombre VARCHAR(255) NOT NULL,
+  color VARCHAR(50) DEFAULT 'bg-blue-500',
+  activa BOOLEAN DEFAULT true,
+  
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- =============================================
+-- 4. LEADS
 -- =============================================
 CREATE TABLE leads (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -84,7 +108,7 @@ CREATE TABLE leads (
   -- Clasificación
   carrera_id UUID REFERENCES carreras(id),
   carrera_nombre VARCHAR(255),
-  carreras_interes UUID[] DEFAULT '{}',  -- Array de UUIDs de carreras de interés
+  carreras_interes UUID[] DEFAULT '{}',
   medio VARCHAR(50),  -- 'instagram', 'web', 'referido', etc.
   
   -- Estado en el funnel
@@ -107,29 +131,15 @@ CREATE TABLE leads (
 );
 
 -- =============================================
--- 4. ACCIONES DE LEAD (historial de contacto)
+-- 5. ACCIONES DE LEAD
 -- =============================================
 CREATE TABLE acciones_lead (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   lead_id UUID REFERENCES leads(id) ON DELETE CASCADE,
   usuario_id UUID REFERENCES usuarios(id),
   
-  tipo VARCHAR(50) NOT NULL,  -- 'llamada', 'email', 'whatsapp', 'reunion', 'nota'
+  tipo VARCHAR(50) NOT NULL,
   descripcion TEXT,
-  
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- =============================================
--- 5. CARRERAS (por institución)
--- =============================================
-CREATE TABLE carreras (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  institucion_id UUID REFERENCES instituciones(id) ON DELETE CASCADE,
-  
-  nombre VARCHAR(255) NOT NULL,
-  color VARCHAR(50) DEFAULT 'bg-blue-500',
-  activa BOOLEAN DEFAULT true,
   
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -142,9 +152,9 @@ CREATE TABLE formularios (
   institucion_id UUID REFERENCES instituciones(id) ON DELETE CASCADE,
   
   nombre VARCHAR(255) NOT NULL,
-  slug VARCHAR(100) UNIQUE,  -- URL pública
+  slug VARCHAR(100) UNIQUE,
   campos JSONB DEFAULT '[]',
-  carrera_default INTEGER,
+  carrera_default UUID REFERENCES carreras(id), -- Corregido a UUID
   activo BOOLEAN DEFAULT true,
   
   -- Contador
@@ -155,20 +165,18 @@ CREATE TABLE formularios (
 );
 
 -- =============================================
--- 7. CONFIGURACIÓN DE PLANES (referencia)
+-- 7. CONFIGURACIÓN DE PLANES
 -- =============================================
 CREATE TABLE planes_config (
   id VARCHAR(20) PRIMARY KEY,
   nombre VARCHAR(50) NOT NULL,
   
-  -- Límites
   max_leads INTEGER NOT NULL,
   max_usuarios INTEGER NOT NULL,
   max_emails_mes INTEGER NOT NULL,
   max_storage_mb INTEGER NOT NULL,
   max_formularios INTEGER NOT NULL,
   
-  -- Funcionalidades
   importar_csv BOOLEAN DEFAULT false,
   exportar_excel BOOLEAN DEFAULT false,
   reportes_avanzados BOOLEAN DEFAULT false,
@@ -176,13 +184,11 @@ CREATE TABLE planes_config (
   emails_automaticos BOOLEAN DEFAULT false,
   api_acceso BOOLEAN DEFAULT false,
   
-  -- Precio (CLP anual)
   precio INTEGER,
   
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Insertar configuración de planes
 INSERT INTO planes_config (id, nombre, max_leads, max_usuarios, max_emails_mes, max_storage_mb, max_formularios, importar_csv, exportar_excel, reportes_avanzados, duplicados, emails_automaticos, api_acceso, precio) VALUES
 ('prueba', 'Prueba', 15, 1, 0, 50, 0, false, false, false, false, false, false, 0),
 ('inicial', 'Inicial', 300, 5, 2000, 1024, 1, true, true, false, false, true, false, 79990),
@@ -191,91 +197,37 @@ INSERT INTO planes_config (id, nombre, max_leads, max_usuarios, max_emails_mes, 
 ('enterprise', 'Enterprise', 999999, 999, 999999, 102400, 999, true, true, true, true, true, true, NULL);
 
 -- =============================================
--- 8. SUPER OWNER (tu usuario admin)
--- =============================================
-
--- Crear institución del sistema
-INSERT INTO instituciones (id, nombre, codigo, plan, estado, email_contacto)
-VALUES (
-  '00000000-0000-0000-0000-000000000001',
-  'Admitio Admin',
-  'admitio-system',
-  'enterprise',
-  'activo',
-  'owner@admitio.cl'
-);
-
--- Crear SuperOwner (TÚ)
--- Password: Admitio2024! (hasheada con bcrypt)
-INSERT INTO usuarios (id, institucion_id, email, password_hash, nombre, rol, activo, email_verificado)
-VALUES (
-  '00000000-0000-0000-0000-000000000002',
-  '00000000-0000-0000-0000-000000000001',
-  'owner@admitio.cl',
-  '$2a$10$xQEq0xT5YQfKxOJUJKEK0OqH8VZJzJqYpQE5E5XkKqXKqXKqXKqXK',
-  'Super Owner',
-  'superowner',
-  true,
-  true
-);
-
--- =============================================
--- 9. ÍNDICES PARA PERFORMANCE
+-- 8. ÍNDICES
 -- =============================================
 CREATE INDEX idx_leads_institucion ON leads(institucion_id);
-CREATE INDEX idx_leads_estado ON leads(estado);
-CREATE INDEX idx_leads_asignado ON leads(asignado_a);
 CREATE INDEX idx_usuarios_institucion ON usuarios(institucion_id);
-CREATE INDEX idx_usuarios_email ON usuarios(email);
 CREATE INDEX idx_acciones_lead ON acciones_lead(lead_id);
 
 -- =============================================
--- 10. TRIGGERS PARA CONTADORES
+-- 9. TRIGGERS
 -- =============================================
-
--- Trigger: Actualizar contador de leads
-CREATE OR REPLACE FUNCTION update_leads_count()
+CREATE OR REPLACE FUNCTION update_counter()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF TG_OP = 'INSERT' THEN
-    UPDATE instituciones SET leads_count = leads_count + 1, updated_at = NOW()
-    WHERE id = NEW.institucion_id;
-  ELSIF TG_OP = 'DELETE' THEN
-    UPDATE instituciones SET leads_count = leads_count - 1, updated_at = NOW()
-    WHERE id = OLD.institucion_id;
+  IF TG_TABLE_NAME = 'leads' THEN
+    IF TG_OP = 'INSERT' THEN UPDATE instituciones SET leads_count = leads_count + 1 WHERE id = NEW.institucion_id;
+    ELSIF TG_OP = 'DELETE' THEN UPDATE instituciones SET leads_count = leads_count - 1 WHERE id = OLD.institucion_id;
+    END IF;
+  ELSIF TG_TABLE_NAME = 'usuarios' THEN
+    IF TG_OP = 'INSERT' THEN UPDATE instituciones SET usuarios_count = usuarios_count + 1 WHERE id = NEW.institucion_id;
+    ELSIF TG_OP = 'DELETE' THEN UPDATE instituciones SET usuarios_count = usuarios_count - 1 WHERE id = OLD.institucion_id;
+    END IF;
   END IF;
   RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trigger_leads_count
-AFTER INSERT OR DELETE ON leads
-FOR EACH ROW EXECUTE FUNCTION update_leads_count();
-
--- Trigger: Actualizar contador de usuarios
-CREATE OR REPLACE FUNCTION update_usuarios_count()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF TG_OP = 'INSERT' THEN
-    UPDATE instituciones SET usuarios_count = usuarios_count + 1, updated_at = NOW()
-    WHERE id = NEW.institucion_id;
-  ELSIF TG_OP = 'DELETE' THEN
-    UPDATE instituciones SET usuarios_count = usuarios_count - 1, updated_at = NOW()
-    WHERE id = OLD.institucion_id;
-  END IF;
-  RETURN NULL;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trigger_usuarios_count
-AFTER INSERT OR DELETE ON usuarios
-FOR EACH ROW EXECUTE FUNCTION update_usuarios_count();
+CREATE TRIGGER tr_leads_count AFTER INSERT OR DELETE ON leads FOR EACH ROW EXECUTE FUNCTION update_counter();
+CREATE TRIGGER tr_usuarios_count AFTER INSERT OR DELETE ON usuarios FOR EACH ROW EXECUTE FUNCTION update_counter();
 
 -- =============================================
--- 11. ROW LEVEL SECURITY (RLS)
+-- 10. RLS
 -- =============================================
-
--- Habilitar RLS
 ALTER TABLE instituciones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usuarios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
@@ -283,60 +235,32 @@ ALTER TABLE acciones_lead ENABLE ROW LEVEL SECURITY;
 ALTER TABLE carreras ENABLE ROW LEVEL SECURITY;
 ALTER TABLE formularios ENABLE ROW LEVEL SECURITY;
 
--- Políticas básicas (se refinan después)
--- Por ahora permitimos todo para desarrollo
-CREATE POLICY "Allow all for dev" ON instituciones FOR ALL USING (true);
-CREATE POLICY "Allow all for dev" ON usuarios FOR ALL USING (true);
-CREATE POLICY "Allow all for dev" ON leads FOR ALL USING (true);
-CREATE POLICY "Allow all for dev" ON acciones_lead FOR ALL USING (true);
-CREATE POLICY "Allow all for dev" ON carreras FOR ALL USING (true);
-CREATE POLICY "Allow all for dev" ON formularios FOR ALL USING (true);
-CREATE POLICY "Allow all for dev" ON planes_config FOR ALL USING (true);
+CREATE POLICY "dev_all_inst" ON instituciones FOR ALL USING (true);
+CREATE POLICY "dev_all_u" ON usuarios FOR ALL USING (true);
+CREATE POLICY "dev_all_l" ON leads FOR ALL USING (true);
+CREATE POLICY "dev_all_a" ON acciones_lead FOR ALL USING (true);
+CREATE POLICY "dev_all_c" ON carreras FOR ALL USING (true);
+CREATE POLICY "dev_all_f" ON formularios FOR ALL USING (true);
+CREATE POLICY "dev_all_p" ON planes_config FOR ALL USING (true);
 
 -- =============================================
--- 12. DATOS DE PRUEBA (Institución Demo)
+-- 11. USUARIO ADMIN (ARNALDO)
 -- =============================================
-
--- Institución demo: ProJazz
 INSERT INTO instituciones (id, nombre, codigo, plan, estado, email_contacto)
-VALUES (
-  '00000000-0000-0000-0000-000000000010',
-  'ProJazz Escuela de Música',
-  'projazz',
-  'prueba',
-  'activo',
-  'admin@projazz.cl'
-);
+VALUES ('00000000-0000-0000-0000-000000000001', 'Admitio Admin', 'admitio-system', 'enterprise', 'activo', 'arnaldoallendeb@gmail.com');
 
--- KeyMaster de ProJazz
-INSERT INTO usuarios (institucion_id, email, password_hash, nombre, rol, activo, email_verificado)
-VALUES (
-  '00000000-0000-0000-0000-000000000010',
-  'admin@projazz.cl',
-  '$2a$10$xQEq0xT5YQfKxOJUJKEK0OqH8VZJzJqYpQE5E5XkKqXKqXKqXKqXK',
-  'Administrador ProJazz',
-  'keymaster',
-  true,
-  true
-);
-
--- Carreras de ProJazz
-INSERT INTO carreras (institucion_id, nombre, color, activa) VALUES
-('00000000-0000-0000-0000-000000000010', 'Canto Popular', 'bg-pink-500', true),
-('00000000-0000-0000-0000-000000000010', 'Guitarra Eléctrica', 'bg-orange-500', true),
-('00000000-0000-0000-0000-000000000010', 'Batería', 'bg-red-500', true),
-('00000000-0000-0000-0000-000000000010', 'Bajo Eléctrico', 'bg-purple-500', true),
-('00000000-0000-0000-0000-000000000010', 'Piano/Teclado', 'bg-blue-500', true),
-('00000000-0000-0000-0000-000000000010', 'Producción Musical', 'bg-green-500', true);
-
--- Algunos leads de prueba
-INSERT INTO leads (institucion_id, nombre, email, telefono, carrera_nombre, medio, estado) VALUES
-('00000000-0000-0000-0000-000000000010', 'María González', 'maria@gmail.com', '+56912345678', 'Canto Popular', 'instagram', 'nueva'),
-('00000000-0000-0000-0000-000000000010', 'Pedro Soto', 'pedro@email.cl', '+56987654321', 'Guitarra Eléctrica', 'web', 'contactado'),
-('00000000-0000-0000-0000-000000000010', 'Ana Muñoz', 'ana@test.com', '+56911112222', 'Batería', 'referido', 'seguimiento'),
-('00000000-0000-0000-0000-000000000010', 'Carlos Ruiz', 'carlos@demo.cl', '+56933334444', 'Producción Musical', 'facebook', 'nueva'),
-('00000000-0000-0000-0000-000000000010', 'Laura Díaz', 'laura@prueba.cl', '+56955556666', 'Piano/Teclado', 'instagram', 'examen');
+INSERT INTO usuarios (id, institucion_id, email, auth_id, nombre, rol, activo, email_verificado)
+VALUES ('00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001', 'arnaldoallendeb@gmail.com', NULL, 'Arnaldo Allende', 'keymaster', true, true);
 
 -- =============================================
--- ¡SCHEMA COMPLETO!
+-- 12. DEMO PROJAZZ
 -- =============================================
+INSERT INTO instituciones (id, nombre, codigo, plan, estado)
+VALUES ('00000000-0000-0000-0000-000000000010', 'ProJazz Escuela', 'projazz', 'prueba', 'activo');
+
+INSERT INTO usuarios (institucion_id, email, auth_id, nombre, rol, activo)
+VALUES ('00000000-0000-0000-0000-000000000010', 'admin@projazz.cl', '00000000-0000-0000-0000-000000000011', 'Admin ProJazz', 'keymaster', true);
+
+INSERT INTO carreras (institucion_id, nombre, color) VALUES
+('00000000-0000-0000-0000-000000000010', 'Canto Popular', 'bg-pink-500'),
+('00000000-0000-0000-0000-000000000010', 'Producción Musical', 'bg-green-500');

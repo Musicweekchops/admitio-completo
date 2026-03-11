@@ -5,6 +5,10 @@ const AuthContext = createContext(null)
 
 // Configuración de roles
 const ROLES = {
+  superowner: {
+    nombre: 'Super Owner',
+    permisos: { ver_todos: true, editar: true, reasignar: true, config: true, usuarios: true, reportes: true, formularios: true, crear_leads: true, eliminar_keymaster: true }
+  },
   superadmin: {
     nombre: 'Super Admin',
     permisos: { ver_todos: true, editar: true, reasignar: true, config: true, usuarios: true, reportes: true, formularios: true, crear_leads: true, eliminar_keymaster: true }
@@ -277,7 +281,7 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'Tu cuenta ha sido desactivada. Contacta al administrador.' }
       }
 
-      const rol = ROLES[usuario.rol] || ROLES.asistente
+      const rol = ROLES[usuario.rol] || ROLES.keymaster || ROLES.asistente
 
       const enrichedUser = {
         id: usuario.id,
@@ -435,6 +439,16 @@ export function AuthProvider({ children }) {
     const emailNormalizado = email.toLowerCase().trim()
     const nombreInst = nombreInstitucion.trim()
     const nombreUsuario = nombre.trim()
+    
+    // Generar código único (slug) a partir del nombre
+    const generarCodigo = (str) => {
+      return str.toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Quitar acentos
+        .replace(/[^a-z0-9]/g, '-') // Solo letras y números
+        .replace(/-+/g, '-') // Quitar guiones duplicados
+        .replace(/^-|-$/g, '') // Quitar guiones al inicio/final
+    }
+    const codigoInst = generarCodigo(nombreInst)
 
     try {
       // ========== VALIDACIONES PREVIAS ==========
@@ -471,7 +485,7 @@ export function AuthProvider({ children }) {
       const { data: instExistePorCodigo } = await supabase
         .from('instituciones')
         .select('id, nombre')
-        .eq('codigo', nombreInst)
+        .eq('codigo', codigoInst)
         .maybeSingle()
 
       if (instExistePorCodigo) {
@@ -528,7 +542,7 @@ export function AuthProvider({ children }) {
         .from('instituciones')
         .insert({ 
           nombre: nombreInst, 
-          codigo: nombreInst,
+          codigo: codigoInst,
           tipo: tipo,
           pais: pais,
           ciudad: ciudad.trim(),
