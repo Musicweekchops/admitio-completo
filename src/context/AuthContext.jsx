@@ -249,9 +249,7 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'Tu cuenta ha sido desactivada. Contacta al administrador.' }
       }
 
-      // Mapear superowner de la DB a superadmin del Context
-      const dbRol = usuario.rol === 'superowner' ? 'superadmin' : usuario.rol
-      const rol = ROLES[dbRol] || ROLES.asistente
+      const rol = ROLES[usuario.rol] || ROLES.asistente
 
       const enrichedUser = {
         id: usuario.id,
@@ -409,16 +407,6 @@ export function AuthProvider({ children }) {
     const emailNormalizado = email.toLowerCase().trim()
     const nombreInst = nombreInstitucion.trim()
     const nombreUsuario = nombre.trim()
-    
-    // Generar código único (slug) a partir del nombre
-    const generarCodigo = (str) => {
-      return str.toLowerCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Quitar acentos
-        .replace(/[^a-z0-9]/g, '-') // Solo letras y números
-        .replace(/-+/g, '-') // Quitar guiones duplicados
-        .replace(/^-|-$/g, '') // Quitar guiones al inicio/final
-    }
-    const codigoInst = generarCodigo(nombreInst)
 
     try {
       // ========== VALIDACIONES PREVIAS ==========
@@ -455,7 +443,7 @@ export function AuthProvider({ children }) {
       const { data: instExistePorCodigo } = await supabase
         .from('instituciones')
         .select('id, nombre')
-        .eq('codigo', codigoInst)
+        .eq('codigo', nombreInst)
         .maybeSingle()
 
       if (instExistePorCodigo) {
@@ -512,7 +500,7 @@ export function AuthProvider({ children }) {
         .from('instituciones')
         .insert({ 
           nombre: nombreInst, 
-          codigo: codigoInst,
+          codigo: nombreInst,
           tipo: tipo,
           pais: pais,
           ciudad: ciudad.trim(),
