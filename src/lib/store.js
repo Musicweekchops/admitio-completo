@@ -1640,7 +1640,7 @@ export function getMetricasGlobales() {
   const contactados = leads.filter(c => c.estado === 'contactado' && !c.matriculado && !c.descartado).length
   const seguimiento = leads.filter(c => c.estado === 'seguimiento' && !c.matriculado && !c.descartado).length
   const examen_admision = leads.filter(c => c.estado === 'examen_admision' && !c.matriculado && !c.descartado).length
-  const enProceso = contactados + seguimiento + examen_admision
+  const enProceso = contactados + seguimiento
   const matriculados = leads.filter(c => c.matriculado).length
   const descartados = leads.filter(c => c.descartado).length
   const enCola = (store.cola_leads || []).length

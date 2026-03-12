@@ -68,6 +68,7 @@ CREATE TABLE usuarios (
   activo BOOLEAN DEFAULT true,
   password_temporal BOOLEAN DEFAULT false,
   email_verificado BOOLEAN DEFAULT false,
+  password_hash TEXT, -- Para compatibilidad con migración
   
   -- Metadata
   ultimo_acceso TIMESTAMP WITH TIME ZONE,
@@ -117,9 +118,20 @@ CREATE TABLE leads (
   
   -- Asignación
   asignado_a UUID REFERENCES usuarios(id),
+  creado_por UUID REFERENCES usuarios(id),
   
   -- Notas
   notas TEXT,
+  
+  -- Tracking y Estados adicionales
+  matriculado BOOLEAN DEFAULT false,
+  descartado BOOLEAN DEFAULT false,
+  motivo_descarte TEXT,
+  tipo_alumno VARCHAR(50) DEFAULT 'nuevo',
+  nuevo_interes UUID REFERENCES carreras(id),
+  fecha_nuevo_interes TIMESTAMP WITH TIME ZONE,
+  emails_enviados INTEGER DEFAULT 0,
+  fecha_proximo_contacto TIMESTAMP WITH TIME ZONE,
   
   -- Tracking de tiempos
   fecha_primer_contacto TIMESTAMP WITH TIME ZONE,
@@ -264,3 +276,19 @@ VALUES ('00000000-0000-0000-0000-000000000010', 'admin@projazz.cl', '00000000-00
 INSERT INTO carreras (institucion_id, nombre, color) VALUES
 ('00000000-0000-0000-0000-000000000010', 'Canto Popular', 'bg-pink-500'),
 ('00000000-0000-0000-0000-000000000010', 'Producción Musical', 'bg-green-500');
+
+-- =============================================
+-- 13. BLOQUEOS DE LEADS (Prevención de edición simultánea)
+-- =============================================
+CREATE TABLE lead_locks (
+  lead_id UUID PRIMARY KEY REFERENCES leads(id) ON DELETE CASCADE,
+  usuario_id UUID REFERENCES usuarios(id) ON DELETE CASCADE,
+  usuario_nombre VARCHAR(255),
+  institucion_id UUID REFERENCES instituciones(id) ON DELETE CASCADE,
+  
+  locked_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  expires_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+ALTER TABLE lead_locks ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "dev_all_locks" ON lead_locks FOR ALL USING (true);

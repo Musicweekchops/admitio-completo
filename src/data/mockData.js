@@ -111,37 +111,55 @@ export const ESTADOS = {
   nueva: { 
     id: 'nueva',
     nombre: 'Nueva', 
+    label: 'Nueva',
     color: 'bg-blue-100 text-blue-700',
+    bg: 'bg-blue-100',
+    text: 'text-blue-700',
     orden: 1 
   },
   contactado: { 
     id: 'contactado',
     nombre: 'Contactado', 
+    label: 'Contactado',
     color: 'bg-yellow-100 text-yellow-700',
+    bg: 'bg-yellow-100',
+    text: 'text-yellow-700',
     orden: 2 
   },
-  interesado: { 
-    id: 'interesado',
-    nombre: 'Interesado', 
+  seguimiento: { 
+    id: 'seguimiento',
+    nombre: 'Seguimiento', 
+    label: 'Seguimiento',
     color: 'bg-purple-100 text-purple-700',
+    bg: 'bg-purple-100',
+    text: 'text-purple-700',
     orden: 3 
   },
-  postulante: { 
-    id: 'postulante',
-    nombre: 'Postulante', 
+  examen_admision: { 
+    id: 'examen_admision',
+    nombre: 'Examen Adm.', 
+    label: 'Examen Adm.',
     color: 'bg-indigo-100 text-indigo-700',
+    bg: 'bg-indigo-100',
+    text: 'text-indigo-700',
     orden: 4 
   },
   matriculado: { 
     id: 'matriculado',
     nombre: 'Matriculado', 
+    label: 'Matriculado',
     color: 'bg-green-100 text-green-700',
+    bg: 'bg-green-100',
+    text: 'text-green-700',
     orden: 5 
   },
   descartado: { 
     id: 'descartado',
     nombre: 'Descartado', 
+    label: 'Descartado',
     color: 'bg-gray-100 text-gray-700',
+    bg: 'bg-gray-100',
+    text: 'text-gray-700',
     orden: 6 
   }
 }

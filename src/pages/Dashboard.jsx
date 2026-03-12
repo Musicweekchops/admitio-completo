@@ -1187,8 +1187,8 @@ export default function Dashboard() {
     const totalLeads = safeStats.total || 0
     const pendientes = esAdmin ? (safeStats.nuevas || 0) : (safeStats.sinContactar || 0)
     const enProceso = esAdmin 
-      ? (safeStats.contactados || 0) + (safeStats.seguimiento || 0) + (safeStats.examen_admision || 0)
-      : (safeStats.activos || 0)
+      ? (safeStats.contactados || 0) + (safeStats.seguimiento || 0)
+      : (safeStats.activos || 0) - (safeStats.sinContactar || 0) - (safeStats.examen_admision || 0)
     const examenAdm = safeStats.examen_admision || 0
     const matriculados = safeStats.matriculados || 0
     const tasaConv = safeStats.tasaConversion || safeStats.tasa_conversion || 0
