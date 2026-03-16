@@ -939,6 +939,17 @@ export function AuthProvider({ children }) {
 
       if (error) {
         console.error('Error en Edge Function:', error)
+        
+        // Intentar obtener el mensaje de error real de la respuesta
+        if (error.context && typeof error.context.json === 'function') {
+          try {
+            const errorBody = await error.context.json()
+            return { success: false, error: errorBody.error || error.message }
+          } catch (e) {
+            console.error('Error parsing error body:', e)
+          }
+        }
+        
         return { success: false, error: error.message || 'Error al crear usuario' }
       }
 

@@ -48,7 +48,10 @@ serve(async (req) => {
     }: InviteRequest = await req.json()
 
     // Validaciones
+    console.log(`📩 Procesando invitación para: ${email} (Institución: ${institucion_id})`)
+    
     if (!email || !nombre || !password || !rol || !institucion_id) {
+      console.error('❌ Faltan campos requeridos:', { email: !!email, nombre: !!nombre, password: !!password, rol: !!rol, institucion_id: !!institucion_id })
       throw new Error('Faltan campos requeridos')
     }
 
@@ -57,9 +60,17 @@ serve(async (req) => {
     }
 
     // Crear cliente Supabase con service_role (permite crear usuarios)
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('❌ Error: Variables de entorno de Supabase no configuradas')
+      throw new Error('Error de configuración del servidor')
+    }
+
     const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      supabaseUrl,
+      supabaseServiceKey,
       {
         auth: {
           autoRefreshToken: false,
@@ -77,6 +88,7 @@ serve(async (req) => {
       .maybeSingle()
 
     if (existingUser) {
+      console.warn(`⚠️ El usuario ${email} ya existe en la tabla usuarios de la institución ${institucion_id}`)
       throw new Error('Este correo ya está registrado en tu institución')
     }
 
@@ -94,11 +106,11 @@ serve(async (req) => {
     })
 
     if (authError) {
-      console.error('Error creando auth user:', authError)
+      console.error('❌ Error creando auth user:', authError)
       if (authError.message.includes('already been registered')) {
-        throw new Error('Este correo ya está registrado')
+        throw new Error('Este correo ya está registrado en el sistema de autenticación')
       }
-      throw new Error(authError.message)
+      throw new Error(`Error de autenticación: ${authError.message}`)
     }
 
     if (!authData.user) {
@@ -179,12 +191,13 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Error en invite-user:', error)
+    console.error('💥 Error crítico en invite-user:', error)
     
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message || 'Error al crear usuario'
+        error: error.message || 'Error al crear usuario',
+        details: error.stack || null
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
