@@ -118,7 +118,7 @@ serve(async (req) => {
     }
 
     // ========== CREAR USUARIO EN TABLA ==========
-    const { error: userError } = await supabaseAdmin
+    const { data: userData, error: userError } = await supabaseAdmin
       .from('usuarios')
       .insert({
         institucion_id: institucion_id,
@@ -129,13 +129,18 @@ serve(async (req) => {
         activo: true,
         email_verificado: true // Ya verificado porque admin lo creó
       })
+      .select()
+      .single()
 
     if (userError) {
-      console.error('Error creando usuario en tabla:', userError)
+      console.error('❌ Error creando usuario en tabla:', userError)
       // Rollback: eliminar de Auth
+      console.log('🔄 Iniciando rollback en Auth...')
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
-      throw new Error('Error al crear el usuario')
+      throw new Error(`Error al crear el registro del usuario: ${userError.message}`)
     }
+
+    console.log('✅ Usuario creado en la tabla usuarios con ID:', userData.id)
 
     // ========== ENVIAR EMAIL CON RESEND ==========
     const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
@@ -179,7 +184,8 @@ serve(async (req) => {
         success: true,
         message: 'Usuario creado correctamente',
         user: {
-          id: authData.user.id,
+          id: userData.id,
+          auth_id: authData.user.id,
           email: email.toLowerCase().trim(),
           nombre: nombre
         }
