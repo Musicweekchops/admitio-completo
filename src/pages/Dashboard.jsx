@@ -585,7 +585,7 @@ const PieChart = ({ data, size = 200 }) => {
 }
 
 export default function Dashboard() {
-  const { user, institucion, signOut, isKeyMaster, isRector, isEncargado, isAsistente, canViewAll, canEdit, canConfig, canCreateLeads, canReasignar, reloadFromSupabase, planInfo, actualizarUso, puedeCrearLead, puedeCrearUsuario, puedeCrearFormulario, inviteUser, resendVerification } = useAuth()
+  const { user, institucion, signOut, isKeyMaster, isRector, isEncargado, isAsistente, canViewAll, canEdit, canConfig, canCreateLeads, canReasignar, reloadFromSupabase, planInfo, actualizarUso, puedeCrearLead, puedeCrearUsuario, puedeCrearFormulario, inviteUser, notifyAssignment, resendVerification } = useAuth()
   
   // Nombre dinámico de la institución
   const nombreInstitucion = institucion?.nombre || user?.institucion_nombre || store.getConfig()?.nombre || 'Mi Institución'
@@ -615,6 +615,7 @@ export default function Dashboard() {
   const [notification, setNotification] = useState(null)
   const [limiteAlerta, setLimiteAlerta] = useState(null) // { tipo: 'leads'|'usuarios'|'formularios', mensaje: '...' }
   const [importacionesPendientes, setImportacionesPendientes] = useState(0) // Para badge del menú
+  const [selectedLeads, setSelectedLeads] = useState([]) // Para asignación masiva
   
   // Estados para sidebar responsive
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -1579,9 +1580,25 @@ export default function Dashboard() {
                 {leadsColumna.map(consulta => (
                   <div key={consulta.id}
                        onClick={() => selectConsulta(consulta.id)}
-                       className={`bg-white rounded-lg p-4 shadow-sm cursor-pointer hover:shadow-md transition-all ${consulta.matriculado ? 'ring-2 ring-emerald-200' : ''}`}>
+                       className={`bg-white rounded-lg p-4 shadow-sm cursor-pointer hover:shadow-md transition-all relative ${consulta.matriculado ? 'ring-2 ring-emerald-200' : ''} ${selectedLeads.includes(consulta.id) ? 'ring-2 ring-violet-500' : ''}`}>
+                    {isKeyMaster && (
+                      <div className="absolute top-2 right-2" onClick={(e) => e.stopPropagation()}>
+                        <input 
+                          type="checkbox" 
+                          checked={selectedLeads.includes(consulta.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedLeads([...selectedLeads, consulta.id])
+                            } else {
+                              setSelectedLeads(selectedLeads.filter(id => id !== consulta.id))
+                            }
+                          }}
+                          className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                        />
+                      </div>
+                    )}
                     <div className="flex items-start justify-between mb-2">
-                      <p className="font-medium text-slate-800 text-sm">{consulta.nombre}</p>
+                      <p className="font-medium text-slate-800 text-sm pr-6">{consulta.nombre}</p>
                       {consulta.matriculado ? (
                         <span className="text-emerald-500">
                           <Icon name="CheckCircle" size={16} />
@@ -1631,6 +1648,22 @@ export default function Dashboard() {
       <table className="w-full min-w-[900px]">
         <thead>
           <tr className="bg-slate-50 border-b border-slate-100">
+            {isKeyMaster && (
+              <th className="p-4 w-10">
+                <input 
+                  type="checkbox" 
+                  checked={selectedLeads.length === filteredConsultas.length && filteredConsultas.length > 0}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedLeads(filteredConsultas.map(c => c.id))
+                    } else {
+                      setSelectedLeads([])
+                    }
+                  }}
+                  className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                />
+              </th>
+            )}
             <th className="text-left p-4 text-sm font-medium text-slate-600">Nombre</th>
             <th className="text-left p-4 text-sm font-medium text-slate-600">Contacto</th>
             <th className="text-left p-4 text-sm font-medium text-slate-600">Carrera</th>
@@ -1645,8 +1678,24 @@ export default function Dashboard() {
             <tr 
               key={c.id} 
               onClick={() => selectConsulta(c.id)}
-              className="border-b border-slate-50 hover:bg-violet-50 cursor-pointer transition-colors"
+              className={`border-b border-slate-50 hover:bg-violet-50 cursor-pointer transition-colors ${selectedLeads.includes(c.id) ? 'bg-violet-50' : ''}`}
             >
+              {isKeyMaster && (
+                <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                  <input 
+                    type="checkbox" 
+                    checked={selectedLeads.includes(c.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedLeads([...selectedLeads, c.id])
+                      } else {
+                        setSelectedLeads(selectedLeads.filter(id => id !== c.id))
+                      }
+                    }}
+                    className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                  />
+                </td>
+              )}
               <td className="p-4">
                 <div className="flex items-center gap-2">
                   {c.matriculado && <Icon name="CheckCircle" size={14} className="text-emerald-500" />}
@@ -1819,16 +1868,68 @@ export default function Dashboard() {
   }, [selectedConsulta?.id, user?.id])
   
   // Handler para reasignar
-  const handleReasignar = useCallback((id, nuevoEncargado) => {
+  const handleReasignar = useCallback(async (id, nuevoEncargado) => {
     const encargado = store.getUsuarios().find(u => u.id === nuevoEncargado)
     store.updateConsulta(id, { asignado_a: nuevoEncargado }, user.id)
     if (selectedConsulta?.id === id) {
       setSelectedConsulta(store.getConsultaById(id))
     }
+    
+    // Notificación individual
+    if (nuevoEncargado && encargado?.email) {
+      const lead = store.getConsultaById(id)
+      try {
+        await notifyAssignment({
+          encargadoId: nuevoEncargado,
+          encargadoEmail: encargado.email,
+          encargadoNombre: encargado.nombre,
+          lead: { id: lead.id, nombre: lead.nombre, carrera: lead.carrera?.nombre || 'Sin carrera' },
+          isBulk: false,
+          institucionNombre: nombreInstitucion
+        })
+      } catch (e) {
+        console.error('Error notificando asignación:', e)
+      }
+    }
+
     loadData()
     setNotification({ type: 'success', message: `Lead asignado a ${encargado?.nombre || 'Sin asignar'}` })
     setTimeout(() => setNotification(null), 3000)
-  }, [selectedConsulta?.id, user?.id])
+  }, [selectedConsulta?.id, user?.id, nombreInstitucion])
+
+  // Handler para asignación masiva
+  const handleBulkAssign = async (encargadoId) => {
+    if (!encargadoId || selectedLeads.length === 0) return
+    
+    const encargado = store.getUsuarios().find(u => u.id === encargadoId)
+    const leadsCount = selectedLeads.length
+    
+    // Actualizar cada lead en el store
+    selectedLeads.forEach(id => {
+      store.updateConsulta(id, { asignado_a: encargadoId }, user.id)
+    })
+    
+    // Notificación masiva
+    if (encargado?.email) {
+      try {
+        await notifyAssignment({
+          encargadoId,
+          encargadoEmail: encargado.email,
+          encargadoNombre: encargado.nombre,
+          leadsCount: leadsCount,
+          isBulk: true,
+          institucionNombre: nombreInstitucion
+        })
+      } catch (e) {
+        console.error('Error notificando asignación masiva:', e)
+      }
+    }
+    
+    setSelectedLeads([])
+    loadData()
+    setNotification({ type: 'success', message: `¡${leadsCount} leads asignados a ${encargado?.nombre}!` })
+    setTimeout(() => setNotification(null), 3000)
+  }
   
   // Handler para cambiar tipo alumno
   const handleTipoAlumnoChange = useCallback((id, tipo) => {
@@ -7264,6 +7365,40 @@ const handleImportCSV = async () => {
         {activeTab === 'importar' && <ImportarView />}
         {activeTab === 'configuracion' && <ConfiguracionView />}
       </div>
+
+      {/* Barra de Acciones Masivas */}
+      {selectedLeads.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-6 z-[60] bulk-actions-animate">
+          <div className="flex items-center gap-2 border-r border-slate-700 pr-6">
+            <span className="w-6 h-6 bg-violet-500 rounded-full flex items-center justify-center text-xs font-bold">
+              {selectedLeads.length}
+            </span>
+            <span className="font-medium">leads seleccionados</span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-slate-400">Asignar a:</span>
+            <select 
+              className="bg-slate-800 border-none rounded-lg text-sm px-3 py-2 focus:ring-2 focus:ring-violet-500 outline-none"
+              onChange={(e) => handleBulkAssign(e.target.value)}
+              defaultValue=""
+            >
+              <option value="" disabled>Seleccionar encargado...</option>
+              {store.getUsuarios().filter(u => u.rol_id === 'encargado' || u.rol_id === 'keymaster').map(u => (
+                <option key={u.id} value={u.id}>{u.nombre}</option>
+              ))}
+            </select>
+          </div>
+
+          <button 
+            onClick={() => setSelectedLeads([])}
+            className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+            title="Cancelar selección"
+          >
+            <Icon name="X" size={20} />
+          </button>
+        </div>
+      )}
       
       {/* Modal nueva consulta */}
       <ModalNuevaConsulta 

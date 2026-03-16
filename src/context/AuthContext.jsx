@@ -973,6 +973,26 @@ export function AuthProvider({ children }) {
     }
   }
 
+  async function notifyAssignment(params) {
+    if (!isSupabaseConfigured()) return { success: false }
+    
+    try {
+      console.log('📧 Enviando notificación de asignación...')
+      const { data, error } = await supabase.functions.invoke('notify-assignment', {
+        body: params
+      })
+      if (error) {
+        console.error('Error en notify-assignment:', error)
+        return { success: false, error: error.message }
+      }
+      return { success: true, data }
+    } catch (error) {
+      console.error('Error in notifyAssignment:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+
   // Roles y permisos
   const isSuperAdmin = user?.rol_id === 'superadmin'
   const isKeyMaster = user?.rol_id === 'keymaster' || isSuperAdmin
@@ -1030,6 +1050,7 @@ export function AuthProvider({ children }) {
       porcentajeUsoUsuarios,
       porcentajeUsoFormularios,
       inviteUser,
+      notifyAssignment,
     }}>
       {children}
     </AuthContext.Provider>
