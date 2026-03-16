@@ -92,11 +92,13 @@ serve(async (req) => {
       throw new Error('Este correo ya está registrado en tu institución')
     }
 
-    // ========== CREAR USUARIO EN AUTH ==========
+    // ========== CREAR O VINCULAR USUARIO EN AUTH ==========
+    let authUserId: string | undefined
+
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: email.toLowerCase().trim(),
       password: password,
-      email_confirm: true, // Marcar email como confirmado (no envía email de Supabase)
+      email_confirm: true,
       user_metadata: {
         nombre: nombre,
         rol: rol,
@@ -106,15 +108,35 @@ serve(async (req) => {
     })
 
     if (authError) {
-      console.error('❌ Error creando auth user:', authError)
       if (authError.message.includes('already been registered')) {
-        throw new Error('Este correo ya está registrado en el sistema de autenticación')
+        console.log(`ℹ️ El usuario ${email} ya existe en Auth. Buscando su ID...`)
+        
+        // El usuario ya existe en Auth, necesitamos su ID para la tabla
+        const { data: listData, error: listError } = await supabaseAdmin.auth.admin.listUsers()
+        if (listError) {
+          console.error('❌ Error listando usuarios de Auth:', listError)
+          throw new Error(`Este correo ya está registrado en Auth y no pudimos recuperar su ID: ${listError.message}`)
+        }
+
+        const existingAuthUser = listData.users.find(u => u.email?.toLowerCase() === email.toLowerCase().trim())
+        if (!existingAuthUser) {
+          console.error(`❌ El usuario ${email} debería existir en Auth pero no fue encontrado en la lista`)
+          throw new Error('Este correo ya está registrado en Auth pero hubo un error de sincronización. Contacta a soporte.')
+        }
+
+        authUserId = existingAuthUser.id
+        console.log(`✅ ID de Auth recuperado: ${authUserId}`)
+      } else {
+        console.error('❌ Error creando auth user:', authError)
+        throw new Error(`Error de autenticación: ${authError.message}`)
       }
-      throw new Error(`Error de autenticación: ${authError.message}`)
+    } else {
+      authUserId = authData.user.id
+      console.log(`✅ Usuario creado en Auth con ID: ${authUserId}`)
     }
 
-    if (!authData.user) {
-      throw new Error('Error al crear usuario en Auth')
+    if (!authUserId) {
+      throw new Error('No se pudo obtener el ID del usuario de autenticación')
     }
 
     // ========== CREAR USUARIO EN TABLA ==========
@@ -122,21 +144,25 @@ serve(async (req) => {
       .from('usuarios')
       .insert({
         institucion_id: institucion_id,
-        auth_id: authData.user.id,
+        auth_id: authUserId,
         email: email.toLowerCase().trim(),
         nombre: nombre,
         rol: rol,
         activo: true,
-        email_verificado: true // Ya verificado porque admin lo creó
+        email_verificado: true
       })
       .select()
       .single()
 
     if (userError) {
       console.error('❌ Error creando usuario en tabla:', userError)
-      // Rollback: eliminar de Auth
-      console.log('🔄 Iniciando rollback en Auth...')
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
+      
+      // Solo hacer rollback si acabamos de crear al usuario en Auth
+      if (!authError) { 
+        console.log('🔄 Iniciando rollback en Auth...')
+        await supabaseAdmin.auth.admin.deleteUser(authUserId)
+      }
+      
       throw new Error(`Error al crear el registro del usuario: ${userError.message}`)
     }
 
@@ -185,7 +211,7 @@ serve(async (req) => {
         message: 'Usuario creado correctamente',
         user: {
           id: userData.id,
-          auth_id: authData.user.id,
+          auth_id: authUserId,
           email: email.toLowerCase().trim(),
           nombre: nombre
         }
