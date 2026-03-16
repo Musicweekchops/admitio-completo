@@ -496,17 +496,15 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
               ))}
             </div>
           </div>
-          {isKeyMaster && (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Asignar a</label>
-              <select value={formData.asignado_a}
-                      onChange={e => setFormData({...formData, asignado_a: e.target.value})}
+              <select value={formData.asignado_a || ''}
+                      onChange={e => setFormData({...formData, asignado_a: e.target.value || null})}
                       className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
-                <option value="">Asignación automática</option>
+                <option value="">Sin asignar (Auto)</option>
                 {encargados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
               </select>
             </div>
-          )}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Notas</label>
             <textarea value={formData.notas}
@@ -2424,9 +2422,10 @@ export default function Dashboard() {
               <div className={`bg-white rounded-xl p-6 shadow-sm border ${isMyLock ? 'border-slate-100' : 'border-slate-200 opacity-60'}`}>
                 <h3 className="font-semibold text-slate-800 mb-4">Reasignar</h3>
                 <select value={c.asignado_a || ''}
-                        onChange={(e) => isMyLock && handleReasignar(c.id, e.target.value)}
+                        onChange={(e) => isMyLock && handleReasignar(c.id, e.target.value || null)}
                         disabled={!isMyLock}
                         className={`w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 ${!isMyLock ? 'opacity-50 cursor-not-allowed bg-slate-100' : ''}`}>
+                  <option value="">Sin asignar</option>
                   {encargados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
                 </select>
                 {!isMyLock && isLocked && (

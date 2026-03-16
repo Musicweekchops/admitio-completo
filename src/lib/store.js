@@ -873,7 +873,7 @@ export function updateConsulta(id, updates, userId) {
   }
   
   // Detectar reasignación
-  if (updates.asignado_a && oldConsulta.asignado_a !== newConsulta.asignado_a) {
+  if (updates.asignado_a !== undefined && oldConsulta.asignado_a !== newConsulta.asignado_a) {
     const oldEnc = store.usuarios.find(u => u.id === oldConsulta.asignado_a)
     const newEnc = store.usuarios.find(u => u.id === newConsulta.asignado_a)
     addActividad(id, userId, 'reasignacion', `Reasignado de ${oldEnc?.nombre || 'Sin asignar'} a ${newEnc?.nombre || 'Sin asignar'}`)
