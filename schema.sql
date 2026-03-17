@@ -44,6 +44,10 @@ CREATE TABLE instituciones (
   storage_usado_mb DECIMAL(10,2) DEFAULT 0,
   emails_enviados_mes INTEGER DEFAULT 0,
   
+  -- SaaS & API
+  api_key UUID UNIQUE DEFAULT gen_random_uuid(),
+  api_key_last_used TIMESTAMP WITH TIME ZONE,
+  
   -- Metadata
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
