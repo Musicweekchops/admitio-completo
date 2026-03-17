@@ -117,21 +117,43 @@ serve(async (req) => {
     
     // Buscar por email o teléfono
     if (email || telefono) {
+      console.log(`🔍 Buscando duplicados para ${email || 'S/E'} o ${telefono || 'S/T'}...`)
+      
       let query = supabase
         .from('leads')
         .select('id, nombre, carreras_interes, carrera_nombre, estado')
         .eq('institucion_id', inst.id)
 
-      if (email && telefono) {
-        query = query.or(`email.eq.${email},telefono.eq.${telefono}`)
-      } else if (email) {
-        query = query.eq('email', email)
-      } else {
-        query = query.eq('telefono', telefono)
+      // Búsqueda flexible de teléfono (con y sin +)
+      let telConPlus = ''
+      let telSinPlus = ''
+      
+      if (telefono) {
+        telConPlus = telefono.startsWith('+') ? telefono : `+${telefono}`
+        telSinPlus = telefono.replace('+', '')
       }
 
-      const { data: duplicateData } = await query.maybeSingle()
-      existingLead = duplicateData
+      if (email && telefono) {
+        query = query.or(`email.eq.${email},telefono.eq.${telefono},telefono.eq.${telConPlus},telefono.eq.${telSinPlus}`)
+      } else if (email) {
+        query = query.eq('email', email)
+      } else if (telefono) {
+        query = query.or(`telefono.eq.${telefono},telefono.eq.${telConPlus},telefono.eq.${telSinPlus}`)
+      }
+
+      // Traer el más reciente si hay varios para evitar el error de maybeSingle
+      const { data: duplicateData, error: searchError } = await query
+        .order('updated_at', { ascending: false })
+        .limit(1)
+
+      if (searchError) {
+        console.error('⚠️ Error en búsqueda de duplicados:', searchError)
+      } else if (duplicateData && duplicateData.length > 0) {
+        existingLead = duplicateData[0]
+        console.log(`✅ Duplicado encontrado: ${existingLead.nombre} (${existingLead.id})`)
+      } else {
+        console.log('✨ No se encontraron duplicados.')
+      }
     }
 
     // 5. Resolver carrera_id con lógica inteligente
@@ -168,14 +190,12 @@ serve(async (req) => {
       
       console.log(`♻️ Duplicado detectado, actualizando lead: ${leadId}`)
 
-      // Si la carrera es nueva, podríamos agregarla a un historial o notas
+      // Para que el webhook sea visible:
+      // 1. Movemos el lead a 'nueva' de nuevo
+      // 2. Actualizamos updated_at para que suba en el Dashboard
       const updateData: any = {
+        estado: 'nueva',
         updated_at: new Date().toISOString()
-      }
-
-      // Si el lead estaba descartado, lo volvemos a poner en seguimiento
-      if (existingLead.estado === 'descartado') {
-        updateData.estado = 'seguimiento'
       }
 
       await supabase.from('leads').update(updateData).eq('id', leadId)
