@@ -246,9 +246,11 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: isUpdate ? 'Lead actualizado (ya existía)' : 'Lead cargado correctamente',
+        message: isUpdate ? `♻️ Lead actualizado: ${nombre}` : `✅ Lead creado: ${nombre}`,
         lead_id: leadId,
+        lead_nombre: nombre,
         is_update: isUpdate,
+        leads_total: inst.leads_count + (isUpdate ? 0 : 1),
         quota_remaining: planConfig.max_leads - (inst.leads_count + (isUpdate ? 0 : 1))
       }),
       {
