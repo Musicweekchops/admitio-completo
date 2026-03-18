@@ -140,6 +140,7 @@ export async function cargarDatosInstitucion(institucionId) {
         { id: 'email', nombre: 'Email', icono: 'Mail', color: 'text-red-500' },
         { id: 'whatsapp', nombre: 'WhatsApp', icono: 'MessageCircle', color: 'text-green-600' },
         { id: 'presencial', nombre: 'Presencial', icono: 'MapPin', color: 'text-purple-500' },
+        { id: 'google sheets', nombre: 'Google Sheets', icono: 'Table', color: 'text-emerald-600' },
         { id: 'otro', nombre: 'Otro', icono: 'MoreHorizontal', color: 'text-slate-500' }
       ],
       plantillas: [],

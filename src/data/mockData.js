@@ -41,6 +41,7 @@ export const MEDIOS = [
   { id: 'facebook', nombre: 'Facebook', icono: 'Facebook', color: 'text-blue-600' },
   { id: 'email', nombre: 'Email', icono: 'Mail', color: 'text-amber-500' },
   { id: 'presencial', nombre: 'Presencial', icono: 'MapPin', color: 'text-emerald-500' },
+  { id: 'google sheets', nombre: 'Google Sheets', icono: 'Table', color: 'text-emerald-600' },
   { id: 'otro', nombre: 'Otro', icono: 'MoreHorizontal', color: 'text-gray-500' }
 ]
 
