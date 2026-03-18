@@ -995,8 +995,8 @@ export function AuthProvider({ children }) {
 
   // Roles y permisos
   const isSuperAdmin = user?.rol_id === 'superadmin'
-  const isKeyMaster = user?.rol_id === 'keymaster' || isSuperAdmin
-  const isEncargado = user?.rol_id === 'encargado'
+  const isKeyMaster = user?.rol_id === 'keymaster' || user?.rol_id === 'director' || isSuperAdmin
+  const isEncargado = user?.rol_id === 'encargado' || user?.rol_id === 'director'
   const isAsistente = user?.rol_id === 'asistente'
   const isRector = user?.rol_id === 'rector'
   

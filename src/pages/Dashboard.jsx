@@ -960,8 +960,8 @@ export default function Dashboard() {
   // SIDEBAR - Responsive y Colapsable
   // ============================================
   const Sidebar = () => {
-    // Fallback: verificar rol directamente si isKeyMaster no está definido
-    const esAdmin = isKeyMaster || user?.rol_id === 'keymaster' || user?.rol_id === 'superadmin' || user?.rol_id === 'superowner'
+    // Restringir pestañas de configuración estricta solo a Admins
+    const esAdmin = ['superowner', 'keymaster', 'superadmin'].includes(user?.rol_id)
     const esRector = isRector || user?.rol_id === 'rector'
     const esEncargado = isEncargado || user?.rol_id === 'encargado'
     
@@ -7384,7 +7384,7 @@ const handleImportCSV = async () => {
               defaultValue=""
             >
               <option value="" disabled>Seleccionar encargado...</option>
-              {store.getUsuarios().filter(u => u.rol_id === 'encargado' || u.rol_id === 'keymaster').map(u => (
+              {store.getUsuarios().filter(u => ['encargado', 'keymaster', 'director'].includes(u.rol_id)).map(u => (
                 <option key={u.id} value={u.id}>{u.nombre}</option>
               ))}
             </select>
