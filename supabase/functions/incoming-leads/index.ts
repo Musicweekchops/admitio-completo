@@ -61,6 +61,7 @@ serve(async (req) => {
         plan, 
         leads_count, 
         estado,
+        recepcion_leads_activa,
         planes_config!inner (
           id,
           max_leads,
@@ -77,6 +78,11 @@ serve(async (req) => {
 
     if (inst.estado !== 'activo') {
       throw new Error('La institución no está activa')
+    }
+
+    // KILL SWITCH: Verificar si la recepción de leads está apagada
+    if (inst.recepcion_leads_activa === false) {
+      throw new Error('La recepción de leads por API está desactivada en la configuración de Admitio')
     }
 
     // 3. Validar permisos del Plan (SaaS Logic)

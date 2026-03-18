@@ -47,6 +47,7 @@ CREATE TABLE instituciones (
   -- SaaS & API
   api_key UUID UNIQUE DEFAULT gen_random_uuid(),
   api_key_last_used TIMESTAMP WITH TIME ZONE,
+  recepcion_leads_activa BOOLEAN DEFAULT true,
   
   -- Metadata
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
