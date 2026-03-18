@@ -2363,8 +2363,15 @@ export default function Dashboard() {
                       {i < c.actividad.length - 1 && <div className="w-0.5 h-full bg-slate-100 mt-2" />}
                     </div>
                     <div className="flex-1 pb-4">
-                      <p className="text-slate-800">{a.descripcion}</p>
-                      <p className="text-xs text-slate-400 mt-1">{formatDate(a.created_at)}</p>
+                      <div className="flex items-center gap-2 mb-1">
+                        {a.user_nombre && (
+                          <span className="text-xs font-semibold text-violet-600 bg-violet-50 px-2 py-0.5 rounded-md">
+                            {a.user_nombre}
+                          </span>
+                        )}
+                        <span className="text-xs text-slate-400">{formatDate(a.created_at)}</span>
+                      </div>
+                      <p className="text-slate-800 text-sm">{a.descripcion}</p>
                     </div>
                   </div>
                 )) : (
