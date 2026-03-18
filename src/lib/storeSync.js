@@ -77,7 +77,7 @@ export async function cargarDatosInstitucion(institucionId) {
         carrera_id: lead.carrera_id,
         carrera_nombre: lead.carrera_nombre,
         carreras_interes: lead.carreras_interes || [],
-        medio_id: lead.medio,
+        medio_id: lead.medio ? lead.medio.toLowerCase() : null,
         estado: lead.estado,
         prioridad: lead.prioridad,
         asignado_a: lead.asignado_a,
