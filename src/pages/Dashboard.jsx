@@ -696,8 +696,12 @@ export default function Dashboard() {
     const channel = supabase
       .channel('db-changes')
       .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'leads', filter: `institucion_id=eq.${user.institucion_id}` },
+        { event: '*', schema: 'public', table: 'leads' },
         async (payload) => {
+          // Solo procesar cambios de nuestra institución
+          const payloadInstId = payload.new?.institucion_id || payload.old?.institucion_id
+          if (payloadInstId && payloadInstId !== user.institucion_id) return
+
           console.log('📡 Cambio en leads:', payload.eventType, payload.new?.nombre || payload.old?.id)
           if (!selectedConsultaRef.current) {
             // Sin ficha abierta: actualizar en silencio
