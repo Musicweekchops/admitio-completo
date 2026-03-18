@@ -4587,6 +4587,7 @@ export default function Dashboard() {
     const ROLES_DISPONIBLES = [
       ...(isSuperAdmin ? [{ id: 'superadmin', nombre: 'Super Administrador', desc: 'Acceso total del propietario (oculto)' }] : []),
       { id: 'keymaster', nombre: 'Key Master', desc: 'Control total del sistema' },
+      { id: 'director', nombre: 'Director de Admisión', desc: 'Puede ver y asignar a todo el colegio' },
       { id: 'encargado', nombre: 'Encargado de Admisión', desc: 'Gestiona leads asignados' },
       { id: 'asistente', nombre: 'Asistente/Secretaría', desc: 'Solo crea leads' },
       { id: 'rector', nombre: 'Rector', desc: 'Solo ve reportes' },
