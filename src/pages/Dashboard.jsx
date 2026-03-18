@@ -5199,46 +5199,6 @@ Gracias.`)
           </div>
         </div>
 
-        {/* Integraciones y API (Kill Switch) */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-              <Icon name="Upload" size={20} className="text-slate-400" />
-              Integraciones y API
-            </h3>
-          </div>
-          <p className="text-slate-500 mb-6 text-sm">
-            Controla las integraciones externas que envían leads automáticamente a tu cuenta.
-          </p>
-
-          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
-            <div>
-              <h4 className="font-medium text-slate-800">Recepción Inbound (Google Sheets / Webhook)</h4>
-              <p className="text-sm text-slate-500 mt-1">
-                Al apagar esto, el sistema rechazará instantáneamente cualquier nuevo lead externo.
-              </p>
-            </div>
-            
-            <button
-              onClick={async () => {
-                const newState = !(institucion?.recepcion_leads_activa ?? true);
-                const { error } = await supabase.from('instituciones').update({ recepcion_leads_activa: newState }).eq('id', institucion.id);
-                if (!error && reloadFromSupabase) reloadFromSupabase();
-              }}
-              className={`relative inline-flex h-8 w-14 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-violet-600 focus:ring-offset-2 ${
-                (institucion?.recepcion_leads_activa !== false) ? 'bg-emerald-500' : 'bg-slate-300'
-              }`}
-            >
-              <span className="sr-only">Toggle webhook reception</span>
-              <span
-                className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                  (institucion?.recepcion_leads_activa !== false) ? 'translate-x-6' : 'translate-x-0'
-                }`}
-              />
-            </button>
-          </div>
-        </div>
-
         {/* Mejorar Plan */}
         <div className="bg-gradient-to-br from-violet-50 to-purple-50 rounded-xl p-6 border border-violet-200">
           <div className="flex items-start gap-4">
