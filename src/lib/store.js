@@ -923,7 +923,7 @@ export function updateConsulta(id, updates, userId) {
     syncUpdates.carreras_interes = newConsulta.carreras_interes
   }
   
-  syncActualizarLead(id, syncUpdates)
+  syncActualizarLeadDirecto(id, syncUpdates)
   // ========================================
   
   return newConsulta
