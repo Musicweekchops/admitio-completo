@@ -457,7 +457,7 @@ export function syncEliminarLead(leadId) {
   });
 }
 
-export function syncCrearAccion(leadId, accion, usuarioId) {
+export async function syncCrearAccion(leadId, accion, usuarioId) {
   // Si el leadId es local, no podemos crear la acción en Supabase
   if (!leadId || leadId.startsWith('c-') || leadId.startsWith('a-')) {
     console.log('⚠️ Lead con ID local, no se sincroniza acción');
@@ -470,21 +470,21 @@ export function syncCrearAccion(leadId, accion, usuarioId) {
     return;
   }
   
-  addToSyncQueue('crear_accion', async () => {
-    const insertData = {
-      lead_id: leadId,
-      tipo: accion.tipo,
-      descripcion: accion.descripcion,
-      usuario_nombre: accion.user_nombre || null
-    };
-    
-    // Solo agregar usuario_id si parece UUID válido
-    if (usuarioId && typeof usuarioId === 'string' && usuarioId.includes('-') && usuarioId.length > 30) {
-      insertData.usuario_id = usuarioId;
-    }
-    
-    console.log('📤 Sincronizando acción a Supabase:', insertData);
-    
+  const insertData = {
+    lead_id: leadId,
+    tipo: accion.tipo,
+    descripcion: accion.descripcion,
+    usuario_nombre: accion.user_nombre || null
+  };
+  
+  // Solo agregar usuario_id si parece UUID válido
+  if (usuarioId && typeof usuarioId === 'string' && usuarioId.includes('-') && usuarioId.length > 30) {
+    insertData.usuario_id = usuarioId;
+  }
+  
+  console.log('📤 Sincronizando acción a Supabase:', insertData);
+  
+  try {
     const { data, error } = await supabase
       .from('acciones_lead')
       .insert(insertData)
@@ -492,10 +492,12 @@ export function syncCrearAccion(leadId, accion, usuarioId) {
     
     if (error) {
       console.error('❌ Error sincronizando acción:', error);
-      throw error;
+      return;
     }
     console.log('✅ Acción sincronizada:', data);
-  });
+  } catch (err) {
+    console.error('❌ Excepción sincronizando acción:', err);
+  }
 }
 
 export function syncCrearUsuario(institucionId, userData) {
