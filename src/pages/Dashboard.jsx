@@ -12,18 +12,18 @@ import { ESTADOS, CARRERAS, MEDIOS, TIPOS_ALUMNO } from '../data/mockData'
 const NotasTextarea = ({ consulta, userId, onSaved, disabled = false, lockedByName = null }) => {
   const [notas, setNotas] = useState(consulta?.notas || '')
   const [saved, setSaved] = useState(true)
-  
+
   useEffect(() => {
     setNotas(consulta?.notas || '')
     setSaved(true)
   }, [consulta?.id, consulta?.notas])
-  
+
   const handleChange = (e) => {
     if (disabled) return
     setNotas(e.target.value)
     setSaved(e.target.value === (consulta?.notas || ''))
   }
-  
+
   const handleSave = () => {
     if (disabled) return
     if (notas !== (consulta?.notas || '')) {
@@ -32,7 +32,7 @@ const NotasTextarea = ({ consulta, userId, onSaved, disabled = false, lockedByNa
       if (onSaved) onSaved()
     }
   }
-  
+
   return (
     <div className={`bg-slate-50 rounded-lg p-4 border ${disabled ? 'border-amber-200 bg-amber-50/30' : 'border-slate-200'}`}>
       <div className="flex items-center justify-between mb-2">
@@ -60,7 +60,7 @@ const NotasTextarea = ({ consulta, userId, onSaved, disabled = false, lockedByNa
       />
       <div className="flex items-center justify-between mt-2">
         <p className="text-xs text-slate-400">Las notas se guardan en el historial</p>
-        <button 
+        <button
           onClick={handleSave}
           disabled={saved || disabled}
           className={`px-3 py-1 text-sm rounded-lg font-medium flex items-center gap-1 ${saved ? 'bg-slate-100 text-slate-400' : 'bg-violet-600 text-white hover:bg-violet-700'}`}
@@ -85,11 +85,11 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
   const [showDuplicadoAlert, setShowDuplicadoAlert] = useState(false)
   const [selectedDuplicado, setSelectedDuplicado] = useState(null)
   const [showLimiteAlert, setShowLimiteAlert] = useState(false)
-  
+
   const encargados = store.getUsuarios().filter(u => u.rol_id === 'encargado')
   // Usar carreras de Supabase, fallback a mockData
   const carrerasDisponibles = store.getCarreras().length > 0 ? store.getCarreras() : CARRERAS
-  
+
   const resetForm = () => {
     setFormData({
       nombre: '', email: '', telefono: '', carrera_id: '', medio_id: 'web', notas: '', asignado_a: '', tipo_alumno: 'nuevo'
@@ -99,7 +99,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
     setShowDuplicadoAlert(false)
     setSelectedDuplicado(null)
   }
-  
+
   // Verificar duplicados cuando cambia nombre, email o teléfono
   const verificarDuplicados = () => {
     if (formData.nombre.length >= 3 || formData.email.length >= 5) {
@@ -110,65 +110,65 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
     setDuplicados([])
     return []
   }
-  
+
   const handleSubmit = (e) => {
     e.preventDefault()
-    
+
     // Verificar duplicados antes de crear
     const encontrados = verificarDuplicados()
-    
+
     if (encontrados.length > 0) {
       setShowDuplicadoAlert(true)
       setSelectedDuplicado(encontrados[0]) // Mostrar el primer duplicado
       return
     }
-    
+
     // No hay duplicados, crear normalmente
     crearLeadNuevo()
   }
-  
+
   const crearLeadNuevo = () => {
     // Verificar límite del plan
     if (puedeCrearLead && !puedeCrearLead()) {
       setShowLimiteAlert(true)
       return
     }
-    
+
     setSubmitting(true)
-    
+
     const carreraSeleccionada = carrerasDisponibles.find(c => String(c.id) === String(formData.carrera_id))
-    
+
     const newConsulta = store.createConsulta({
       ...formData,
       carrera_id: formData.carrera_id || null,  // Mantener como string (UUID)
       carrera_nombre: carreraSeleccionada?.nombre || null,  // Guardar nombre también
       asignado_a: formData.asignado_a || null
     }, userId, userRol)
-    
+
     // Actualizar contador de uso
     if (actualizarUso) actualizarUso('leads', 1)
-    
+
     setSubmitting(false)
     setSuccess(true)
-    
+
     setTimeout(() => {
       resetForm()
       onClose()
       if (onCreated) onCreated(newConsulta)
     }, 1500)
   }
-  
+
   const agregarCarreraAExistente = () => {
     if (!selectedDuplicado || !formData.carrera_id) return
-    
+
     setSubmitting(true)
     const resultado = store.agregarCarreraALead(
-      selectedDuplicado.id, 
+      selectedDuplicado.id,
       formData.carrera_id,  // Mantener como string
       userId
     )
     setSubmitting(false)
-    
+
     if (resultado) {
       setShowDuplicadoAlert(false)
       setSuccess(true)
@@ -179,25 +179,25 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
       }, 1500)
     }
   }
-  
+
   const crearDeTodasFormas = () => {
     setShowDuplicadoAlert(false)
     crearLeadNuevo()
   }
-  
+
   const handleClose = () => {
     resetForm()
     onClose()
   }
-  
+
   if (!isOpen) return null
-  
+
   // Modal de éxito
   if (success) {
-    const encargadoAsignado = formData.asignado_a 
-      ? encargados.find(e => e.id === formData.asignado_a)?.nombre 
+    const encargadoAsignado = formData.asignado_a
+      ? encargados.find(e => e.id === formData.asignado_a)?.nombre
       : 'automáticamente'
-    
+
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-2xl p-8 w-full max-w-md text-center">
@@ -213,25 +213,25 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
       </div>
     )
   }
-  
+
   // Modal de alerta de duplicado
   if (showDuplicadoAlert && selectedDuplicado) {
     const carreraNueva = carrerasDisponibles.find(c => String(c.id) === String(formData.carrera_id))
     const carreraExistente = selectedDuplicado.carrera
-    
+
     // Mostrar botón "Agregar Carrera" si:
     // 1. Se seleccionó una carrera nueva Y
     // 2. El duplicado no tiene esa carrera (o no tiene carrera)
     const puedeAgregarCarrera = carreraNueva && (
-      !carreraExistente || 
+      !carreraExistente ||
       String(carreraNueva.id) !== String(carreraExistente.id) ||
       (selectedDuplicado.carreras_interes && !selectedDuplicado.carreras_interes.includes(carreraNueva.id))
     )
-    
+
     // Mostrar porcentaje de coincidencia si existe
     const porcentaje = selectedDuplicado.porcentajeCoincidencia || 100
     const tipoCoincidencia = selectedDuplicado.tipoCoincidencia || ['datos']
-    
+
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-2xl p-6 w-full max-w-lg">
@@ -246,19 +246,18 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
               </p>
             </div>
           </div>
-          
+
           {/* Info del duplicado encontrado */}
           <div className="bg-slate-50 rounded-xl p-4 mb-4">
             <div className="flex items-center justify-between mb-2">
               <span className="font-semibold text-slate-800">{selectedDuplicado.nombre}</span>
-              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                selectedDuplicado.matriculado ? 'bg-emerald-100 text-emerald-700' :
-                selectedDuplicado.descartado ? 'bg-slate-100 text-slate-600' :
-                'bg-blue-100 text-blue-700'
-              }`}>
-                {selectedDuplicado.matriculado ? 'Matriculado' : 
-                 selectedDuplicado.descartado ? 'Descartado' : 
-                 ESTADOS[selectedDuplicado.estado]?.label || selectedDuplicado.estado}
+              <span className={`px-2 py-1 rounded-full text-xs font-medium ${selectedDuplicado.matriculado ? 'bg-emerald-100 text-emerald-700' :
+                  selectedDuplicado.descartado ? 'bg-slate-100 text-slate-600' :
+                    'bg-blue-100 text-blue-700'
+                }`}>
+                {selectedDuplicado.matriculado ? 'Matriculado' :
+                  selectedDuplicado.descartado ? 'Descartado' :
+                    ESTADOS[selectedDuplicado.estado]?.label || selectedDuplicado.estado}
               </span>
             </div>
             <div className="text-sm text-slate-600 space-y-1">
@@ -271,7 +270,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
                 <p><Icon name="User" size={14} className="inline mr-2" />Asignado a: {selectedDuplicado.encargado.nombre}</p>
               )}
             </div>
-            
+
             {/* Mostrar carreras de interés si tiene varias */}
             {selectedDuplicado.carreras_interes && selectedDuplicado.carreras_interes.length > 1 && (
               <div className="mt-3 pt-3 border-t border-slate-200">
@@ -289,7 +288,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
               </div>
             )}
           </div>
-          
+
           {/* Nueva consulta */}
           <div className="bg-violet-50 rounded-xl p-4 mb-6">
             <p className="text-sm text-violet-600 mb-2">Nueva consulta:</p>
@@ -299,7 +298,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
               Solicita info sobre: <span className="font-medium">{carreraNueva?.nombre || 'Sin seleccionar'}</span>
             </p>
           </div>
-          
+
           {/* Pregunta y opciones */}
           {puedeAgregarCarrera ? (
             <>
@@ -308,15 +307,15 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
               </p>
               <div className="flex gap-3">
                 <button onClick={handleClose}
-                        className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 rounded-xl font-medium hover:bg-slate-50">
+                  className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 rounded-xl font-medium hover:bg-slate-50">
                   Cancelar
                 </button>
                 <button onClick={crearDeTodasFormas}
-                        className="flex-1 px-4 py-3 border border-amber-200 text-amber-700 bg-amber-50 rounded-xl font-medium hover:bg-amber-100">
+                  className="flex-1 px-4 py-3 border border-amber-200 text-amber-700 bg-amber-50 rounded-xl font-medium hover:bg-amber-100">
                   Crear Nuevo
                 </button>
                 <button onClick={agregarCarreraAExistente} disabled={submitting}
-                        className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                  className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2">
                   {submitting ? (
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
@@ -335,30 +334,29 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
               </p>
               <div className="flex gap-3">
                 <button onClick={handleClose}
-                        className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 rounded-xl font-medium hover:bg-slate-50">
+                  className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 rounded-xl font-medium hover:bg-slate-50">
                   Cancelar
                 </button>
                 <button onClick={crearDeTodasFormas}
-                        className="flex-1 px-4 py-3 bg-amber-600 text-white rounded-xl font-medium hover:bg-amber-700">
+                  className="flex-1 px-4 py-3 bg-amber-600 text-white rounded-xl font-medium hover:bg-amber-700">
                   Crear de todas formas
                 </button>
               </div>
             </>
           )}
-          
+
           {/* Mostrar otros duplicados si hay más de uno */}
           {duplicados.length > 1 && (
             <div className="mt-4 pt-4 border-t border-slate-200">
               <p className="text-xs text-slate-500 mb-2">Se encontraron {duplicados.length} coincidencias:</p>
               <div className="flex flex-wrap gap-2">
                 {duplicados.map((d, i) => (
-                  <button key={d.id} 
-                          onClick={() => setSelectedDuplicado(d)}
-                          className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                            selectedDuplicado?.id === d.id 
-                              ? 'bg-violet-600 text-white' 
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}>
+                  <button key={d.id}
+                    onClick={() => setSelectedDuplicado(d)}
+                    className={`px-3 py-1 text-xs rounded-full transition-colors ${selectedDuplicado?.id === d.id
+                        ? 'bg-violet-600 text-white'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}>
                     {d.nombre} ({d.porcentajeCoincidencia || 100}%)
                   </button>
                 ))}
@@ -369,7 +367,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
       </div>
     )
   }
-  
+
   // Formulario principal
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={handleClose}>
@@ -380,7 +378,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
             <Icon name="X" size={20} />
           </button>
         </div>
-        
+
         {/* Alerta de límite de plan alcanzado */}
         {showLimiteAlert && (
           <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -391,7 +389,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
                   Has alcanzado el límite de tu plan
                 </p>
                 <p className="text-xs text-red-600 mb-3">
-                  Tu plan actual permite {planInfo?.limites?.max_leads || 10} leads. 
+                  Tu plan actual permite {planInfo?.limites?.max_leads || 10} leads.
                   Actualiza tu plan para agregar más.
                 </p>
                 <button
@@ -410,7 +408,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
             </div>
           </div>
         )}
-        
+
         {/* Alerta de posible duplicado mientras escribe */}
         {duplicados.length > 0 && !showDuplicadoAlert && (
           <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3">
@@ -425,40 +423,38 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
             </div>
           </div>
         )}
-        
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Nombre completo *</label>
             <input type="text" required value={formData.nombre}
-                   onChange={e => setFormData({...formData, nombre: e.target.value})}
-                   onBlur={verificarDuplicados}
-                   className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 ${
-                     duplicados.length > 0 ? 'border-amber-300 bg-amber-50' : 'border-slate-200'
-                   }`} />
+              onChange={e => setFormData({ ...formData, nombre: e.target.value })}
+              onBlur={verificarDuplicados}
+              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 ${duplicados.length > 0 ? 'border-amber-300 bg-amber-50' : 'border-slate-200'
+                }`} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Email *</label>
               <input type="email" required value={formData.email}
-                     onChange={e => setFormData({...formData, email: e.target.value})}
-                     onBlur={verificarDuplicados}
-                     className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 ${
-                       duplicados.length > 0 ? 'border-amber-300 bg-amber-50' : 'border-slate-200'
-                     }`} />
+                onChange={e => setFormData({ ...formData, email: e.target.value })}
+                onBlur={verificarDuplicados}
+                className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 ${duplicados.length > 0 ? 'border-amber-300 bg-amber-50' : 'border-slate-200'
+                  }`} />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Teléfono *</label>
               <input type="tel" required value={formData.telefono}
-                     onChange={e => setFormData({...formData, telefono: e.target.value})}
-                     onBlur={verificarDuplicados}
-                     className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                onChange={e => setFormData({ ...formData, telefono: e.target.value })}
+                onBlur={verificarDuplicados}
+                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" />
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Carrera *</label>
             <select required value={formData.carrera_id}
-                    onChange={e => setFormData({...formData, carrera_id: e.target.value})}
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
+              onChange={e => setFormData({ ...formData, carrera_id: e.target.value })}
+              className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
               <option value="">Seleccionar carrera</option>
               {carrerasDisponibles.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
@@ -468,15 +464,15 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
             <div className="flex gap-2">
               <label className={`flex-1 flex items-center justify-center gap-2 p-3 border rounded-lg cursor-pointer transition-colors ${formData.tipo_alumno === 'nuevo' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 hover:bg-slate-50'}`}>
                 <input type="radio" name="tipo_alumno_modal" value="nuevo" checked={formData.tipo_alumno === 'nuevo'}
-                       onChange={e => setFormData({...formData, tipo_alumno: e.target.value})}
-                       className="sr-only" />
+                  onChange={e => setFormData({ ...formData, tipo_alumno: e.target.value })}
+                  className="sr-only" />
                 <Icon name="UserPlus" size={16} />
                 <span className="text-sm font-medium">Nuevo</span>
               </label>
               <label className={`flex-1 flex items-center justify-center gap-2 p-3 border rounded-lg cursor-pointer transition-colors ${formData.tipo_alumno === 'antiguo' ? 'border-violet-500 bg-violet-50 text-violet-700' : 'border-slate-200 hover:bg-slate-50'}`}>
                 <input type="radio" name="tipo_alumno_modal" value="antiguo" checked={formData.tipo_alumno === 'antiguo'}
-                       onChange={e => setFormData({...formData, tipo_alumno: e.target.value})}
-                       className="sr-only" />
+                  onChange={e => setFormData({ ...formData, tipo_alumno: e.target.value })}
+                  className="sr-only" />
                 <Icon name="UserCheck" size={16} />
                 <span className="text-sm font-medium">Antiguo</span>
               </label>
@@ -488,37 +484,37 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
               {MEDIOS.slice(0, 5).map(m => (
                 <label key={m.id} className={`flex items-center gap-2 p-3 border rounded-lg cursor-pointer transition-colors ${formData.medio_id === m.id ? 'border-violet-500 bg-violet-50' : 'border-slate-200 hover:bg-slate-50'}`}>
                   <input type="radio" name="medio_modal" value={m.id} checked={formData.medio_id === m.id}
-                         onChange={e => setFormData({...formData, medio_id: e.target.value})}
-                         className="sr-only" />
+                    onChange={e => setFormData({ ...formData, medio_id: e.target.value })}
+                    className="sr-only" />
                   <Icon name={m.icono} className={m.color} size={16} />
                   <span className="text-xs">{m.nombre}</span>
                 </label>
               ))}
             </div>
           </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Asignar a</label>
-              <select value={formData.asignado_a || ''}
-                      onChange={e => setFormData({...formData, asignado_a: e.target.value || null})}
-                      className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
-                <option value="">Sin asignar (Auto)</option>
-                {encargados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
-              </select>
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Asignar a</label>
+            <select value={formData.asignado_a || ''}
+              onChange={e => setFormData({ ...formData, asignado_a: e.target.value || null })}
+              className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
+              <option value="">Sin asignar (Auto)</option>
+              {encargados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+            </select>
+          </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Notas</label>
             <textarea value={formData.notas}
-                      onChange={e => setFormData({...formData, notas: e.target.value})}
-                      placeholder="Información adicional..."
-                      className="w-full h-20 px-4 py-2 border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              onChange={e => setFormData({ ...formData, notas: e.target.value })}
+              placeholder="Información adicional..."
+              className="w-full h-20 px-4 py-2 border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-violet-500" />
           </div>
           <div className="flex gap-3 mt-6">
             <button type="button" onClick={handleClose}
-                    className="flex-1 px-4 py-2 border border-slate-200 text-slate-600 rounded-lg font-medium hover:bg-slate-50">
+              className="flex-1 px-4 py-2 border border-slate-200 text-slate-600 rounded-lg font-medium hover:bg-slate-50">
               Cancelar
             </button>
             <button type="submit" disabled={submitting}
-                    className="flex-1 px-4 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 disabled:opacity-50 flex items-center justify-center gap-2">
+              className="flex-1 px-4 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 disabled:opacity-50 flex items-center justify-center gap-2">
               {submitting ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -539,7 +535,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
 const PieChart = ({ data, size = 200 }) => {
   const total = data.reduce((sum, item) => sum + item.value, 0)
   if (total === 0) return <div className="text-slate-400 text-center py-8">Sin datos</div>
-  
+
   let currentAngle = 0
   const paths = data.map((item, i) => {
     const percentage = item.value / total
@@ -547,37 +543,37 @@ const PieChart = ({ data, size = 200 }) => {
     const startAngle = currentAngle
     const endAngle = currentAngle + angle
     currentAngle = endAngle
-    
+
     const startRad = (startAngle - 90) * Math.PI / 180
     const endRad = (endAngle - 90) * Math.PI / 180
     const radius = size / 2 - 10
     const cx = size / 2
     const cy = size / 2
-    
+
     const x1 = cx + radius * Math.cos(startRad)
     const y1 = cy + radius * Math.sin(startRad)
     const x2 = cx + radius * Math.cos(endRad)
     const y2 = cy + radius * Math.sin(endRad)
-    
+
     const largeArc = angle > 180 ? 1 : 0
-    
+
     const d = `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`
-    
+
     return (
       <path key={i} d={d} fill={item.color} className="hover:opacity-80 transition-opacity cursor-pointer">
         <title>{item.label}: {item.value} ({(percentage * 100).toFixed(1)}%)</title>
       </path>
     )
   })
-  
+
   return (
     <svg width={size} height={size} className="mx-auto">
       {paths}
-      <circle cx={size/2} cy={size/2} r={size/4} fill="white" />
-      <text x={size/2} y={size/2} textAnchor="middle" dominantBaseline="middle" className="text-2xl font-bold fill-slate-800">
+      <circle cx={size / 2} cy={size / 2} r={size / 4} fill="white" />
+      <text x={size / 2} y={size / 2} textAnchor="middle" dominantBaseline="middle" className="text-2xl font-bold fill-slate-800">
         {total}
       </text>
-      <text x={size/2} y={size/2 + 18} textAnchor="middle" dominantBaseline="middle" className="text-xs fill-slate-500">
+      <text x={size / 2} y={size / 2 + 18} textAnchor="middle" dominantBaseline="middle" className="text-xs fill-slate-500">
         total
       </text>
     </svg>
@@ -586,11 +582,11 @@ const PieChart = ({ data, size = 200 }) => {
 
 export default function Dashboard() {
   const { user, institucion, signOut, isKeyMaster, isRector, isEncargado, isAsistente, canViewAll, canEdit, canConfig, canCreateLeads, canReasignar, reloadFromSupabase, planInfo, actualizarUso, puedeCrearLead, puedeCrearUsuario, puedeCrearFormulario, inviteUser, notifyAssignment, resendVerification } = useAuth()
-  
+
   // Nombre dinámico de la institución
   const nombreInstitucion = institucion?.nombre || user?.institucion_nombre || store.getConfig()?.nombre || 'Mi Institución'
   const navigate = useNavigate()
-  
+
   const [activeTab, setActiveTab] = useState(isRector ? 'reportes' : 'dashboard')
   const [viewMode, setViewMode] = useState('kanban')
   const [consultas, setConsultas] = useState([])
@@ -616,12 +612,12 @@ export default function Dashboard() {
   const [limiteAlerta, setLimiteAlerta] = useState(null) // { tipo: 'leads'|'usuarios'|'formularios', mensaje: '...' }
   const [importacionesPendientes, setImportacionesPendientes] = useState(0) // Para badge del menú
   const [selectedLeads, setSelectedLeads] = useState([]) // Para asignación masiva
-  
+
   // Estados para sidebar responsive
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [lastUpdate, setLastUpdate] = useState(new Date())
-  
+
   // Protecciones para arrays que pueden ser undefined durante la carga
   const safeLeadsHoy = leadsHoy || []
 
@@ -631,37 +627,37 @@ export default function Dashboard() {
   // ============================================
   const formatearTiempoRespuesta = (horas) => {
     if (horas === null || horas === undefined || isNaN(horas)) return { valor: '-', unidad: '', color: 'text-slate-400' }
-    
+
     const minutos = horas * 60
-    
+
     // Determinar color según tiempo (basado en horas)
     let color = 'text-emerald-600' // Bueno: < 4h
     if (horas > 4 && horas <= 8) color = 'text-amber-500' // Regular: 4-8h
     if (horas > 8 && horas <= 24) color = 'text-orange-500' // Malo: 8-24h
     if (horas > 24) color = 'text-red-600' // Muy malo: > 24h
-    
+
     // Formato progresivo
     if (minutos < 60) {
-      return { 
-        valor: Math.round(minutos), 
-        unidad: 'min', 
+      return {
+        valor: Math.round(minutos),
+        unidad: 'min',
         color,
         texto: `${Math.round(minutos)} min`
       }
     } else if (horas < 24) {
       const h = Math.floor(horas)
       const m = Math.round((horas - h) * 60)
-      return { 
-        valor: horas.toFixed(1), 
-        unidad: 'hrs', 
+      return {
+        valor: horas.toFixed(1),
+        unidad: 'hrs',
         color,
         texto: m > 0 ? `${h}h ${m}m` : `${h} hrs`
       }
     } else {
       const dias = horas / 24
-      return { 
-        valor: dias.toFixed(1), 
-        unidad: 'días', 
+      return {
+        valor: dias.toFixed(1),
+        unidad: 'días',
         color,
         texto: `${dias.toFixed(1)} días`
       }
@@ -670,7 +666,7 @@ export default function Dashboard() {
 
   // ========== ACTUALIZACIÓN MANUAL + REALTIME ==========
   // Estilo Trello: Realtime para cambios, botón para forzar actualización
-  
+
   // Función para actualizar manualmente
   const handleRefreshData = async () => {
     if (!isSupabaseConfigured() || !user?.institucion_id) return
@@ -686,12 +682,12 @@ export default function Dashboard() {
 
   // Supabase Realtime - Solo escucha cambios, no hace polling
   const selectedConsultaRef = useRef(selectedConsulta)
-  
+
   // Mantener ref actualizado
   useEffect(() => {
     selectedConsultaRef.current = selectedConsulta
   }, [selectedConsulta])
-  
+
   useEffect(() => {
     if (!isSupabaseConfigured() || !user?.institucion_id) return
 
@@ -703,15 +699,18 @@ export default function Dashboard() {
         { event: '*', schema: 'public', table: 'leads', filter: `institucion_id=eq.${user.institucion_id}` },
         async (payload) => {
           console.log('📡 Cambio en leads:', payload.eventType, payload.new?.nombre || payload.old?.id)
-          // Solo actualizar si NO hay ficha abierta (evita parpadeo del botón editar)
           if (!selectedConsultaRef.current) {
+            // Sin ficha abierta: actualizar en silencio
             await reloadFromSupabase()
-            store.reloadStore() // Actualizar store en memoria
+            store.reloadStore()
             loadData()
             setLastUpdate(new Date())
-            console.log('✅ Dashboard actualizado con cambios de Supabase')
+            console.log('✅ Dashboard actualizado automáticamente')
           } else {
-            console.log('⏸️ Lead abierto, actualización pendiente')
+            // Con ficha abierta: avisar sin interrumpir
+            setNotification({ type: 'info', message: '🔄 Hay cambios en otros leads. Cierra esta ficha para actualizar.' })
+            setTimeout(() => setNotification(null), 6000)
+            console.log('⚠️ Cambio pendiente - lead abierto, usuario notificado')
           }
         }
       )
@@ -721,15 +720,27 @@ export default function Dashboard() {
           console.log('📡 Cambio en usuarios:', payload.eventType)
           if (!selectedConsultaRef.current) {
             await reloadFromSupabase()
-            store.reloadStore() // Actualizar store en memoria
+            store.reloadStore()
             loadData()
           }
+        }
+      )
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'acciones_lead' },
+        async (payload) => {
+          console.log('📡 Nueva acción en historial:', payload.eventType)
+          await reloadFromSupabase()
+          store.reloadStore()
+          loadData()
         }
       )
       .subscribe((status) => {
         console.log('📡 Realtime status:', status)
         if (status === 'SUBSCRIBED') {
-          console.log('✅ Realtime conectado - recibirás cambios automáticamente')
+          console.log('✅ Realtime completo - leads, usuarios y actividad en vivo')
+        }
+        if (status === 'CHANNEL_ERROR') {
+          console.warn('⚠️ Error en canal Realtime, reconectando...')
         }
       })
 
@@ -743,24 +754,24 @@ export default function Dashboard() {
   // Cargar importaciones pendientes (solo Enterprise)
   const cargarImportacionesPendientes = async () => {
     if (planInfo?.plan !== 'enterprise') return
-    
+
     try {
       const { count } = await supabase
         .from('leads_importados')
         .select('*', { count: 'exact', head: true })
         .eq('institucion_id', user?.institucion_id)
         .eq('estado', 'pendiente')
-      
+
       setImportacionesPendientes(count || 0)
     } catch (e) {
       console.error('Error cargando importaciones pendientes:', e)
     }
   }
-  
+
   useEffect(() => {
     if (planInfo?.plan === 'enterprise' && user?.institucion_id) {
       cargarImportacionesPendientes()
-      
+
       // Suscribirse a cambios en leads_importados
       const channel = supabase
         .channel('importaciones-changes')
@@ -769,33 +780,33 @@ export default function Dashboard() {
           (payload) => {
             console.log('📥 Nueva importación desde Sheets')
             cargarImportacionesPendientes()
-            
+
             // Notificar solo si no hay throttling (la función SQL ya controla esto)
             if (payload.new && payload.new.conflicto_detalles?.notificar !== false) {
-              setNotification({ 
-                type: 'info', 
-                message: `Nuevo lead desde Sheets: ${payload.new.datos_raw?.nombre || 'Sin nombre'}` 
+              setNotification({
+                type: 'info',
+                message: `Nuevo lead desde Sheets: ${payload.new.datos_raw?.nombre || 'Sin nombre'}`
               })
               setTimeout(() => setNotification(null), 4000)
             }
           }
         )
         .subscribe()
-      
+
       return () => supabase.removeChannel(channel)
     }
   }, [planInfo?.plan, user?.institucion_id])
 
   function loadData() {
     console.log('📊 loadData() - Rol:', user?.rol_id, 'isRector:', isRector)
-    
+
     // Protección: verificar que el store esté listo
     const storeReady = store.getConsultas && typeof store.getConsultas === 'function'
     if (!storeReady) {
       console.warn('⚠️ loadData: store no está listo')
       return
     }
-    
+
     // Para Rector: cargar TODOS los leads de la institución (para reportes)
     // Para otros roles: usar filtro normal
     let data
@@ -807,9 +818,9 @@ export default function Dashboard() {
     } else {
       data = store.getConsultas(user?.id, user?.rol_id) || []
     }
-    
+
     setConsultas(data || [])
-    
+
     if (isEncargado && user?.id) {
       setMetricas(store.getMetricasEncargado(user.id))
       setLeadsHoy(store.getLeadsContactarHoy(user.id, user.rol_id) || [])
@@ -824,22 +835,22 @@ export default function Dashboard() {
   // Cargar datos inicial y escuchar eventos de datos cargados
   useEffect(() => {
     loadData()
-    
+
     // Escuchar cuando AuthContext carga datos de Supabase
     const handleDataLoaded = () => {
       console.log('📡 Evento admitio-data-loaded recibido')
       store.reloadStore() // Recargar store desde localStorage
       loadData() // Recargar datos en el Dashboard
     }
-    
+
     window.addEventListener('admitio-data-loaded', handleDataLoaded)
-    
+
     // Retry después de 500ms por si el store aún no tenía datos
     const timer = setTimeout(() => {
       store.reloadStore()
       loadData()
     }, 500)
-    
+
     return () => {
       clearTimeout(timer)
       window.removeEventListener('admitio-data-loaded', handleDataLoaded)
@@ -860,7 +871,7 @@ export default function Dashboard() {
 
   const filteredConsultas = (consultas || []).filter(c => {
     const matchCarrera = filterCarrera === 'todas' || c.carrera?.nombre === filterCarrera
-    
+
     // Manejar estados especiales (matriculado/descartado)
     let matchEstado = false
     if (filterEstado === 'todos') {
@@ -873,32 +884,32 @@ export default function Dashboard() {
       // Estados normales: solo si NO está matriculado ni descartado
       matchEstado = c.estado === filterEstado && !c.matriculado && !c.descartado
     }
-    
+
     const matchTipo = filterTipoAlumno === 'todos' || c.tipo_alumno === filterTipoAlumno
     const matchSearch = (c.nombre || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        (c.email || '').toLowerCase().includes(searchTerm.toLowerCase())
+      (c.email || '').toLowerCase().includes(searchTerm.toLowerCase())
     return matchCarrera && matchEstado && matchTipo && matchSearch
   })
 
   async function handleUpdateEstado(id, nuevoEstado) {
     // Mostrar feedback inmediato
     setNotification({ type: 'info', message: 'Actualizando estado...' })
-    
+
     try {
       // Usar versión async que espera confirmación de Supabase
       const result = await store.updateConsultaAsync(id, { estado: nuevoEstado }, user.id)
-      
+
       if (!result || !result.success) {
         setNotification({ type: 'error', message: result?.error || 'Error al cambiar estado' })
         setTimeout(() => setNotification(null), 4000)
         return
       }
-      
+
       loadData()
       if (selectedConsulta?.id === id) {
         setSelectedConsulta(store.getConsultaById(id))
       }
-      
+
       setNotification({ type: 'success', message: `Estado cambiado a "${nuevoEstado}"` })
       setTimeout(() => setNotification(null), 2000)
     } catch (error) {
@@ -931,13 +942,13 @@ export default function Dashboard() {
     signOut()
     navigate('/login')
   }
-  
+
   function navigateToEstado(estado) {
     setFilterEstado(estado)
     setActiveTab('consultas')
     setSelectedConsulta(null)
   }
-  
+
   function navigateToMatriculados() {
     setFilterEstado('matriculado')
     setActiveTab('consultas')
@@ -946,7 +957,7 @@ export default function Dashboard() {
 
   function formatDate(dateStr) {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString('es-CL', { 
+    return new Date(dateStr).toLocaleDateString('es-CL', {
       day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
     })
   }
@@ -964,7 +975,7 @@ export default function Dashboard() {
     const esAdmin = ['superowner', 'keymaster', 'superadmin'].includes(user?.rol_id)
     const esRector = isRector || user?.rol_id === 'rector'
     const esEncargado = isEncargado || user?.rol_id === 'encargado'
-    
+
     const navItems = [
       { id: 'dashboard', icon: 'Home', label: 'Dashboard', show: !esRector },
       { id: 'consultas', icon: 'Users', label: 'Consultas', show: !esRector, badge: (consultas || []).filter(c => c.estado === 'nueva').length },
@@ -977,24 +988,24 @@ export default function Dashboard() {
       { id: 'importaciones_sheets', icon: 'Table', label: 'Google Sheets', show: esAdmin && planInfo?.plan === 'enterprise', badge: importacionesPendientes },
       { id: 'configuracion', icon: 'Settings', label: 'Configuración', show: esAdmin },
     ]
-    
+
     const handleNavClick = (tabId) => {
       setActiveTab(tabId)
       setSelectedConsulta(null)
       if (tabId === 'dashboard') setFilterEstado('todos')
       setMobileMenuOpen(false) // Cerrar en mobile
     }
-    
+
     return (
       <>
         {/* Overlay para mobile */}
         {mobileMenuOpen && (
-          <div 
+          <div
             className="fixed inset-0 bg-black/50 z-40 lg:hidden"
             onClick={() => setMobileMenuOpen(false)}
           />
         )}
-        
+
         {/* Sidebar */}
         <div className={`
           fixed left-0 top-0 h-full bg-white border-r border-slate-100 flex flex-col z-50
@@ -1016,10 +1027,10 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
-              
+
               {/* Botón cerrar - solo mobile */}
               {!sidebarCollapsed && (
-                <button 
+                <button
                   onClick={() => setMobileMenuOpen(false)}
                   className="lg:hidden p-2 text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
                   title="Cerrar menú"
@@ -1028,14 +1039,14 @@ export default function Dashboard() {
                 </button>
               )}
             </div>
-            
+
             {/* Botón colapsar - solo desktop - VISIBLE */}
-            <button 
+            <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
               className={`
                 hidden lg:flex w-full items-center justify-center gap-2 p-3 rounded-xl mb-4 transition-all font-medium
-                ${sidebarCollapsed 
-                  ? 'bg-violet-700 text-white hover:bg-violet-800' 
+                ${sidebarCollapsed
+                  ? 'bg-violet-700 text-white hover:bg-violet-800'
                   : 'bg-violet-100 text-violet-700 hover:bg-violet-200 border-2 border-violet-300'}
               `}
               title={sidebarCollapsed ? 'Expandir menú' : 'Colapsar menú'}
@@ -1043,7 +1054,7 @@ export default function Dashboard() {
               <Icon name={sidebarCollapsed ? 'ChevronRight' : 'ChevronLeft'} size={20} />
               {!sidebarCollapsed && <span className="text-sm">Colapsar</span>}
             </button>
-            
+
             {/* Navegación */}
             <nav className="space-y-1">
               {navItems.filter(item => item.show).map(item => (
@@ -1053,8 +1064,8 @@ export default function Dashboard() {
                   className={`
                     w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all
                     ${sidebarCollapsed ? 'justify-center' : ''}
-                    ${activeTab === item.id || (item.id === 'consultas' && activeTab === 'detalle') 
-                      ? 'bg-violet-50 text-violet-600' 
+                    ${activeTab === item.id || (item.id === 'consultas' && activeTab === 'detalle')
+                      ? 'bg-violet-50 text-violet-600'
                       : 'text-slate-600 hover:bg-slate-50'}
                   `}
                   title={sidebarCollapsed ? item.label : ''}
@@ -1077,7 +1088,7 @@ export default function Dashboard() {
               ))}
             </nav>
           </div>
-          
+
           {/* Stats rápidos - solo expandido */}
           {!isRector && metricas && !sidebarCollapsed && (
             <div className="mt-auto p-4">
@@ -1100,7 +1111,7 @@ export default function Dashboard() {
               </div>
             </div>
           )}
-          
+
           {/* User info */}
           <div className="p-4 border-t border-slate-100">
             <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
@@ -1113,8 +1124,8 @@ export default function Dashboard() {
                   <p className="text-xs text-slate-400">{user?.rol?.nombre}</p>
                 </div>
               )}
-              <button 
-                onClick={handleLogout} 
+              <button
+                onClick={handleLogout}
                 className={`p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg ${sidebarCollapsed ? 'mt-2' : ''}`}
                 title="Cerrar sesión"
               >
@@ -1126,27 +1137,27 @@ export default function Dashboard() {
       </>
     )
   }
-  
+
   // ============================================
   // MOBILE HEADER
   // ============================================
   const MobileHeader = () => (
     <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-100 flex items-center justify-between px-4 z-30">
-      <button 
+      <button
         onClick={() => setMobileMenuOpen(true)}
         className="p-2 bg-red-500 text-white hover:bg-red-600 rounded-lg shadow-sm"
       >
         <Icon name="Menu" size={24} />
       </button>
-      
+
       <div className="flex items-center gap-2">
         <div className="w-8 h-8 bg-gradient-to-br from-violet-600 to-purple-600 rounded-lg flex items-center justify-center">
           <span className="text-white font-bold text-sm">{nombreInstitucion.charAt(0).toUpperCase()}</span>
         </div>
         <span className="font-bold text-slate-800">{nombreInstitucion}</span>
       </div>
-      
-      <button 
+
+      <button
         onClick={handleNuevoLead}
         className="p-2 text-violet-600 hover:bg-violet-50 rounded-lg"
       >
@@ -1161,12 +1172,12 @@ export default function Dashboard() {
   const DashboardView = () => {
     // Fallback: verificar rol directamente
     const esAdmin = isKeyMaster || user?.rol_id === 'keymaster' || user?.rol_id === 'superadmin'
-    
+
     const stats = esAdmin ? metricasGlobales : metricas
-    
+
     // Protección: asegurar que consultas sea array
     const safeConsultas = consultas || []
-    
+
     // Valores por defecto si no hay stats
     const defaultStats = {
       total: safeConsultas.length || 0,
@@ -1179,13 +1190,13 @@ export default function Dashboard() {
       activos: safeConsultas.filter(c => !c.matriculado && !c.descartado).length || 0,
       tasaConversion: 0
     }
-    
+
     const safeStats = stats || defaultStats
-    
+
     // Calcular valores según el rol
     const totalLeads = safeStats.total || 0
     const pendientes = esAdmin ? (safeStats.nuevas || 0) : (safeStats.sinContactar || 0)
-    const enProceso = esAdmin 
+    const enProceso = esAdmin
       ? (safeStats.contactados || 0) + (safeStats.seguimiento || 0)
       : (safeStats.activos || 0) - (safeStats.sinContactar || 0) - (safeStats.examen_admision || 0)
     const examenAdm = safeStats.examen_admision || 0
@@ -1193,7 +1204,7 @@ export default function Dashboard() {
     const tasaConv = safeStats.tasaConversion || safeStats.tasa_conversion || 0
     const tiempoResp = safeStats.tiempoRespuestaPromedio || safeStats.tiempo_respuesta_promedio || null
     const tiempoCierre = safeStats.tiempoCierrePromedio || safeStats.tiempo_cierre_promedio || null
-    
+
     // Calcular tipo de alumnos si no viene en stats
     const alumnosNuevos = safeStats.alumnos_nuevos || filteredConsultas.filter(c => c.tipo_alumno === 'nuevo').length
     const alumnosAntiguos = safeStats.alumnos_antiguos || filteredConsultas.filter(c => c.tipo_alumno === 'antiguo').length
@@ -1232,47 +1243,47 @@ export default function Dashboard() {
 
         {/* KPIs Clickeables */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          <StatCard 
-            title="Pendientes" 
-            value={pendientes} 
-            icon="Clock" 
-            color="amber" 
+          <StatCard
+            title="Pendientes"
+            value={pendientes}
+            icon="Clock"
+            color="amber"
             sub="Requieren atención"
             onClick={() => navigateToEstado('nueva')}
           />
-          <StatCard 
-            title="En Proceso" 
-            value={enProceso} 
-            icon="Users" 
-            color="blue" 
+          <StatCard
+            title="En Proceso"
+            value={enProceso}
+            icon="Users"
+            color="blue"
             sub="Seguimiento activo"
             onClick={() => { setFilterEstado('todos'); setActiveTab('consultas'); }}
           />
-          <StatCard 
-            title={esAdmin ? "Examen Adm." : "Contactar Hoy"} 
-            value={esAdmin ? examenAdm : safeLeadsHoy.length} 
-            icon={esAdmin ? "ClipboardCheck" : "Phone"} 
-            color="cyan" 
+          <StatCard
+            title={esAdmin ? "Examen Adm." : "Contactar Hoy"}
+            value={esAdmin ? examenAdm : safeLeadsHoy.length}
+            icon={esAdmin ? "ClipboardCheck" : "Phone"}
+            color="cyan"
             sub={esAdmin ? "Agendados" : "Requieren atención"}
             onClick={() => esAdmin ? navigateToEstado('examen_admision') : setShowLeadsHoyModal(true)}
           />
-          <StatCard 
-            title="Matriculados" 
-            value={matriculados} 
-            icon="Check" 
-            color="emerald" 
+          <StatCard
+            title="Matriculados"
+            value={matriculados}
+            icon="Check"
+            color="emerald"
             sub="Este período"
             onClick={() => navigateToMatriculados()}
           />
-          <StatCard 
-            title="Conversión" 
-            value={`${tasaConv}%`} 
-            icon="TrendingUp" 
-            color="violet" 
+          <StatCard
+            title="Conversión"
+            value={`${tasaConv}%`}
+            icon="TrendingUp"
+            color="violet"
             sub="Tasa de éxito"
           />
         </div>
-        
+
         {/* KPIs de Tiempo - Solo si hay datos */}
         {(tiempoResp !== null || tiempoCierre !== null) && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1315,7 +1326,7 @@ export default function Dashboard() {
             })()}
           </div>
         )}
-        
+
         {/* Leads para Hoy */}
         {safeLeadsHoy.length > 0 && (
           <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl p-6 border border-amber-200">
@@ -1330,13 +1341,12 @@ export default function Dashboard() {
             </div>
             <div className="space-y-2">
               {safeLeadsHoy.slice(0, 5).map(c => (
-                <div key={c.id} 
-                     onClick={() => selectConsulta(c.id)}
-                     className={`flex items-center justify-between p-3 bg-white rounded-lg cursor-pointer hover:shadow-md transition-all ${
-                       c.nuevoInteres ? 'border-l-4 border-violet-500 ring-1 ring-violet-200' :
-                       c.atrasado ? 'border-l-4 border-red-400' : 
-                       'border-l-4 border-amber-400'
-                     }`}>
+                <div key={c.id}
+                  onClick={() => selectConsulta(c.id)}
+                  className={`flex items-center justify-between p-3 bg-white rounded-lg cursor-pointer hover:shadow-md transition-all ${c.nuevoInteres ? 'border-l-4 border-violet-500 ring-1 ring-violet-200' :
+                      c.atrasado ? 'border-l-4 border-red-400' :
+                        'border-l-4 border-amber-400'
+                    }`}>
                   <div className="flex items-center gap-3">
                     <div className={`w-2 h-2 rounded-full ${c.carrera?.color}`} />
                     <div>
@@ -1373,12 +1383,11 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
             <div className="flex items-center gap-3 mb-4">
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                tiempoResp === null ? 'bg-slate-100 text-slate-400' :
-                tiempoResp <= 4 ? 'bg-emerald-100 text-emerald-600' :
-                tiempoResp <= 8 ? 'bg-amber-100 text-amber-600' :
-                'bg-red-100 text-red-600'
-              }`}>
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${tiempoResp === null ? 'bg-slate-100 text-slate-400' :
+                  tiempoResp <= 4 ? 'bg-emerald-100 text-emerald-600' :
+                    tiempoResp <= 8 ? 'bg-amber-100 text-amber-600' :
+                      'bg-red-100 text-red-600'
+                }`}>
                 <Icon name="Zap" size={20} />
               </div>
               <div>
@@ -1439,7 +1448,7 @@ export default function Dashboard() {
           <div className="space-y-3">
             {filteredConsultas.filter(c => !c.matriculado && !c.descartado).slice(0, 5).map(c => (
               <div key={c.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
-                   onClick={() => selectConsulta(c.id)}>
+                onClick={() => selectConsulta(c.id)}>
                 <div className="flex items-center gap-3">
                   <div className={`w-2 h-2 rounded-full ${c.carrera?.color}`} />
                   <div>
@@ -1517,32 +1526,32 @@ export default function Dashboard() {
           <div className="flex-1 min-w-[200px] relative">
             <Icon name="Search" className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" size={20} />
             <input type="text" placeholder="Buscar por nombre o email..."
-                   value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-                   className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" />
           </div>
           <select value={filterCarrera} onChange={(e) => setFilterCarrera(e.target.value)}
-                  className="px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
+            className="px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
             <option value="todas">Todas las carreras</option>
             {CARRERAS.map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
           </select>
           <select value={filterEstado} onChange={(e) => setFilterEstado(e.target.value)}
-                  className="px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
+            className="px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
             <option value="todos">Todos los estados</option>
             {Object.values(ESTADOS).map(e => <option key={e.id} value={e.id}>{e.label}</option>)}
           </select>
           <select value={filterTipoAlumno} onChange={(e) => setFilterTipoAlumno(e.target.value)}
-                  className="px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
+            className="px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
             <option value="todos">Todos los tipos</option>
             <option value="nuevo">Alumnos Nuevos</option>
             <option value="antiguo">Alumnos Antiguos</option>
           </select>
           <div className="flex items-center bg-slate-100 rounded-lg p-1">
             <button onClick={() => setViewMode('kanban')}
-                    className={`p-2 rounded-lg transition-colors ${viewMode === 'kanban' ? 'bg-white shadow-sm text-violet-600' : 'text-slate-400'}`}>
+              className={`p-2 rounded-lg transition-colors ${viewMode === 'kanban' ? 'bg-white shadow-sm text-violet-600' : 'text-slate-400'}`}>
               <Icon name="LayoutGrid" size={20} />
             </button>
             <button onClick={() => setViewMode('lista')}
-                    className={`p-2 rounded-lg transition-colors ${viewMode === 'lista' ? 'bg-white shadow-sm text-violet-600' : 'text-slate-400'}`}>
+              className={`p-2 rounded-lg transition-colors ${viewMode === 'lista' ? 'bg-white shadow-sm text-violet-600' : 'text-slate-400'}`}>
               <Icon name="List" size={20} />
             </button>
           </div>
@@ -1579,12 +1588,12 @@ export default function Dashboard() {
               <div className="space-y-3 min-h-[300px] max-h-[500px] overflow-y-auto">
                 {leadsColumna.map(consulta => (
                   <div key={consulta.id}
-                       onClick={() => selectConsulta(consulta.id)}
-                       className={`bg-white rounded-lg p-4 shadow-sm cursor-pointer hover:shadow-md transition-all relative ${consulta.matriculado ? 'ring-2 ring-emerald-200' : ''} ${selectedLeads.includes(consulta.id) ? 'ring-2 ring-violet-500' : ''}`}>
+                    onClick={() => selectConsulta(consulta.id)}
+                    className={`bg-white rounded-lg p-4 shadow-sm cursor-pointer hover:shadow-md transition-all relative ${consulta.matriculado ? 'ring-2 ring-emerald-200' : ''} ${selectedLeads.includes(consulta.id) ? 'ring-2 ring-violet-500' : ''}`}>
                     {isKeyMaster && (
                       <div className="absolute top-2 right-2" onClick={(e) => e.stopPropagation()}>
-                        <input 
-                          type="checkbox" 
+                        <input
+                          type="checkbox"
                           checked={selectedLeads.includes(consulta.id)}
                           onChange={(e) => {
                             if (e.target.checked) {
@@ -1650,8 +1659,8 @@ export default function Dashboard() {
           <tr className="bg-slate-50 border-b border-slate-100">
             {isKeyMaster && (
               <th className="p-4 w-10">
-                <input 
-                  type="checkbox" 
+                <input
+                  type="checkbox"
                   checked={selectedLeads.length === filteredConsultas.length && filteredConsultas.length > 0}
                   onChange={(e) => {
                     if (e.target.checked) {
@@ -1675,15 +1684,15 @@ export default function Dashboard() {
         </thead>
         <tbody>
           {filteredConsultas.map(c => (
-            <tr 
-              key={c.id} 
+            <tr
+              key={c.id}
               onClick={() => selectConsulta(c.id)}
               className={`border-b border-slate-50 hover:bg-violet-50 cursor-pointer transition-colors ${selectedLeads.includes(c.id) ? 'bg-violet-50' : ''}`}
             >
               {isKeyMaster && (
                 <td className="p-4" onClick={(e) => e.stopPropagation()}>
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="checkbox"
                     checked={selectedLeads.includes(c.id)}
                     onChange={(e) => {
                       if (e.target.checked) {
@@ -1737,7 +1746,7 @@ export default function Dashboard() {
               )}
               <td className="p-4">
                 <div className="flex items-center justify-center gap-1">
-                  <button 
+                  <button
                     onClick={(e) => { e.stopPropagation(); selectConsulta(c.id); }}
                     className="p-2 text-slate-400 hover:text-violet-600 hover:bg-violet-100 rounded-lg"
                   >
@@ -1765,9 +1774,9 @@ export default function Dashboard() {
     const matriculados = (consultas || []).filter(c => c.matriculado)
     const descartados = (consultas || []).filter(c => c.descartado)
     const [historialTab, setHistorialTab] = useState('matriculados')
-    
+
     const lista = historialTab === 'matriculados' ? matriculados : descartados
-    
+
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
@@ -1779,20 +1788,20 @@ export default function Dashboard() {
             <p className="text-slate-500">Leads cerrados (matriculados y descartados)</p>
           </div>
         </div>
-        
+
         <div className="flex gap-2">
           <button onClick={() => setHistorialTab('matriculados')}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${historialTab === 'matriculados' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${historialTab === 'matriculados' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
             <Icon name="Check" size={16} className="inline mr-2" />
             Matriculados ({matriculados.length})
           </button>
           <button onClick={() => setHistorialTab('descartados')}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${historialTab === 'descartados' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${historialTab === 'descartados' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
             <Icon name="X" size={16} className="inline mr-2" />
             Descartados ({descartados.length})
           </button>
         </div>
-        
+
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
           {lista.length === 0 ? (
             <div className="p-8 text-center text-slate-400">
@@ -1834,7 +1843,7 @@ export default function Dashboard() {
                     <td className="p-4">
                       <div className="flex items-center justify-center">
                         <button onClick={() => selectConsulta(c.id)}
-                                className="p-2 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg">
+                          className="p-2 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg">
                           <Icon name="Eye" size={16} />
                         </button>
                       </div>
@@ -1855,7 +1864,7 @@ export default function Dashboard() {
     setSelectedConsulta(consulta)
     setActiveTab('detalle')
   }, [])
-  
+
   // Handler para cambiar estado
   const handleEstadoChange = useCallback((id, nuevoEstado) => {
     store.updateConsulta(id, { estado: nuevoEstado }, user.id)
@@ -1866,7 +1875,7 @@ export default function Dashboard() {
     setNotification({ type: 'success', message: `Estado cambiado a "${nuevoEstado}"` })
     setTimeout(() => setNotification(null), 2000)
   }, [selectedConsulta?.id, user?.id])
-  
+
   // Handler para reasignar
   const handleReasignar = useCallback(async (id, nuevoEncargado) => {
     const encargado = store.getUsuarios().find(u => u.id === nuevoEncargado)
@@ -1874,7 +1883,7 @@ export default function Dashboard() {
     if (selectedConsulta?.id === id) {
       setSelectedConsulta(store.getConsultaById(id))
     }
-    
+
     // Notificación individual
     if (nuevoEncargado && encargado?.email) {
       const lead = store.getConsultaById(id)
@@ -1900,15 +1909,15 @@ export default function Dashboard() {
   // Handler para asignación masiva
   const handleBulkAssign = async (encargadoId) => {
     if (!encargadoId || selectedLeads.length === 0) return
-    
+
     const encargado = store.getUsuarios().find(u => u.id === encargadoId)
     const leadsCount = selectedLeads.length
-    
+
     // Actualizar cada lead en el store
     selectedLeads.forEach(id => {
       store.updateConsulta(id, { asignado_a: encargadoId }, user.id)
     })
-    
+
     // Notificación masiva
     if (encargado?.email) {
       try {
@@ -1924,13 +1933,13 @@ export default function Dashboard() {
         console.error('Error notificando asignación masiva:', e)
       }
     }
-    
+
     setSelectedLeads([])
     loadData()
     setNotification({ type: 'success', message: `¡${leadsCount} leads asignados a ${encargado?.nombre}!` })
     setTimeout(() => setNotification(null), 3000)
   }
-  
+
   // Handler para cambiar tipo alumno
   const handleTipoAlumnoChange = useCallback((id, tipo) => {
     store.updateConsulta(id, { tipo_alumno: tipo }, user.id)
@@ -1947,7 +1956,7 @@ export default function Dashboard() {
     if (!selectedConsulta) return null
     const c = selectedConsulta
     const encargados = store.getUsuarios().filter(u => u.rol_id === 'encargado')
-    
+
     // Sistema de bloqueo de leads
     const {
       lockInfo,
@@ -1961,11 +1970,11 @@ export default function Dashboard() {
       releaseLock,
       forceAcquireLock
     } = useLockLead(c.id, user, isKeyMaster)
-    
+
     const [isEditing, setIsEditing] = useState(false)
     const [saveStatus, setSaveStatus] = useState(null) // 'saving', 'saved', 'error'
     const [showForceConfirm, setShowForceConfirm] = useState(false)
-    
+
     // Calcular tiempo desde el bloqueo
     const getTimeSinceLock = () => {
       if (!lockedSince) return ''
@@ -1977,7 +1986,7 @@ export default function Dashboard() {
       const hours = Math.floor(minutes / 60)
       return `hace ${hours} hora${hours > 1 ? 's' : ''}`
     }
-    
+
     // Iniciar edición (adquirir lock)
     const handleStartEditing = async () => {
       const result = await acquireLock()
@@ -1990,7 +1999,7 @@ export default function Dashboard() {
         setTimeout(() => setNotification(null), 3000)
       }
     }
-    
+
     // Guardar y cerrar edición
     const handleGuardarYCerrar = async () => {
       if (!canEdit || !isMyLock) {
@@ -1998,20 +2007,20 @@ export default function Dashboard() {
         setTimeout(() => setNotification(null), 3000)
         return
       }
-      
+
       setSaveStatus('saving')
-      
+
       try {
         // Los cambios ya están en localStorage y en cola de sync a Supabase
         // Solo necesitamos liberar el lock y cerrar
         await releaseLock()
-        
+
         setSaveStatus('saved')
         setNotification({ type: 'success', message: '✓ Cambios guardados' })
-        
+
         // Refrescar datos locales (no desde Supabase, para no sobrescribir)
         loadData()
-        
+
         setTimeout(() => {
           setNotification(null)
           setSaveStatus(null)
@@ -2026,7 +2035,7 @@ export default function Dashboard() {
         }, 3000)
       }
     }
-    
+
     // Cancelar edición (descartar cambios)
     const handleCancelarEdicion = async () => {
       // Recargar desde Supabase para descartar cambios locales
@@ -2034,25 +2043,25 @@ export default function Dashboard() {
       loadData()
       await releaseLock()
       setIsEditing(false)
-      
+
       // Refrescar el lead seleccionado con datos originales
       const updated = store.getConsultaById(c.id)
       if (updated) setSelectedConsulta(updated)
-      
+
       setNotification({ type: 'info', message: 'Cambios descartados' })
       setTimeout(() => setNotification(null), 2000)
     }
-    
+
     // KeyMaster toma control
     const handleForceControl = async () => {
       const result = await forceAcquireLock(c.nombre)
       setShowForceConfirm(false)
-      
+
       if (result.success) {
         setIsEditing(true)
-        setNotification({ 
-          type: 'warning', 
-          message: `Control tomado. ${result.previousUser} fue notificado.` 
+        setNotification({
+          type: 'warning',
+          message: `Control tomado. ${result.previousUser} fue notificado.`
         })
         setTimeout(() => setNotification(null), 3000)
       } else {
@@ -2060,7 +2069,7 @@ export default function Dashboard() {
         setTimeout(() => setNotification(null), 3000)
       }
     }
-    
+
     // Handler para confirmar contacto por nuevo interés
     const handleConfirmarNuevoInteres = () => {
       store.confirmarContactoNuevoInteres(c.id, user.id)
@@ -2071,7 +2080,7 @@ export default function Dashboard() {
       setNotification({ type: 'success', message: 'Contacto confirmado' })
       setTimeout(() => setNotification(null), 2000)
     }
-    
+
     // Limpiar lock al salir de la vista
     const handleBack = async () => {
       if (isMyLock) {
@@ -2079,7 +2088,7 @@ export default function Dashboard() {
       }
       setSelectedConsulta(null)
       setActiveTab('consultas')
-      
+
       // Recargar datos por si hubo cambios mientras el lead estaba abierto
       store.reloadStore()
       loadData()
@@ -2088,32 +2097,30 @@ export default function Dashboard() {
     return (
       <div className="space-y-6">
         <button onClick={handleBack}
-                className="flex items-center gap-2 text-slate-600 hover:text-slate-800">
+          className="flex items-center gap-2 text-slate-600 hover:text-slate-800">
           <Icon name="ArrowLeft" size={20} /> Volver
         </button>
-        
+
         {/* ========== INDICADOR DE BLOQUEO ========== */}
         {!lockLoading && (
-          <div className={`rounded-xl p-4 border ${
-            isMyLock 
-              ? 'bg-emerald-50 border-emerald-200' 
-              : isLocked 
+          <div className={`rounded-xl p-4 border ${isMyLock
+              ? 'bg-emerald-50 border-emerald-200'
+              : isLocked
                 ? 'bg-amber-50 border-amber-200'
                 : 'bg-slate-50 border-slate-200'
-          }`}>
+            }`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                  isMyLock 
-                    ? 'bg-emerald-100' 
-                    : isLocked 
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isMyLock
+                    ? 'bg-emerald-100'
+                    : isLocked
                       ? 'bg-amber-100'
                       : 'bg-slate-100'
-                }`}>
-                  <Icon 
-                    name={isMyLock ? 'Edit' : isLocked ? 'Lock' : 'Unlock'} 
+                  }`}>
+                  <Icon
+                    name={isMyLock ? 'Edit' : isLocked ? 'Lock' : 'Unlock'}
                     className={isMyLock ? 'text-emerald-600' : isLocked ? 'text-amber-600' : 'text-slate-500'}
-                    size={20} 
+                    size={20}
                   />
                 </div>
                 <div>
@@ -2138,20 +2145,19 @@ export default function Dashboard() {
                   )}
                 </div>
               </div>
-              
+
               <div className="flex items-center gap-2">
                 {isMyLock ? (
                   <>
                     <button
                       onClick={handleGuardarYCerrar}
                       disabled={saveStatus === 'saving'}
-                      className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors ${
-                        saveStatus === 'saving'
+                      className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors ${saveStatus === 'saving'
                           ? 'bg-slate-300 text-slate-500 cursor-wait'
                           : saveStatus === 'saved'
                             ? 'bg-emerald-500 text-white'
                             : 'bg-emerald-600 text-white hover:bg-emerald-700'
-                      }`}
+                        }`}
                     >
                       <Icon name={saveStatus === 'saving' ? 'Loader' : saveStatus === 'saved' ? 'Check' : 'Save'} size={16} />
                       {saveStatus === 'saving' ? 'Guardando...' : saveStatus === 'saved' ? '¡Guardado!' : 'Guardar y Cerrar'}
@@ -2194,7 +2200,7 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-        
+
         {/* Modal confirmación tomar control */}
         {showForceConfirm && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -2229,7 +2235,7 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-        
+
         {/* Alerta de nuevo interés */}
         {c.nuevo_interes && (
           <div className="bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-200 rounded-xl p-4">
@@ -2280,22 +2286,22 @@ export default function Dashboard() {
                 <InfoCard icon="Phone" label="Teléfono" value={c.telefono} iconColor="text-green-500" copiable leadId={c.id} />
                 <InfoCard icon={c.medio?.icono || 'Globe'} label="Medio" value={c.medio?.nombre} iconColor={c.medio?.color} />
                 <InfoCard icon="Calendar" label="Fecha ingreso" value={formatDate(c.created_at)} iconColor="text-slate-400" />
-                <InfoCard 
-                  icon={c.origen_entrada === 'secretaria' ? 'UserPlus' : c.origen_entrada === 'formulario' ? 'FileCode' : 'Edit'} 
-                  label="Ingresado por" 
-                  value={c.origen_entrada === 'secretaria' ? `Secretaría (${c.creado_por_nombre || ''})` : 
-                         c.origen_entrada === 'formulario' ? 'Formulario Web' : 
-                         c.creado_por_nombre || 'Manual'} 
-                  iconColor={c.origen_entrada === 'secretaria' ? 'text-violet-500' : 'text-slate-400'} 
+                <InfoCard
+                  icon={c.origen_entrada === 'secretaria' ? 'UserPlus' : c.origen_entrada === 'formulario' ? 'FileCode' : 'Edit'}
+                  label="Ingresado por"
+                  value={c.origen_entrada === 'secretaria' ? `Secretaría (${c.creado_por_nombre || ''})` :
+                    c.origen_entrada === 'formulario' ? 'Formulario Web' :
+                      c.creado_por_nombre || 'Manual'}
+                  iconColor={c.origen_entrada === 'secretaria' ? 'text-violet-500' : 'text-slate-400'}
                 />
-                <InfoCard 
-                  icon="Music" 
-                  label="Tipo alumno" 
-                  value={c.tipo_alumno === 'nuevo' ? 'Alumno Nuevo' : 'Alumno Antiguo'} 
-                  iconColor={c.tipo_alumno === 'nuevo' ? 'text-blue-500' : 'text-violet-500'} 
+                <InfoCard
+                  icon="Music"
+                  label="Tipo alumno"
+                  value={c.tipo_alumno === 'nuevo' ? 'Alumno Nuevo' : 'Alumno Antiguo'}
+                  iconColor={c.tipo_alumno === 'nuevo' ? 'text-blue-500' : 'text-violet-500'}
                 />
               </div>
-              
+
               {/* Carreras de interés (si tiene más de una) */}
               {c.carreras_interes && c.carreras_interes.length > 1 && (
                 <div className="mb-6 p-4 bg-violet-50 rounded-xl">
@@ -2307,12 +2313,11 @@ export default function Dashboard() {
                     {c.carreras_interes.map(carreraId => {
                       const carrera = CARRERAS.find(ca => ca.id === carreraId)
                       return carrera ? (
-                        <span key={carreraId} 
-                              className={`px-3 py-1 rounded-full text-sm font-medium ${
-                                carreraId === c.carrera_id 
-                                  ? 'bg-violet-600 text-white' 
-                                  : 'bg-violet-100 text-violet-700'
-                              }`}>
+                        <span key={carreraId}
+                          className={`px-3 py-1 rounded-full text-sm font-medium ${carreraId === c.carrera_id
+                              ? 'bg-violet-600 text-white'
+                              : 'bg-violet-100 text-violet-700'
+                            }`}>
                           {carrera.nombre}
                           {carreraId === c.carrera_id && ' (principal)'}
                         </span>
@@ -2323,15 +2328,15 @@ export default function Dashboard() {
               )}
 
               {/* Notas editables */}
-              <NotasTextarea 
-                consulta={c} 
-                userId={user.id} 
+              <NotasTextarea
+                consulta={c}
+                userId={user.id}
                 disabled={!isMyLock}
                 lockedByName={isLocked && !isMyLock ? lockedByName : null}
                 onSaved={() => {
                   setSelectedConsulta(store.getConsultaById(c.id))
                   loadData()
-                }} 
+                }}
               />
             </div>
 
@@ -2342,22 +2347,21 @@ export default function Dashboard() {
                 {c.actividad?.length > 0 ? c.actividad.map((a, i) => (
                   <div key={a.id} className="flex gap-4">
                     <div className="flex flex-col items-center">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                        a.tipo === 'matriculado' ? 'bg-emerald-100 text-emerald-600' :
-                        a.tipo === 'descartado' ? 'bg-red-100 text-red-600' :
-                        a.tipo === 'cambio_estado' ? 'bg-blue-100 text-blue-600' :
-                        a.tipo === 'email_enviado' ? 'bg-amber-100 text-amber-600' :
-                        a.tipo === 'cambio_tipo' ? 'bg-violet-100 text-violet-600' :
-                        a.tipo === 'nota' ? 'bg-slate-100 text-slate-600' :
-                        'bg-slate-100 text-slate-600'
-                      }`}>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${a.tipo === 'matriculado' ? 'bg-emerald-100 text-emerald-600' :
+                          a.tipo === 'descartado' ? 'bg-red-100 text-red-600' :
+                            a.tipo === 'cambio_estado' ? 'bg-blue-100 text-blue-600' :
+                              a.tipo === 'email_enviado' ? 'bg-amber-100 text-amber-600' :
+                                a.tipo === 'cambio_tipo' ? 'bg-violet-100 text-violet-600' :
+                                  a.tipo === 'nota' ? 'bg-slate-100 text-slate-600' :
+                                    'bg-slate-100 text-slate-600'
+                        }`}>
                         <Icon name={
                           a.tipo === 'matriculado' ? 'Check' :
-                          a.tipo === 'descartado' ? 'X' :
-                          a.tipo === 'email_enviado' ? 'Mail' :
-                          a.tipo === 'cambio_tipo' ? 'UserCheck' :
-                          a.tipo === 'nota' ? 'FileText' :
-                          'Activity'
+                            a.tipo === 'descartado' ? 'X' :
+                              a.tipo === 'email_enviado' ? 'Mail' :
+                                a.tipo === 'cambio_tipo' ? 'UserCheck' :
+                                  a.tipo === 'nota' ? 'FileText' :
+                                    'Activity'
                         } size={16} />
                       </div>
                       {i < c.actividad.length - 1 && <div className="w-0.5 h-full bg-slate-100 mt-2" />}
@@ -2390,7 +2394,7 @@ export default function Dashboard() {
                 <div className="space-y-2">
                   {/* Nueva Consulta - Azul */}
                   {c.estado !== 'nueva' && (
-                    <button 
+                    <button
                       onClick={() => handleUpdateEstado(c.id, 'nueva')}
                       className="w-full px-4 py-3 rounded-lg text-left transition-colors bg-blue-500 text-white hover:bg-blue-600 cursor-pointer font-medium">
                       Nueva Consulta
@@ -2398,7 +2402,7 @@ export default function Dashboard() {
                   )}
                   {/* Contactado - Ámbar */}
                   {c.estado !== 'contactado' && (
-                    <button 
+                    <button
                       onClick={() => handleUpdateEstado(c.id, 'contactado')}
                       className="w-full px-4 py-3 rounded-lg text-left transition-colors bg-amber-500 text-white hover:bg-amber-600 cursor-pointer font-medium">
                       Contactado
@@ -2406,7 +2410,7 @@ export default function Dashboard() {
                   )}
                   {/* Seguimiento - Púrpura */}
                   {c.estado !== 'seguimiento' && (
-                    <button 
+                    <button
                       onClick={() => handleUpdateEstado(c.id, 'seguimiento')}
                       className="w-full px-4 py-3 rounded-lg text-left transition-colors bg-purple-500 text-white hover:bg-purple-600 cursor-pointer font-medium">
                       En Seguimiento
@@ -2414,20 +2418,20 @@ export default function Dashboard() {
                   )}
                   {/* Examen Admisión - Cyan */}
                   {c.estado !== 'examen_admision' && (
-                    <button 
+                    <button
                       onClick={() => handleUpdateEstado(c.id, 'examen_admision')}
                       className="w-full px-4 py-3 rounded-lg text-left transition-colors bg-cyan-500 text-white hover:bg-cyan-600 cursor-pointer font-medium">
                       Examen de Admisión
                     </button>
                   )}
                   {/* Matriculado - Verde */}
-                  <button 
+                  <button
                     onClick={() => handleUpdateEstado(c.id, 'matriculado')}
                     className="w-full px-4 py-3 rounded-lg text-left transition-colors bg-emerald-500 text-white hover:bg-emerald-600 cursor-pointer font-medium">
                     ✓ Matriculado
                   </button>
                   {/* Descartado - Rojo */}
-                  <button 
+                  <button
                     onClick={() => handleUpdateEstado(c.id, 'descartado')}
                     className="w-full px-4 py-3 rounded-lg text-left transition-colors bg-red-500 text-white hover:bg-red-600 cursor-pointer font-medium">
                     ✗ Descartado
@@ -2441,11 +2445,11 @@ export default function Dashboard() {
                 <h3 className="font-semibold text-slate-800 mb-4">Tipo de Alumno</h3>
                 <div className="flex gap-2">
                   <button onClick={() => handleTipoAlumnoChange(c.id, 'nuevo')}
-                          className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'nuevo' ? 'bg-blue-500 text-white ring-2 ring-blue-300' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} cursor-pointer`}>
+                    className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'nuevo' ? 'bg-blue-500 text-white ring-2 ring-blue-300' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} cursor-pointer`}>
                     Nuevo
                   </button>
                   <button onClick={() => handleTipoAlumnoChange(c.id, 'antiguo')}
-                          className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'antiguo' ? 'bg-violet-500 text-white ring-2 ring-violet-300' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} cursor-pointer`}>
+                    className={`flex-1 px-4 py-3 rounded-lg text-center transition-colors ${c.tipo_alumno === 'antiguo' ? 'bg-violet-500 text-white ring-2 ring-violet-300' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} cursor-pointer`}>
                     Antiguo
                   </button>
                 </div>
@@ -2457,40 +2461,40 @@ export default function Dashboard() {
                 <h3 className="font-semibold text-slate-800 mb-4">Acciones Rápidas</h3>
                 <div className="space-y-2">
                   <button onClick={() => handleEnviarEmail(c.id)}
-                          disabled={c.emails_enviados >= 2}
-                          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${c.emails_enviados >= 2 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>
+                    disabled={c.emails_enviados >= 2}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${c.emails_enviados >= 2 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>
                     <Icon name="Mail" size={20} />
                     Registrar Email ({c.emails_enviados}/2)
                   </button>
-                  <a href={`tel:${c.telefono}`} 
-                     onClick={() => {
-                       store.registrarAccionContacto(c.id, user?.id, 'llamada')
-                       loadData()
-                     }}
-                     className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors">
+                  <a href={`tel:${c.telefono}`}
+                    onClick={() => {
+                      store.registrarAccionContacto(c.id, user?.id, 'llamada')
+                      loadData()
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors">
                     <Icon name="Phone" size={20} />
                     Llamar
                   </a>
                   <a href={`https://wa.me/${c.telefono?.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer"
-                     onClick={() => {
-                       store.registrarAccionContacto(c.id, user?.id, 'whatsapp')
-                       loadData()
-                     }}
-                     className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors">
+                    onClick={() => {
+                      store.registrarAccionContacto(c.id, user?.id, 'whatsapp')
+                      loadData()
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors">
                     <Icon name="MessageCircle" size={20} />
                     WhatsApp
                   </a>
                   <a href={`mailto:${c.email}`}
-                     onClick={() => {
-                       store.registrarAccionContacto(c.id, user?.id, 'email')
-                       loadData()
-                     }}
-                     className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-violet-50 text-violet-600 hover:bg-violet-100 transition-colors">
+                    onClick={() => {
+                      store.registrarAccionContacto(c.id, user?.id, 'email')
+                      loadData()
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-violet-50 text-violet-600 hover:bg-violet-100 transition-colors">
                     <Icon name="Mail" size={20} />
                     Enviar Email
                   </a>
                 </div>
-                
+
                 {/* Botones de copiar */}
                 <div className="mt-4 pt-4 border-t border-slate-100">
                   <p className="text-xs text-slate-400 mb-2">Copiar al portapapeles</p>
@@ -2530,9 +2534,9 @@ export default function Dashboard() {
               <div className={`bg-white rounded-xl p-6 shadow-sm border ${isMyLock ? 'border-slate-100' : 'border-slate-200 opacity-60'}`}>
                 <h3 className="font-semibold text-slate-800 mb-4">Reasignar</h3>
                 <select value={c.asignado_a || ''}
-                        onChange={(e) => isMyLock && handleReasignar(c.id, e.target.value || null)}
-                        disabled={!isMyLock}
-                        className={`w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 ${!isMyLock ? 'opacity-50 cursor-not-allowed bg-slate-100' : ''}`}>
+                  onChange={(e) => isMyLock && handleReasignar(c.id, e.target.value || null)}
+                  disabled={!isMyLock}
+                  className={`w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 ${!isMyLock ? 'opacity-50 cursor-not-allowed bg-slate-100' : ''}`}>
                   <option value="">Sin asignar</option>
                   {encargados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
                 </select>
@@ -2558,17 +2562,17 @@ export default function Dashboard() {
     const [activeTab, setActiveTab] = useState('embudo') // 'embudo', 'tendencia', 'carreras', 'medios', 'encargados'
     const [tipoGrafico, setTipoGrafico] = useState('linea')
     const [agrupacion, setAgrupacion] = useState('dia')
-    
+
     // Calcular fechas según período seleccionado
     const { fechaInicio, fechaFin, fechaInicioAnterior, fechaFinAnterior } = useMemo(() => {
       const hoy = new Date()
       const fin = new Date(hoy)
       fin.setHours(23, 59, 59, 999)
-      
+
       let inicio = new Date(hoy)
       let diasPeriodo = 30
-      
-      switch(periodo) {
+
+      switch (periodo) {
         case 'semana':
           inicio.setDate(hoy.getDate() - 7)
           diasPeriodo = 7
@@ -2587,16 +2591,16 @@ export default function Dashboard() {
           break
       }
       inicio.setHours(0, 0, 0, 0)
-      
+
       // Período anterior para comparación
       const finAnterior = new Date(inicio)
       finAnterior.setDate(finAnterior.getDate() - 1)
       finAnterior.setHours(23, 59, 59, 999)
-      
+
       const inicioAnterior = new Date(finAnterior)
       inicioAnterior.setDate(inicioAnterior.getDate() - diasPeriodo + 1)
       inicioAnterior.setHours(0, 0, 0, 0)
-      
+
       return {
         fechaInicio: inicio.toISOString().split('T')[0],
         fechaFin: fin.toISOString().split('T')[0],
@@ -2604,7 +2608,7 @@ export default function Dashboard() {
         fechaFinAnterior: finAnterior.toISOString().split('T')[0]
       }
     }, [periodo])
-    
+
     // Estados de filtro (simplificados, ya no se muestran todos a la vez)
     const [filtroEstados, setFiltroEstados] = useState([])
     const [filtroCarreras, setFiltroCarreras] = useState([])
@@ -2612,26 +2616,26 @@ export default function Dashboard() {
     const [filtroEncargados, setFiltroEncargados] = useState([])
     const [filtroTipoAlumno, setFiltroTipoAlumno] = useState('todos')
     const [showFilters, setShowFilters] = useState(false)
-    
+
     // USAR DATOS FRESCOS - Para Rector usar todos los leads, para otros usar consultas del dashboard
     const leadsReporte = useMemo(() => {
       // Para Rector: cargar todos los leads directamente del store
       // Para otros: usar las consultas ya filtradas del dashboard
       let leads = isRector ? store.getConsultasParaReportes() : [...(consultas || [])]
-      
+
       console.log('📊 leadsReporte useMemo - isRector:', isRector, 'leads iniciales:', leads?.length || 0, 'consultas estado:', (consultas || []).length)
-      
+
       // Si no hay consultas en el dashboard pero hay en el store, cargar del store
       if (leads.length === 0 && !isRector) {
         leads = store.getConsultasParaReportes()
         console.log('📊 leadsReporte - Fallback a store:', leads.length)
       }
-      
+
       // Filtrar por rol si es encargado (solo aplica si no es rector)
       if (user?.rol_id === 'encargado' && user?.id) {
         leads = leads.filter(c => c.asignado_a === user.id)
       }
-      
+
       // Filtrar por rango de fechas
       if (fechaInicio) {
         const inicio = new Date(fechaInicio)
@@ -2643,7 +2647,7 @@ export default function Dashboard() {
         fin.setHours(23, 59, 59, 999)
         leads = leads.filter(c => new Date(c.created_at) <= fin)
       }
-      
+
       // Filtrar por estados
       if (filtroEstados.length > 0) {
         leads = leads.filter(c => {
@@ -2653,37 +2657,37 @@ export default function Dashboard() {
           return false
         })
       }
-      
+
       // Filtrar por carreras
       if (filtroCarreras.length > 0) {
         leads = leads.filter(c => filtroCarreras.includes(c.carrera_id))
       }
-      
+
       // Filtrar por medios
       if (filtroMedios.length > 0) {
         leads = leads.filter(c => filtroMedios.includes(c.medio_id))
       }
-      
+
       // Filtrar por encargados
       if (filtroEncargados.length > 0) {
         leads = leads.filter(c => filtroEncargados.includes(c.asignado_a))
       }
-      
+
       // Filtrar por tipo de alumno
       if (filtroTipoAlumno !== 'todos') {
         leads = leads.filter(c => c.tipo_alumno === filtroTipoAlumno)
       }
-      
+
       return leads
     }, [consultas, isRector, fechaInicio, fechaFin, filtroEstados, filtroCarreras, filtroMedios, filtroEncargados, filtroTipoAlumno, user])
-    
+
     // Calcular estadísticas desde los leads filtrados
     const estadisticas = useMemo(() => {
       const total = leadsReporte.length
       const matriculados = leadsReporte.filter(c => c.matriculado).length
       const descartados = leadsReporte.filter(c => c.descartado).length
       const activos = leadsReporte.filter(c => !c.matriculado && !c.descartado).length
-      
+
       // Por estado
       const porEstado = {
         nueva: leadsReporte.filter(c => c.estado === 'nueva' && !c.matriculado && !c.descartado).length,
@@ -2693,7 +2697,7 @@ export default function Dashboard() {
         matriculado: matriculados,
         descartado: descartados
       }
-      
+
       // Por carrera - usar store para obtener nombres
       const porCarrera = {}
       const todasCarreras = store.getCarreras()
@@ -2708,7 +2712,7 @@ export default function Dashboard() {
         porCarrera[carreraId].total++
         if (c.matriculado) porCarrera[carreraId].matriculados++
       })
-      
+
       // Por medio - usar store para obtener nombres
       const porMedio = {}
       const todosLosMedios = store.getMedios()
@@ -2723,7 +2727,7 @@ export default function Dashboard() {
         porMedio[medioId].total++
         if (c.matriculado) porMedio[medioId].matriculados++
       })
-      
+
       // Por encargado - usar store para obtener nombres
       const porEncargado = {}
       const todosUsuarios = store.getTodosLosUsuarios()
@@ -2743,13 +2747,13 @@ export default function Dashboard() {
         const e = porEncargado[id]
         e.tasa = e.total > 0 ? Math.round((e.matriculados / e.total) * 100) : 0
       })
-      
+
       // Por tipo de alumno
       const porTipoAlumno = {
         nuevo: leadsReporte.filter(c => c.tipo_alumno === 'nuevo' || !c.tipo_alumno).length,
         antiguo: leadsReporte.filter(c => c.tipo_alumno === 'antiguo').length
       }
-      
+
       // Tiempo de respuesta promedio
       const leadsConPrimerContacto = leadsReporte.filter(c => c.fecha_primer_contacto && c.created_at)
       const tiemposRespuesta = leadsConPrimerContacto.map(c => {
@@ -2760,7 +2764,7 @@ export default function Dashboard() {
       const tiempoRespuestaPromedio = tiemposRespuesta.length > 0
         ? Math.round(tiemposRespuesta.reduce((a, b) => a + b, 0) / tiemposRespuesta.length * 10) / 10
         : 0
-      
+
       // Tiempo de cierre promedio
       const leadsConCierre = leadsReporte.filter(c => c.fecha_cierre && c.created_at && c.matriculado)
       const tiemposCierre = leadsConCierre.map(c => {
@@ -2771,7 +2775,7 @@ export default function Dashboard() {
       const tiempoCierrePromedio = tiemposCierre.length > 0
         ? Math.round(tiemposCierre.reduce((a, b) => a + b, 0) / tiemposCierre.length * 10) / 10
         : 0
-      
+
       return {
         total,
         matriculados,
@@ -2787,22 +2791,22 @@ export default function Dashboard() {
         tiempoCierrePromedio
       }
     }, [leadsReporte])
-    
+
     // Calcular estadísticas del período anterior para comparación
     const estadisticasAnteriores = useMemo(() => {
       // Para Rector: usar todos los leads del store
       let leads = isRector ? store.getConsultasParaReportes() : [...consultas]
-      
+
       // Si no hay consultas pero hay en el store, cargar del store
       if (leads.length === 0 && !isRector) {
         leads = store.getConsultasParaReportes()
       }
-      
+
       // Filtrar por rol si es encargado
       if (user?.rol_id === 'encargado' && user?.id) {
         leads = leads.filter(c => c.asignado_a === user.id)
       }
-      
+
       // Filtrar por período anterior
       if (fechaInicioAnterior && fechaFinAnterior) {
         const inicio = new Date(fechaInicioAnterior)
@@ -2814,23 +2818,23 @@ export default function Dashboard() {
           return fecha >= inicio && fecha <= fin
         })
       }
-      
+
       const total = leads.length
       const matriculados = leads.filter(c => c.matriculado).length
-      
+
       return {
         total,
         matriculados,
         tasaConversion: total > 0 ? Math.round((matriculados / total) * 100) : 0
       }
     }, [consultas, isRector, fechaInicioAnterior, fechaFinAnterior, user])
-    
+
     // Calcular cambios vs período anterior
     const cambios = useMemo(() => {
       const cambioLeads = estadisticas.total - estadisticasAnteriores.total
       const cambioMatriculas = estadisticas.matriculados - estadisticasAnteriores.matriculados
       const cambioConversion = estadisticas.tasaConversion - estadisticasAnteriores.tasaConversion
-      
+
       return {
         leads: cambioLeads,
         leadsPercent: estadisticasAnteriores.total > 0 ? Math.round((cambioLeads / estadisticasAnteriores.total) * 100) : 0,
@@ -2838,7 +2842,7 @@ export default function Dashboard() {
         conversion: cambioConversion // Puntos porcentuales
       }
     }, [estadisticas, estadisticasAnteriores])
-    
+
     // Datos del embudo
     const datosEmbudo = useMemo(() => {
       const total = estadisticas.total || 0
@@ -2850,13 +2854,13 @@ export default function Dashboard() {
         { etapa: 'Matriculados', cantidad: estadisticas.matriculados || 0, color: 'bg-emerald-500', percent: total > 0 ? Math.round(((estadisticas.matriculados || 0) / total) * 100) : 0 },
       ]
     }, [estadisticas])
-    
+
     const datosGrafico = store.getDatosGraficoTemporal(leadsReporte, agrupacion)
-    
+
     const carreras = store.getCarreras()
     const medios = store.getMedios()
     const encargados = store.getEncargadosActivos()
-    
+
     const estadosDisponibles = [
       { id: 'nueva', label: 'Nueva', color: 'bg-amber-500' },
       { id: 'contactado', label: 'Contactado', color: 'bg-blue-500' },
@@ -2865,7 +2869,7 @@ export default function Dashboard() {
       { id: 'matriculado', label: 'Matriculado', color: 'bg-emerald-500' },
       { id: 'descartado', label: 'Descartado', color: 'bg-slate-400' },
     ]
-    
+
     const toggleFiltro = (arr, setArr, id) => {
       if (arr.includes(id)) {
         setArr(arr.filter(x => x !== id))
@@ -2873,7 +2877,7 @@ export default function Dashboard() {
         setArr([...arr, id])
       }
     }
-    
+
     const limpiarFiltros = () => {
       setFiltroEstados([])
       setFiltroCarreras([])
@@ -2881,7 +2885,7 @@ export default function Dashboard() {
       setFiltroEncargados([])
       setFiltroTipoAlumno('todos')
     }
-    
+
     const descargarCSV = () => {
       const csv = store.exportarReporteCSV(leadsReporte, true)
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -2890,10 +2894,10 @@ export default function Dashboard() {
       link.download = `reporte_admisiones_${fechaInicio}_${fechaFin}.csv`
       link.click()
     }
-    
+
     // Estado para modal de generación PDF
     const [generandoPDF, setGenerandoPDF] = useState(false)
-    
+
     // Función para cargar jsPDF desde CDN
     const cargarJsPDF = () => {
       return new Promise((resolve, reject) => {
@@ -2902,7 +2906,7 @@ export default function Dashboard() {
           resolve(window.jspdf.jsPDF)
           return
         }
-        
+
         // Cargar desde CDN
         const script = document.createElement('script')
         script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
@@ -2917,21 +2921,21 @@ export default function Dashboard() {
         document.head.appendChild(script)
       })
     }
-    
+
     // Función para generar PDF (carga jsPDF desde CDN)
     const descargarPDF = async () => {
       setGenerandoPDF(true)
-      
+
       try {
         // Cargar jsPDF desde CDN
         const jsPDF = await cargarJsPDF()
-        
+
         const pdf = new jsPDF('p', 'mm', 'a4')
         const pageWidth = pdf.internal.pageSize.getWidth()
         const pageHeight = pdf.internal.pageSize.getHeight()
         const margin = 15
         let yPosition = margin
-        
+
         // Colores
         const violetRGB = [139, 92, 246]
         const slateRGB = [100, 116, 139]
@@ -2940,24 +2944,24 @@ export default function Dashboard() {
         const blueRGB = [59, 130, 246]
         const purpleRGB = [168, 85, 247]
         const cyanRGB = [6, 182, 212]
-        
+
         // ============ PÁGINA 1: RESUMEN EJECUTIVO ============
-        
+
         // Header con gradiente simulado
         pdf.setFillColor(139, 92, 246)
         pdf.rect(0, 0, pageWidth, 45, 'F')
-        
+
         // Título
         pdf.setTextColor(255, 255, 255)
         pdf.setFontSize(24)
         pdf.setFont('helvetica', 'bold')
         pdf.text('Reporte de Admisiones', margin, 20)
-        
+
         // Subtítulo
         pdf.setFontSize(12)
         pdf.setFont('helvetica', 'normal')
         pdf.text(nombreInstitucion, margin, 30)
-        
+
         // Período
         const periodoTexto = {
           'semana': 'Última semana',
@@ -2966,76 +2970,76 @@ export default function Dashboard() {
           'año': 'Último año'
         }[periodo] || periodo
         pdf.text(`Período: ${periodoTexto} | Generado: ${new Date().toLocaleDateString('es-CL')}`, margin, 38)
-        
+
         yPosition = 55
-        
+
         // ============ KPI PRINCIPAL: CONVERSIÓN ============
         pdf.setFillColor(245, 243, 255)
         pdf.roundedRect(margin, yPosition, pageWidth - margin * 2, 35, 3, 3, 'F')
-        
+
         pdf.setTextColor(...violetRGB)
         pdf.setFontSize(10)
         pdf.text('TASA DE CONVERSIÓN', margin + 5, yPosition + 10)
-        
+
         pdf.setFontSize(36)
         pdf.setFont('helvetica', 'bold')
         pdf.text(`${estadisticas?.tasaConversion || 0}%`, margin + 5, yPosition + 28)
-        
+
         // Comparación
         pdf.setFontSize(10)
         pdf.setFont('helvetica', 'normal')
         const cambioTexto = cambios.conversion >= 0 ? `+${cambios.conversion}pp vs anterior` : `${cambios.conversion}pp vs anterior`
         pdf.setTextColor(cambios.conversion >= 0 ? 16 : 239, cambios.conversion >= 0 ? 185 : 68, cambios.conversion >= 0 ? 129 : 68)
         pdf.text(cambioTexto, margin + 50, yPosition + 15)
-        
+
         // Detalle
         pdf.setTextColor(...slateRGB)
         pdf.text(`${estadisticas?.matriculados || 0} matrículas de ${estadisticas?.total || 0} leads`, margin + 50, yPosition + 25)
-        
+
         yPosition += 45
-        
+
         // ============ KPIS SECUNDARIOS (2x2) ============
         const kpiWidth = (pageWidth - margin * 2 - 10) / 2
         const kpiHeight = 28
-        
+
         const kpis = [
           { label: 'Total Leads', value: estadisticas?.total || 0, subtext: cambios.leads !== 0 ? `${cambios.leads > 0 ? '+' : ''}${cambios.leads} vs anterior` : '', color: violetRGB },
           { label: 'Matrículas', value: estadisticas?.matriculados || 0, subtext: `${estadisticas?.activos || 0} en proceso`, color: emeraldRGB },
           { label: 'Tiempo Respuesta', value: estadisticas?.tiempoRespuestaPromedio ? `${estadisticas.tiempoRespuestaPromedio}h` : '-', subtext: 'Primer contacto', color: amberRGB },
           { label: 'Ciclo de Cierre', value: estadisticas?.tiempoCierrePromedio ? `${estadisticas.tiempoCierrePromedio}d` : '-', subtext: 'Días promedio', color: purpleRGB }
         ]
-        
+
         kpis.forEach((kpi, idx) => {
           const x = margin + (idx % 2) * (kpiWidth + 10)
           const y = yPosition + Math.floor(idx / 2) * (kpiHeight + 5)
-          
+
           pdf.setFillColor(248, 250, 252)
           pdf.roundedRect(x, y, kpiWidth, kpiHeight, 2, 2, 'F')
-          
+
           pdf.setTextColor(...slateRGB)
           pdf.setFontSize(9)
           pdf.text(kpi.label, x + 5, y + 8)
-          
+
           pdf.setTextColor(...kpi.color)
           pdf.setFontSize(18)
           pdf.setFont('helvetica', 'bold')
           pdf.text(String(kpi.value), x + 5, y + 20)
-          
+
           pdf.setTextColor(...slateRGB)
           pdf.setFontSize(8)
           pdf.setFont('helvetica', 'normal')
           pdf.text(kpi.subtext, x + 45, y + 20)
         })
-        
+
         yPosition += kpiHeight * 2 + 20
-        
+
         // ============ EMBUDO DE CONVERSIÓN ============
         pdf.setTextColor(30, 41, 59)
         pdf.setFontSize(14)
         pdf.setFont('helvetica', 'bold')
         pdf.text('Embudo de Conversión', margin, yPosition)
         yPosition += 8
-        
+
         const embudoColores = {
           'Nuevos': amberRGB,
           'Contactados': blueRGB,
@@ -3043,24 +3047,24 @@ export default function Dashboard() {
           'Examen': cyanRGB,
           'Matriculados': emeraldRGB
         }
-        
+
         const barHeight = 12
         const maxBarWidth = pageWidth - margin * 2 - 50
-        
+
         datosEmbudo.forEach((item, idx) => {
           const y = yPosition + idx * (barHeight + 4)
           const barWidth = Math.max(8, (item.cantidad / Math.max(1, estadisticas?.total || 1)) * maxBarWidth)
-          
+
           // Etiqueta
           pdf.setTextColor(...slateRGB)
           pdf.setFontSize(9)
           pdf.setFont('helvetica', 'normal')
           pdf.text(item.etapa, margin, y + 8)
-          
+
           // Barra
           pdf.setFillColor(...(embudoColores[item.etapa] || violetRGB))
           pdf.roundedRect(margin + 35, y, barWidth, barHeight, 2, 2, 'F')
-          
+
           // Valor dentro de la barra
           pdf.setTextColor(255, 255, 255)
           pdf.setFontSize(9)
@@ -3068,26 +3072,26 @@ export default function Dashboard() {
           if (barWidth > 20) {
             pdf.text(String(item.cantidad), margin + 38, y + 8)
           }
-          
+
           // Porcentaje al final
           pdf.setTextColor(...slateRGB)
           pdf.setFont('helvetica', 'normal')
           pdf.text(`${item.percent}%`, margin + 40 + barWidth, y + 8)
         })
-        
+
         yPosition += datosEmbudo.length * (barHeight + 4) + 15
-        
+
         // ============ PÁGINA 2: GRÁFICO + TABLAS ============
         pdf.addPage()
         yPosition = margin
-        
+
         // Título gráfico
         pdf.setTextColor(30, 41, 59)
         pdf.setFontSize(14)
         pdf.setFont('helvetica', 'bold')
         pdf.text('Tendencia de Leads', margin, yPosition + 5)
         yPosition += 15
-        
+
         // Dibujar gráfico de barras manualmente
         const chartData = datosGrafico.slice(-12) // Últimos 12 períodos
         if (chartData.length > 0) {
@@ -3095,28 +3099,28 @@ export default function Dashboard() {
           const chartWidth = pageWidth - margin * 2
           const barWidthChart = (chartWidth - 20) / chartData.length
           const maxVal = Math.max(...chartData.map(d => d.total), 1)
-          
+
           // Fondo del gráfico
           pdf.setFillColor(250, 250, 252)
           pdf.rect(margin, yPosition, chartWidth, chartHeight, 'F')
-          
+
           // Líneas de guía horizontales
           pdf.setDrawColor(230, 230, 235)
           for (let i = 0; i <= 4; i++) {
             const lineY = yPosition + (chartHeight / 4) * i
             pdf.line(margin, lineY, margin + chartWidth, lineY)
           }
-          
+
           // Barras
           chartData.forEach((d, i) => {
             const barX = margin + 10 + i * barWidthChart
             const barH = (d.total / maxVal) * (chartHeight - 10)
             const barY = yPosition + chartHeight - barH - 5
-            
+
             // Barra total (violeta)
             pdf.setFillColor(...violetRGB)
             pdf.rect(barX, barY, barWidthChart - 4, barH, 'F')
-            
+
             // Barra matriculados (verde) superpuesta
             if (d.matriculados > 0) {
               const matrH = (d.matriculados / maxVal) * (chartHeight - 10)
@@ -3124,7 +3128,7 @@ export default function Dashboard() {
               pdf.rect(barX, yPosition + chartHeight - matrH - 5, barWidthChart - 4, matrH, 'F')
             }
           })
-          
+
           // Leyenda
           yPosition += chartHeight + 5
           pdf.setFontSize(8)
@@ -3132,11 +3136,11 @@ export default function Dashboard() {
           pdf.rect(margin, yPosition, 8, 4, 'F')
           pdf.setTextColor(...slateRGB)
           pdf.text('Total leads', margin + 10, yPosition + 3)
-          
+
           pdf.setFillColor(...emeraldRGB)
           pdf.rect(margin + 45, yPosition, 8, 4, 'F')
           pdf.text('Matriculados', margin + 55, yPosition + 3)
-          
+
           yPosition += 15
         } else {
           pdf.setTextColor(...slateRGB)
@@ -3144,14 +3148,14 @@ export default function Dashboard() {
           pdf.text('Sin datos de tendencia para el período seleccionado', margin, yPosition + 5)
           yPosition += 15
         }
-        
+
         // ============ RENDIMIENTO POR CARRERA ============
         pdf.setTextColor(30, 41, 59)
         pdf.setFontSize(14)
         pdf.setFont('helvetica', 'bold')
         pdf.text('Rendimiento por Carrera/Programa', margin, yPosition + 5)
         yPosition += 12
-        
+
         // Header tabla
         pdf.setFillColor(248, 250, 252)
         pdf.rect(margin, yPosition, pageWidth - margin * 2, 8, 'F')
@@ -3163,23 +3167,23 @@ export default function Dashboard() {
         pdf.text('Matrículas', margin + 115, yPosition + 5.5)
         pdf.text('Conversión', margin + 145, yPosition + 5.5)
         yPosition += 10
-        
+
         // Filas
         pdf.setFont('helvetica', 'normal')
         const carrerasData = Object.entries(estadisticas?.porCarrera || {})
           .filter(([_, v]) => v.total > 0)
           .sort((a, b) => b[1].total - a[1].total)
           .slice(0, 10)
-          
+
         carrerasData.forEach(([id, data], idx) => {
           const tasa = data.total > 0 ? Math.round((data.matriculados / data.total) * 100) : 0
           const y = yPosition + idx * 7
-          
+
           if (idx % 2 === 0) {
             pdf.setFillColor(252, 252, 253)
             pdf.rect(margin, y - 1, pageWidth - margin * 2, 7, 'F')
           }
-          
+
           pdf.setTextColor(30, 41, 59)
           pdf.text((data.nombre || 'Sin carrera').substring(0, 35), margin + 3, y + 4)
           pdf.text(String(data.total), margin + 90, y + 4)
@@ -3188,21 +3192,21 @@ export default function Dashboard() {
           pdf.setTextColor(tasa >= 20 ? 16 : tasa >= 10 ? 245 : 100, tasa >= 20 ? 185 : tasa >= 10 ? 158 : 116, tasa >= 20 ? 129 : tasa >= 10 ? 11 : 139)
           pdf.text(`${tasa}%`, margin + 145, y + 4)
         })
-        
+
         yPosition += carrerasData.length * 7 + 15
-        
+
         // ============ RENDIMIENTO POR ENCARGADO ============
         if (yPosition > pageHeight - 60) {
           pdf.addPage()
           yPosition = margin
         }
-        
+
         pdf.setTextColor(30, 41, 59)
         pdf.setFontSize(14)
         pdf.setFont('helvetica', 'bold')
         pdf.text('Rendimiento por Encargado', margin, yPosition + 5)
         yPosition += 12
-        
+
         // Header tabla
         pdf.setFillColor(248, 250, 252)
         pdf.rect(margin, yPosition, pageWidth - margin * 2, 8, 'F')
@@ -3214,32 +3218,32 @@ export default function Dashboard() {
         pdf.text('Matrículas', margin + 105, yPosition + 5.5)
         pdf.text('Conversión', margin + 140, yPosition + 5.5)
         yPosition += 10
-        
+
         pdf.setFont('helvetica', 'normal')
         const encargadosData = Object.entries(estadisticas?.porEncargado || {})
           .filter(([_, v]) => v.total > 0)
           .sort((a, b) => (b[1].tasa || 0) - (a[1].tasa || 0))
           .slice(0, 8)
-          
+
         encargadosData.forEach(([id, data], idx) => {
           const y = yPosition + idx * 7
-          
+
           if (idx % 2 === 0) {
             pdf.setFillColor(252, 252, 253)
             pdf.rect(margin, y - 1, pageWidth - margin * 2, 7, 'F')
           }
-          
+
           pdf.setTextColor(30, 41, 59)
           pdf.text((data.nombre || 'Sin asignar').substring(0, 30), margin + 3, y + 4)
           pdf.text(String(data.total), margin + 80, y + 4)
           pdf.setTextColor(...emeraldRGB)
           pdf.text(String(data.matriculados), margin + 105, y + 4)
-          
+
           const tasa = data.tasa || 0
           pdf.setTextColor(tasa >= 25 ? 16 : tasa >= 15 ? 245 : 100, tasa >= 25 ? 185 : tasa >= 15 ? 158 : 116, tasa >= 25 ? 129 : tasa >= 15 ? 11 : 139)
           pdf.text(`${tasa}%`, margin + 140, y + 4)
         })
-        
+
         // ============ FOOTER EN TODAS LAS PÁGINAS ============
         const totalPages = pdf.internal.getNumberOfPages()
         for (let i = 1; i <= totalPages; i++) {
@@ -3253,35 +3257,35 @@ export default function Dashboard() {
             { align: 'center' }
           )
         }
-        
+
         // Descargar
         const fileName = `Reporte_Admisiones_${nombreInstitucion.replace(/[^a-zA-Z0-9]/g, '_')}_${fechaInicio}.pdf`
         pdf.save(fileName)
-        
+
         setNotification({ type: 'success', message: 'PDF generado correctamente' })
-        
+
       } catch (error) {
         console.error('Error generando PDF:', error)
-        setNotification({ 
-          type: 'error', 
-          message: 'Error al generar PDF. Verifica tu conexión a internet.' 
+        setNotification({
+          type: 'error',
+          message: 'Error al generar PDF. Verifica tu conexión a internet.'
         })
       }
-      
+
       setGenerandoPDF(false)
     }
-    
+
     // Calcular máximo para escala del gráfico
     const maxValor = Math.max(...datosGrafico.map(d => d.total), 1)
-    
+
     // Componente de gráfico de barras estilo Spotify
     const BarChart = ({ data }) => {
       if (data.length === 0) return <div className="h-72 flex items-center justify-center text-slate-400">Sin datos para mostrar</div>
-      
+
       // Limitar a máximo 15 barras para legibilidad
       const displayData = data.length > 15 ? data.slice(-15) : data
       const maxVal = Math.max(...displayData.map(d => d.total), 1)
-      
+
       // Calcular escala Y
       const yLabels = []
       const step = Math.ceil(maxVal / 4)
@@ -3289,13 +3293,13 @@ export default function Dashboard() {
         yLabels.push(step * i)
       }
       yLabels.reverse()
-      
+
       const formatFecha = (fecha) => {
         const [year, month, day] = fecha.split('-')
         const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
         return day ? `${parseInt(day)} ${meses[parseInt(month) - 1]}` : `${meses[parseInt(month) - 1]} ${year}`
       }
-      
+
       return (
         <div className="h-80">
           {/* Leyenda superior */}
@@ -3309,7 +3313,7 @@ export default function Dashboard() {
               <span className="text-slate-600">Matriculados</span>
             </span>
           </div>
-          
+
           <div className="flex h-64">
             {/* Eje Y */}
             <div className="flex flex-col justify-between pr-3 text-right">
@@ -3317,7 +3321,7 @@ export default function Dashboard() {
                 <span key={i} className="text-xs text-slate-400 font-medium">{val}</span>
               ))}
             </div>
-            
+
             {/* Área del gráfico */}
             <div className="flex-1 relative">
               {/* Líneas de guía horizontales */}
@@ -3326,7 +3330,7 @@ export default function Dashboard() {
                   <div key={i} className="border-t border-slate-100 w-full" />
                 ))}
               </div>
-              
+
               {/* Barras */}
               <div className="relative h-full flex items-end gap-1 px-1">
                 {displayData.map((d, i) => (
@@ -3338,18 +3342,18 @@ export default function Dashboard() {
                       <p className="text-emerald-300">Matriculados: {d.matriculados}</p>
                       <p className="text-slate-400">Descartados: {d.descartados}</p>
                     </div>
-                    
+
                     {/* Número sobre la barra */}
                     <span className="text-xs font-bold text-slate-600 mb-1">{d.total > 0 ? d.total : ''}</span>
-                    
+
                     {/* Barra principal (total) */}
-                    <div 
+                    <div
                       className="w-full bg-violet-500 rounded-t-md transition-all duration-200 group-hover:bg-violet-600 relative"
                       style={{ height: `${(d.total / maxVal) * 100}%`, minHeight: d.total > 0 ? '4px' : '0' }}
                     >
                       {/* Barra interna (matriculados) */}
                       {d.matriculados > 0 && (
-                        <div 
+                        <div
                           className="absolute bottom-0 left-0 right-0 bg-emerald-500 rounded-t-md"
                           style={{ height: `${(d.matriculados / d.total) * 100}%` }}
                         />
@@ -3360,13 +3364,13 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
-          
+
           {/* Eje X - Fechas */}
           <div className="flex mt-2 pl-8">
             <div className="flex-1 flex justify-between px-1">
               {displayData.map((d, i) => (
-                <span 
-                  key={i} 
+                <span
+                  key={i}
                   className={`text-xs text-slate-500 text-center flex-1 ${displayData.length > 10 ? 'transform -rotate-45 origin-top-left mt-1' : ''}`}
                   style={{ fontSize: displayData.length > 12 ? '10px' : '12px' }}
                 >
@@ -3378,14 +3382,14 @@ export default function Dashboard() {
         </div>
       )
     }
-    
+
     // Componente de gráfico de líneas estilo Spotify
     const LineChart = ({ data }) => {
       if (data.length < 2) return <div className="h-72 flex items-center justify-center text-slate-400">Se necesitan al menos 2 puntos de datos</div>
-      
+
       const displayData = data.length > 20 ? data.slice(-20) : data
       const maxVal = Math.max(...displayData.map(d => d.total), 1)
-      
+
       // Calcular escala Y
       const yLabels = []
       const step = Math.ceil(maxVal / 4)
@@ -3393,27 +3397,27 @@ export default function Dashboard() {
         yLabels.push(step * i)
       }
       yLabels.reverse()
-      
+
       const formatFecha = (fecha) => {
         const [year, month, day] = fecha.split('-')
         const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
         return day ? `${parseInt(day)} ${meses[parseInt(month) - 1]}` : `${meses[parseInt(month) - 1]} ${year}`
       }
-      
+
       // Calcular puntos para el path SVG
       const chartWidth = 100
       const chartHeight = 100
       const padding = 2
-      
+
       const getX = (i) => padding + (i / (displayData.length - 1)) * (chartWidth - padding * 2)
       const getY = (val) => chartHeight - padding - (val / maxVal) * (chartHeight - padding * 2)
-      
+
       const pathTotal = displayData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getY(d.total)}`).join(' ')
       const pathMatr = displayData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getY(d.matriculados)}`).join(' ')
-      
+
       // Área bajo la curva
       const areaTotal = `${pathTotal} L ${getX(displayData.length - 1)} ${chartHeight - padding} L ${getX(0)} ${chartHeight - padding} Z`
-      
+
       return (
         <div className="h-80">
           {/* Leyenda superior */}
@@ -3427,7 +3431,7 @@ export default function Dashboard() {
               <span className="text-slate-600">Matriculados</span>
             </span>
           </div>
-          
+
           <div className="flex h-64">
             {/* Eje Y */}
             <div className="flex flex-col justify-between pr-3 text-right">
@@ -3435,7 +3439,7 @@ export default function Dashboard() {
                 <span key={i} className="text-xs text-slate-400 font-medium">{val}</span>
               ))}
             </div>
-            
+
             {/* Área del gráfico */}
             <div className="flex-1 relative">
               {/* Líneas de guía horizontales */}
@@ -3444,12 +3448,12 @@ export default function Dashboard() {
                   <div key={i} className="border-t border-slate-100 w-full" />
                 ))}
               </div>
-              
+
               {/* SVG del gráfico */}
               <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-full" preserveAspectRatio="none">
                 {/* Área sombreada */}
                 <path d={areaTotal} fill="url(#gradientArea)" opacity="0.3" />
-                
+
                 {/* Degradado */}
                 <defs>
                   <linearGradient id="gradientArea" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -3457,50 +3461,50 @@ export default function Dashboard() {
                     <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
                   </linearGradient>
                 </defs>
-                
+
                 {/* Línea de total */}
                 <path d={pathTotal} fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                
+
                 {/* Línea de matriculados */}
                 <path d={pathMatr} fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                
+
                 {/* Puntos interactivos */}
                 {displayData.map((d, i) => (
                   <g key={i} className="group">
                     {/* Punto total */}
-                    <circle 
-                      cx={getX(i)} 
-                      cy={getY(d.total)} 
-                      r="4" 
-                      fill="#8b5cf6" 
+                    <circle
+                      cx={getX(i)}
+                      cy={getY(d.total)}
+                      r="4"
+                      fill="#8b5cf6"
                       className="opacity-0 group-hover:opacity-100 transition-opacity"
                     />
                     {/* Punto matriculados */}
-                    <circle 
-                      cx={getX(i)} 
-                      cy={getY(d.matriculados)} 
-                      r="4" 
-                      fill="#10b981" 
+                    <circle
+                      cx={getX(i)}
+                      cy={getY(d.matriculados)}
+                      r="4"
+                      fill="#10b981"
                       className="opacity-0 group-hover:opacity-100 transition-opacity"
                     />
                     {/* Área hover invisible */}
-                    <rect 
-                      x={getX(i) - 3} 
-                      y="0" 
-                      width="6" 
-                      height={chartHeight} 
-                      fill="transparent" 
+                    <rect
+                      x={getX(i) - 3}
+                      y="0"
+                      width="6"
+                      height={chartHeight}
+                      fill="transparent"
                       className="cursor-pointer"
                     />
                   </g>
                 ))}
               </svg>
-              
+
               {/* Tooltips (fuera del SVG para mejor renderizado) */}
               <div className="absolute inset-0 flex pointer-events-none">
                 {displayData.map((d, i) => (
-                  <div 
-                    key={i} 
+                  <div
+                    key={i}
                     className="flex-1 relative group pointer-events-auto"
                   >
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-800 text-white text-xs px-3 py-2 rounded-lg shadow-lg z-20 whitespace-nowrap">
@@ -3513,7 +3517,7 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
-          
+
           {/* Eje X - Fechas */}
           <div className="flex mt-2 pl-8">
             <div className="flex-1 flex justify-between">
@@ -3533,13 +3537,13 @@ export default function Dashboard() {
         </div>
       )
     }
-    
+
     // Presets de fecha
     const setPresetFecha = (preset) => {
       const hoy = new Date()
       let inicio = new Date()
-      
-      switch(preset) {
+
+      switch (preset) {
         case 'semana':
           inicio.setDate(hoy.getDate() - 7)
           break
@@ -3556,16 +3560,16 @@ export default function Dashboard() {
           inicio.setFullYear(hoy.getFullYear() - 1)
           break
       }
-      
+
       setFechaInicio(inicio.toISOString().split('T')[0])
       setFechaFin(hoy.toISOString().split('T')[0])
     }
-    
+
     const hayFiltrosActivos = filtroEstados.length > 0 || filtroCarreras.length > 0 || filtroMedios.length > 0 || filtroEncargados.length > 0 || filtroTipoAlumno !== 'todos'
-    
+
     // Estado de carga
     const [cargandoDatos, setCargandoDatos] = useState(false)
-    
+
     // Función para recargar datos (especialmente para Rector)
     const recargarDatosReporte = async () => {
       setCargandoDatos(true)
@@ -3580,7 +3584,7 @@ export default function Dashboard() {
       }
       setCargandoDatos(false)
     }
-    
+
     return (
       <div className="space-y-6">
         {/* Banner de bienvenida para Rector */}
@@ -3616,7 +3620,7 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-        
+
         {/* Header con selectores de período */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -3634,7 +3638,7 @@ export default function Dashboard() {
               </select>
               <span className="text-slate-400 text-sm">vs período anterior</span>
             </div>
-            
+
             <div className="flex items-center gap-2">
               <button
                 onClick={handleRefreshData}
@@ -3672,7 +3676,7 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-        
+
         {/* KPI Hero - Conversión */}
         <div className="bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700 rounded-2xl p-8 text-white">
           <div className="flex flex-col lg:flex-row items-center gap-8">
@@ -3696,11 +3700,11 @@ export default function Dashboard() {
                 <span className="text-white font-bold">{estadisticas?.total || 0}</span> leads
               </p>
             </div>
-            
+
             {/* Barra de progreso visual */}
             <div className="w-full lg:w-64">
               <div className="h-4 bg-white/20 rounded-full overflow-hidden">
-                <div 
+                <div
                   className="h-full bg-gradient-to-r from-emerald-400 to-emerald-300 rounded-full transition-all duration-1000"
                   style={{ width: `${Math.min(100, estadisticas?.tasaConversion || 0)}%` }}
                 />
@@ -3713,7 +3717,7 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-        
+
         {/* KPIs Secundarios */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
@@ -3733,7 +3737,7 @@ export default function Dashboard() {
               </p>
             )}
           </div>
-          
+
           {/* KPI Matrículas con Meta - Destacado para Rector */}
           <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-5 shadow-sm border border-emerald-200">
             <div className="flex items-center justify-between">
@@ -3751,14 +3755,14 @@ export default function Dashboard() {
                 <span className="font-medium">{estadisticas?.activos || 0} en proceso</span>
               </div>
               <div className="h-1.5 bg-emerald-200 rounded-full overflow-hidden">
-                <div 
+                <div
                   className="h-full bg-emerald-500 rounded-full transition-all"
                   style={{ width: `${Math.min(100, ((estadisticas?.matriculados || 0) / Math.max(1, (estadisticas?.total || 1))) * 100)}%` }}
                 />
               </div>
             </div>
           </div>
-          
+
           <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
             <div className="flex items-center justify-between">
               <div>
@@ -3774,7 +3778,7 @@ export default function Dashboard() {
             </div>
             <p className="text-sm mt-2 text-slate-500">Primer contacto</p>
           </div>
-          
+
           <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
             <div className="flex items-center justify-between">
               <div>
@@ -3790,7 +3794,7 @@ export default function Dashboard() {
             <p className="text-sm mt-2 text-slate-500">Días promedio</p>
           </div>
         </div>
-        
+
         {/* Tabs de navegación */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
           <div className="flex border-b border-slate-100 overflow-x-auto">
@@ -3804,18 +3808,17 @@ export default function Dashboard() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-6 py-4 font-medium text-sm whitespace-nowrap transition-colors ${
-                  activeTab === tab.id 
-                    ? 'text-violet-600 border-b-2 border-violet-600 bg-violet-50/50' 
+                className={`flex items-center gap-2 px-6 py-4 font-medium text-sm whitespace-nowrap transition-colors ${activeTab === tab.id
+                    ? 'text-violet-600 border-b-2 border-violet-600 bg-violet-50/50'
                     : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-                }`}
+                  }`}
               >
                 <Icon name={tab.icon} size={18} />
                 {tab.label}
               </button>
             ))}
           </div>
-          
+
           <div className="p-6">
             {/* Tab: Embudo */}
             {activeTab === 'embudo' && (
@@ -3826,7 +3829,7 @@ export default function Dashboard() {
                     <div key={idx} className="flex items-center gap-4">
                       <div className="w-28 text-sm text-slate-600 font-medium">{item.etapa}</div>
                       <div className="flex-1 h-10 bg-slate-100 rounded-lg overflow-hidden relative">
-                        <div 
+                        <div
                           className={`h-full ${item.color} transition-all duration-700 flex items-center justify-end pr-3`}
                           style={{ width: `${Math.max(5, (item.cantidad / (estadisticas?.total || 1)) * 100)}%` }}
                         >
@@ -3837,13 +3840,13 @@ export default function Dashboard() {
                     </div>
                   ))}
                 </div>
-                
+
                 {/* Descartados separado */}
                 <div className="pt-4 border-t border-slate-100">
                   <div className="flex items-center gap-4">
                     <div className="w-28 text-sm text-slate-400 font-medium">Descartados</div>
                     <div className="flex-1 h-8 bg-slate-100 rounded-lg overflow-hidden">
-                      <div 
+                      <div
                         className="h-full bg-slate-400 transition-all duration-700 flex items-center justify-end pr-3"
                         style={{ width: `${Math.max(5, ((estadisticas?.descartados || 0) / (estadisticas?.total || 1)) * 100)}%` }}
                       >
@@ -3857,7 +3860,7 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
-            
+
             {/* Tab: Tendencia */}
             {activeTab === 'tendencia' && (
               <div className="space-y-4">
@@ -3889,7 +3892,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </div>
-                
+
                 <div data-chart-tendencia className="bg-white">
                   {datosGrafico.length > 0 ? (
                     tipoGrafico === 'linea' ? <LineChart data={datosGrafico} /> : <BarChart data={datosGrafico} />
@@ -3901,7 +3904,7 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
-            
+
             {/* Tab: Carreras */}
             {activeTab === 'carreras' && (
               <div className="space-y-4">
@@ -3932,7 +3935,7 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
-            
+
             {/* Tab: Medios */}
             {activeTab === 'medios' && (
               <div className="space-y-4">
@@ -3963,7 +3966,7 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
-            
+
             {/* Tab: Encargados */}
             {activeTab === 'encargados' && (isKeyMaster || user?.rol_id === 'superadmin' || isRector) && (
               <div className="space-y-4">
@@ -3973,7 +3976,7 @@ export default function Dashboard() {
                     {Object.keys(estadisticas?.porEncargado || {}).filter(k => k !== 'sin_asignar').length} encargados activos
                   </span>
                 </div>
-                
+
                 {/* Resumen rápido */}
                 <div className="grid grid-cols-3 gap-4 mb-4">
                   <div className="bg-violet-50 rounded-lg p-3 text-center">
@@ -3998,7 +4001,7 @@ export default function Dashboard() {
                     <p className="text-xs text-amber-600">Conversión promedio</p>
                   </div>
                 </div>
-                
+
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
@@ -4017,10 +4020,10 @@ export default function Dashboard() {
                         .sort((a, b) => (b[1].tasa || 0) - (a[1].tasa || 0))
                         .map(([id, data]) => {
                           // Calcular activos (no matriculados ni descartados)
-                          const activos = leadsReporte.filter(l => 
+                          const activos = leadsReporte.filter(l =>
                             l.asignado_a === id && !l.matriculado && !l.descartado
                           ).length
-                          
+
                           return (
                             <tr key={id} className="border-b border-slate-50 hover:bg-slate-50">
                               <td className="py-4">
@@ -4038,32 +4041,29 @@ export default function Dashboard() {
                               </td>
                               <td className="py-4 text-center text-slate-600 font-medium">{data.total}</td>
                               <td className="py-4 text-center">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                  activos > 5 ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
-                                }`}>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${activos > 5 ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                                  }`}>
                                   {activos}
                                 </span>
                               </td>
                               <td className="py-4 text-center text-emerald-600 font-bold">{data.matriculados}</td>
                               <td className="py-4 text-center">
-                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-bold ${
-                                  (data.tasa || 0) >= 25 ? 'bg-emerald-100 text-emerald-700' :
-                                  (data.tasa || 0) >= 15 ? 'bg-amber-100 text-amber-700' :
-                                  (data.tasa || 0) > 0 ? 'bg-orange-100 text-orange-700' :
-                                  'bg-slate-100 text-slate-500'
-                                }`}>
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-bold ${(data.tasa || 0) >= 25 ? 'bg-emerald-100 text-emerald-700' :
+                                    (data.tasa || 0) >= 15 ? 'bg-amber-100 text-amber-700' :
+                                      (data.tasa || 0) > 0 ? 'bg-orange-100 text-orange-700' :
+                                        'bg-slate-100 text-slate-500'
+                                  }`}>
                                   {data.tasa || 0}%
                                 </span>
                               </td>
                               <td className="py-4 text-right">
                                 <div className="flex items-center gap-2 justify-end">
                                   <div className="w-24 h-3 bg-slate-100 rounded-full overflow-hidden">
-                                    <div 
-                                      className={`h-full rounded-full transition-all ${
-                                        (data.tasa || 0) >= 25 ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' :
-                                        (data.tasa || 0) >= 15 ? 'bg-gradient-to-r from-amber-400 to-amber-500' :
-                                        'bg-gradient-to-r from-slate-300 to-slate-400'
-                                      }`}
+                                    <div
+                                      className={`h-full rounded-full transition-all ${(data.tasa || 0) >= 25 ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' :
+                                          (data.tasa || 0) >= 15 ? 'bg-gradient-to-r from-amber-400 to-amber-500' :
+                                            'bg-gradient-to-r from-slate-300 to-slate-400'
+                                        }`}
                                       style={{ width: `${Math.min(100, (data.tasa || 0) * 2)}%` }}
                                     />
                                   </div>
@@ -4074,7 +4074,7 @@ export default function Dashboard() {
                             </tr>
                           )
                         })}
-                      
+
                       {/* Fila de Sin Asignar si hay leads sin asignar */}
                       {estadisticas?.porEncargado?.['sin_asignar']?.total > 0 && (
                         <tr className="border-b border-slate-50 bg-amber-50/50">
@@ -4102,7 +4102,7 @@ export default function Dashboard() {
                       )}
                     </tbody>
                   </table>
-                  
+
                   {Object.keys(estadisticas?.porEncargado || {}).filter(k => k !== 'sin_asignar').length === 0 && (
                     <div className="text-center py-12">
                       <Icon name="Users" size={48} className="text-slate-300 mx-auto mb-4" />
@@ -4115,7 +4115,7 @@ export default function Dashboard() {
             )}
           </div>
         </div>
-        
+
         {/* Resumen rápido al final */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
@@ -4135,7 +4135,7 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
-          
+
           <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
             <h3 className="font-semibold text-slate-800 mb-4">Período Anterior</h3>
             <div className="space-y-3">
@@ -4164,7 +4164,7 @@ export default function Dashboard() {
   const FormulariosView = () => {
     const [editingForm, setEditingForm] = useState(null)
     const [localShowModal, setLocalShowModal] = useState(false)
-    
+
     const handleDeleteForm = async (formId) => {
       if (confirm('¿Eliminar formulario?')) {
         const result = await store.deleteFormulario(formId)
@@ -4179,12 +4179,12 @@ export default function Dashboard() {
         }
       }
     }
-    
+
     const handleEditForm = (form) => {
       setEditingForm(form)
       setLocalShowModal(true)
     }
-    
+
     const handleNewForm = () => {
       if (!puedeCrearFormulario()) {
         setLimiteAlerta({
@@ -4196,7 +4196,7 @@ export default function Dashboard() {
       setEditingForm(null)
       setLocalShowModal(true)
     }
-    
+
     const handleFormCreated = () => {
       loadData()
       setLocalShowModal(false)
@@ -4214,7 +4214,7 @@ export default function Dashboard() {
             <Icon name="Plus" size={20} /> Nuevo Formulario
           </button>
         </div>
-        
+
         {formularios.length === 0 ? (
           <div className="bg-white rounded-xl p-12 shadow-sm border border-slate-100 text-center">
             <div className="w-16 h-16 bg-violet-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -4239,7 +4239,7 @@ export default function Dashboard() {
                     {form.activo ? 'Activo' : 'Inactivo'}
                   </span>
                 </div>
-                
+
                 <div className="flex items-center gap-4 text-sm text-slate-500 mb-4">
                   <span className="flex items-center gap-1">
                     <Icon name="Users" size={14} />
@@ -4250,15 +4250,15 @@ export default function Dashboard() {
                     {form.campos_extra?.length || 0} campos
                   </span>
                 </div>
-                
+
                 <div className="flex gap-2">
-                  <button 
+                  <button
                     onClick={() => handleEditForm(form)}
                     className="flex-1 px-3 py-2 bg-violet-50 text-violet-600 rounded-lg text-sm font-medium hover:bg-violet-100 flex items-center justify-center gap-1"
                   >
                     <Icon name="Edit" size={14} /> Editar
                   </button>
-                  <button 
+                  <button
                     onClick={() => handleDeleteForm(form.id)}
                     className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-medium hover:bg-red-100"
                   >
@@ -4269,7 +4269,7 @@ export default function Dashboard() {
             ))}
           </div>
         )}
-        
+
         {/* Usar el nuevo ModalFormulario */}
         <ModalFormulario
           isOpen={localShowModal}
@@ -4301,25 +4301,25 @@ export default function Dashboard() {
       rol_id: 'encargado',
       activo: true
     })
-    
+
     // Auto-refresh para actualizar estados de presencia cada 30 segundos
     useEffect(() => {
       const refreshPresencia = async () => {
         await reloadFromSupabase()
         setUsuarios(store.getUsuarios(user?.id, isSuperAdmin))
       }
-      
+
       const interval = setInterval(refreshPresencia, 30 * 1000) // 30 segundos
-      
+
       return () => clearInterval(interval)
     }, [isSuperAdmin])
-    
+
     const refreshUsuarios = async () => {
       // Recargar desde Supabase para obtener usuarios actualizados
       await reloadFromSupabase()
       setUsuarios(store.getUsuarios(user?.id, isSuperAdmin))
     }
-    
+
     const openNewUser = () => {
       if (!puedeCrearUsuario()) {
         setLimiteAlerta({
@@ -4338,7 +4338,7 @@ export default function Dashboard() {
       })
       setLocalShowUserModal(true)
     }
-    
+
     const openEditUser = (targetUser) => {
       setLocalEditingUser(targetUser)
       setUserFormData({
@@ -4349,26 +4349,26 @@ export default function Dashboard() {
       })
       setLocalShowUserModal(true)
     }
-    
+
     const handleSaveUser = async () => {
       if (!userFormData.nombre || !userFormData.email) {
         alert('Nombre y email son requeridos')
         return
       }
-      
+
       // Validar email
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
       if (!emailRegex.test(userFormData.email)) {
         alert('Por favor ingresa un email válido')
         return
       }
-      
+
       // Validar contraseña para nuevo usuario
       if (!localEditingUser && (!userFormData.password || userFormData.password.length < 6)) {
         alert('La contraseña debe tener al menos 6 caracteres')
         return
       }
-      
+
       if (localEditingUser) {
         // ========== ACTUALIZAR USUARIO EXISTENTE ==========
         const updates = {
@@ -4384,7 +4384,7 @@ export default function Dashboard() {
       } else {
         // ========== CREAR NUEVO USUARIO ==========
         setInviteLoading(true)
-        
+
         try {
           const result = await inviteUser({
             nombre: userFormData.nombre,
@@ -4392,34 +4392,34 @@ export default function Dashboard() {
             password: userFormData.password,
             rol: userFormData.rol_id
           })
-          
+
           if (result.success) {
-            setNotification({ 
-              type: 'success', 
+            setNotification({
+              type: 'success',
               message: result.message || 'Invitación enviada correctamente'
             })
             setLocalShowUserModal(false)
             await refreshUsuarios()
           } else {
-            setNotification({ 
-              type: 'error', 
+            setNotification({
+              type: 'error',
               message: result.error || 'Error al invitar usuario'
             })
           }
         } catch (error) {
           console.error('Error invitando usuario:', error)
-          setNotification({ 
-            type: 'error', 
+          setNotification({
+            type: 'error',
             message: 'Error al invitar usuario: ' + error.message
           })
         } finally {
           setInviteLoading(false)
         }
       }
-      
+
       setTimeout(() => setNotification(null), 4000)
     }
-    
+
     const handleToggleActivo = (targetUser) => {
       // ========== VALIDACIONES CRÍTICAS ==========
       // No puede desactivarse a sí mismo
@@ -4427,7 +4427,7 @@ export default function Dashboard() {
         setNotification({ type: 'error', message: 'No puedes desactivarte a ti mismo' })
         return
       }
-      
+
       // Si se va a desactivar, verificar que no sea el único keymaster
       if (targetUser.activo && targetUser.rol_id === 'keymaster') {
         const keymasters = usuarios.filter(u => u.rol_id === 'keymaster' && u.activo)
@@ -4437,7 +4437,7 @@ export default function Dashboard() {
         }
       }
       // ============================================
-      
+
       // Si se va a desactivar (está activo) y tiene leads, mostrar modal
       if (targetUser.activo) {
         const leads = store.getLeadsPorUsuario(targetUser.id)
@@ -4447,17 +4447,17 @@ export default function Dashboard() {
           return
         }
       }
-      
+
       // Si no tiene leads o se está reactivando, hacer toggle directo
       store.toggleUsuarioActivo(targetUser.id)
       refreshUsuarios()
       setNotification({ type: 'info', message: targetUser.activo ? 'Usuario desactivado' : 'Usuario reactivado' })
       setTimeout(() => setNotification(null), 2000)
     }
-    
+
     const handleDeactivateUser = async () => {
       const { user: targetUser, leadsCount } = localShowDeactivateModal
-      
+
       // ========== VALIDACIONES CRÍTICAS ==========
       // No puede desactivarse a sí mismo
       if (targetUser.id === user?.id || targetUser.email === user?.email) {
@@ -4465,7 +4465,7 @@ export default function Dashboard() {
         setLocalShowDeactivateModal(null)
         return
       }
-      
+
       // No puede desactivar al único keymaster
       const keymasters = usuarios.filter(u => u.rol_id === 'keymaster' && u.activo)
       if (targetUser.rol_id === 'keymaster' && keymasters.length <= 1) {
@@ -4474,53 +4474,53 @@ export default function Dashboard() {
         return
       }
       // ============================================
-      
+
       // Si tiene leads y no seleccionó migración
       if (leadsCount > 0 && !migrateToUser) {
         alert('Debes seleccionar un encargado para migrar los leads')
         return
       }
-      
+
       // Migrar leads
       if (leadsCount > 0 && migrateToUser) {
         setNotification({ type: 'info', message: 'Migrando leads...' })
-        
+
         const resultado = await store.migrarLeads(targetUser.id, migrateToUser, user?.id)
-        
+
         if (!resultado || resultado.success === false) {
-          setNotification({ 
-            type: 'error', 
-            message: resultado?.error || 'Error al migrar leads' 
+          setNotification({
+            type: 'error',
+            message: resultado?.error || 'Error al migrar leads'
           })
           return
         }
-        
-        setNotification({ 
-          type: 'success', 
-          message: `${resultado.migrados} leads migrados correctamente` 
+
+        setNotification({
+          type: 'success',
+          message: `${resultado.migrados} leads migrados correctamente`
         })
-        
+
         await new Promise(resolve => setTimeout(resolve, 500))
       }
-      
+
       // Desactivar usuario
       store.toggleUsuarioActivo(targetUser.id)
       setNotification({ type: 'success', message: 'Usuario desactivado correctamente' })
-      
+
       setLocalShowDeactivateModal(null)
       refreshUsuarios()
       setTimeout(() => setNotification(null), 3000)
     }
-    
+
     const openDeleteModal = (user) => {
       const leads = store.getLeadsPorUsuario(user.id)
       setLocalShowDeleteModal({ user, leadsCount: leads.length })
       setMigrateToUser('')
     }
-    
+
     const handleDeleteUser = async () => {
       const { user: targetUser, leadsCount } = localShowDeleteModal
-      
+
       // ========== VALIDACIONES CRÍTICAS ==========
       // No puede eliminarse a sí mismo
       if (targetUser.id === user?.id || targetUser.email === user?.email) {
@@ -4528,7 +4528,7 @@ export default function Dashboard() {
         setLocalShowDeleteModal(null)
         return
       }
-      
+
       // No puede eliminar al único keymaster
       const keymasters = usuarios.filter(u => u.rol_id === 'keymaster' && u.activo)
       if (targetUser.rol_id === 'keymaster' && keymasters.length <= 1) {
@@ -4537,40 +4537,40 @@ export default function Dashboard() {
         return
       }
       // ============================================
-      
+
       // Si tiene leads y no seleccionó migración
       if (leadsCount > 0 && !migrateToUser) {
         alert('Debes seleccionar un encargado para migrar los leads')
         return
       }
-      
+
       // Migrar leads si es necesario
       if (leadsCount > 0 && migrateToUser) {
         setNotification({ type: 'info', message: 'Migrando leads...' })
-        
+
         const resultado = await store.migrarLeads(localShowDeleteModal.user.id, migrateToUser, user?.id)
-        
+
         if (!resultado || resultado.success === false) {
-          setNotification({ 
-            type: 'error', 
-            message: resultado?.error || 'Error al migrar leads' 
+          setNotification({
+            type: 'error',
+            message: resultado?.error || 'Error al migrar leads'
           })
           return // No continuar si falla la migración
         }
-        
-        setNotification({ 
-          type: 'success', 
-          message: `${resultado.migrados} leads migrados correctamente` 
+
+        setNotification({
+          type: 'success',
+          message: `${resultado.migrados} leads migrados correctamente`
         })
-        
+
         // Pequeña pausa para que el usuario vea el mensaje
         await new Promise(resolve => setTimeout(resolve, 500))
       }
-      
+
       // Eliminar usuario
       setNotification({ type: 'info', message: 'Eliminando usuario...' })
       const result = await store.deleteUsuario(targetUser.id, user?.id)
-      
+
       if (result.success) {
         setNotification({ type: 'success', message: 'Usuario eliminado correctamente' })
         // Recargar desde Supabase
@@ -4578,19 +4578,19 @@ export default function Dashboard() {
       } else {
         setNotification({ type: 'error', message: result.error })
       }
-      
+
       setLocalShowDeleteModal(null)
       refreshUsuarios()
       setTimeout(() => setNotification(null), 3000)
     }
-    
-    const encargadosParaMigrar = usuarios.filter(u => 
-      u.rol_id === 'encargado' && 
-      u.activo && 
+
+    const encargadosParaMigrar = usuarios.filter(u =>
+      u.rol_id === 'encargado' &&
+      u.activo &&
       u.id !== localShowDeleteModal?.user?.id &&
       u.id !== localShowDeactivateModal?.user?.id
     )
-    
+
     const ROLES_DISPONIBLES = [
       ...(isSuperAdmin ? [{ id: 'superadmin', nombre: 'Super Administrador', desc: 'Acceso total del propietario (oculto)' }] : []),
       { id: 'keymaster', nombre: 'Key Master', desc: 'Control total del sistema' },
@@ -4599,26 +4599,26 @@ export default function Dashboard() {
       { id: 'asistente', nombre: 'Asistente/Secretaría', desc: 'Solo crea leads' },
       { id: 'rector', nombre: 'Rector', desc: 'Solo ve reportes' },
     ]
-    
+
     // Verificar si puede eliminar un usuario
     const puedeEliminar = (targetUser) => {
       // CRÍTICO: No puede eliminarse a sí mismo
       if (targetUser.id === user?.id) return false
       if (targetUser.email === user?.email) return false
       if (targetUser.auth_id === user?.auth_id) return false
-      
+
       // No puede eliminar al único keymaster
       const keymasters = usuarios.filter(u => u.rol_id === 'keymaster' && u.activo)
       if (targetUser.rol_id === 'keymaster' && keymasters.length <= 1) return false
-      
+
       // Solo superadmin puede eliminar keymaster
       if (targetUser.rol_id === 'keymaster' && !isSuperAdmin) return false
       // Solo superadmin puede eliminar superadmin
       if (targetUser.rol_id === 'superadmin' && !isSuperAdmin) return false
-      
+
       return true
     }
-    
+
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
@@ -4660,26 +4660,24 @@ export default function Dashboard() {
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         <div className="relative">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${
-                            u.rol_id === 'keymaster' ? 'bg-violet-500' :
-                            u.rol_id === 'rector' ? 'bg-amber-500' :
-                            u.rol_id === 'encargado' ? 'bg-blue-500' :
-                            'bg-slate-400'
-                          }`}>
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${u.rol_id === 'keymaster' ? 'bg-violet-500' :
+                              u.rol_id === 'rector' ? 'bg-amber-500' :
+                                u.rol_id === 'encargado' ? 'bg-blue-500' :
+                                  'bg-slate-400'
+                            }`}>
                             {u.nombre?.charAt(0)?.toUpperCase()}
                           </div>
                           {/* Indicador de presencia */}
                           {u.activo && (
-                            <span 
-                              className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white ${
-                                u.ultimo_activo && (Date.now() - new Date(u.ultimo_activo).getTime()) < 10 * 60 * 1000
-                                  ? 'bg-emerald-500' 
+                            <span
+                              className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white ${u.ultimo_activo && (Date.now() - new Date(u.ultimo_activo).getTime()) < 10 * 60 * 1000
+                                  ? 'bg-emerald-500'
                                   : 'bg-slate-300'
-                              }`}
+                                }`}
                               title={
                                 u.ultimo_activo && (Date.now() - new Date(u.ultimo_activo).getTime()) < 10 * 60 * 1000
                                   ? 'En línea'
-                                  : u.ultimo_activo 
+                                  : u.ultimo_activo
                                     ? `Última actividad: ${new Date(u.ultimo_activo).toLocaleString('es-CL')}`
                                     : 'Sin actividad'
                               }
@@ -4709,12 +4707,11 @@ export default function Dashboard() {
                       </div>
                     </td>
                     <td className="p-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        u.rol_id === 'keymaster' ? 'bg-violet-100 text-violet-700' :
-                        u.rol_id === 'rector' ? 'bg-amber-100 text-amber-700' :
-                        u.rol_id === 'encargado' ? 'bg-blue-100 text-blue-700' :
-                        'bg-slate-100 text-slate-700'
-                      }`}>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${u.rol_id === 'keymaster' ? 'bg-violet-100 text-violet-700' :
+                          u.rol_id === 'rector' ? 'bg-amber-100 text-amber-700' :
+                            u.rol_id === 'encargado' ? 'bg-blue-100 text-blue-700' :
+                              'bg-slate-100 text-slate-700'
+                        }`}>
                         {ROLES_DISPONIBLES.find(r => r.id === u.rol_id)?.nombre || u.rol_id}
                       </span>
                     </td>
@@ -4728,11 +4725,10 @@ export default function Dashboard() {
                     <td className="p-4 text-center">
                       <button
                         onClick={() => handleToggleActivo(u)}
-                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                          u.activo 
-                            ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' 
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${u.activo
+                            ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
                             : 'bg-red-100 text-red-700 hover:bg-red-200'
-                        }`}
+                          }`}
                       >
                         {u.activo ? 'Activo' : 'Inactivo'}
                       </button>
@@ -4786,7 +4782,7 @@ export default function Dashboard() {
             </tbody>
           </table>
         </div>
-        
+
         {/* Modal Crear/Editar Usuario */}
         {localShowUserModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -4799,7 +4795,7 @@ export default function Dashboard() {
                   <Icon name="X" size={24} />
                 </button>
               </div>
-              
+
               {/* Mensaje informativo para nuevos usuarios */}
               {!localEditingUser && (
                 <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -4812,26 +4808,26 @@ export default function Dashboard() {
                   </div>
                 </div>
               )}
-              
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Nombre completo *</label>
                   <input
                     type="text"
                     value={userFormData.nombre}
-                    onChange={e => setUserFormData({...userFormData, nombre: e.target.value})}
+                    onChange={e => setUserFormData({ ...userFormData, nombre: e.target.value })}
                     className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                     placeholder="Juan Pérez"
                     disabled={inviteLoading}
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Email *</label>
                   <input
                     type="email"
                     value={userFormData.email}
-                    onChange={e => setUserFormData({...userFormData, email: e.target.value})}
+                    onChange={e => setUserFormData({ ...userFormData, email: e.target.value })}
                     className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                     placeholder="usuario@institucion.com"
                     disabled={inviteLoading || localEditingUser}
@@ -4840,14 +4836,14 @@ export default function Dashboard() {
                     <p className="text-xs text-slate-400 mt-1">El email no se puede cambiar</p>
                   )}
                 </div>
-                
+
                 {!localEditingUser && (
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Contraseña *</label>
                     <input
                       type="password"
                       value={userFormData.password}
-                      onChange={e => setUserFormData({...userFormData, password: e.target.value})}
+                      onChange={e => setUserFormData({ ...userFormData, password: e.target.value })}
                       className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                       placeholder="Mínimo 6 caracteres"
                       disabled={inviteLoading}
@@ -4855,12 +4851,12 @@ export default function Dashboard() {
                     <p className="text-xs text-slate-400 mt-1">Deberás comunicar esta contraseña al usuario</p>
                   </div>
                 )}
-                
+
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Rol *</label>
                   <select
                     value={userFormData.rol_id}
-                    onChange={e => setUserFormData({...userFormData, rol_id: e.target.value})}
+                    onChange={e => setUserFormData({ ...userFormData, rol_id: e.target.value })}
                     className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                     disabled={inviteLoading}
                   >
@@ -4872,14 +4868,14 @@ export default function Dashboard() {
                     {ROLES_DISPONIBLES.find(r => r.id === userFormData.rol_id)?.desc}
                   </p>
                 </div>
-                
+
                 {localEditingUser && (
                   <div className="flex items-center gap-3">
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
                         type="checkbox"
                         checked={userFormData.activo}
-                        onChange={e => setUserFormData({...userFormData, activo: e.target.checked})}
+                        onChange={e => setUserFormData({ ...userFormData, activo: e.target.checked })}
                         className="sr-only peer"
                       />
                       <div className="w-11 h-6 bg-slate-200 peer-focus:ring-2 peer-focus:ring-violet-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>
@@ -4888,7 +4884,7 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
-              
+
               <div className="flex gap-3 mt-6">
                 <button
                   onClick={() => setLocalShowUserModal(false)}
@@ -4920,7 +4916,7 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-        
+
         {/* Modal Eliminar Usuario */}
         {localShowDeleteModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -4934,12 +4930,12 @@ export default function Dashboard() {
                   <p className="text-slate-500 text-sm">Esta acción no se puede deshacer</p>
                 </div>
               </div>
-              
+
               <div className="bg-slate-50 rounded-xl p-4 mb-4">
                 <p className="font-semibold text-slate-800">{localShowDeleteModal.user.nombre}</p>
                 <p className="text-sm text-slate-500">{localShowDeleteModal.user.email}</p>
               </div>
-              
+
               {localShowDeleteModal.leadsCount > 0 && (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
                   <div className="flex items-center gap-2 mb-3">
@@ -4948,11 +4944,11 @@ export default function Dashboard() {
                       Este usuario tiene {localShowDeleteModal.leadsCount} lead{localShowDeleteModal.leadsCount !== 1 ? 's' : ''} asignado{localShowDeleteModal.leadsCount !== 1 ? 's' : ''}
                     </p>
                   </div>
-                  
+
                   <p className="text-sm text-amber-700 mb-3">
                     Antes de eliminar, debes migrar los leads a otro encargado. Se mantendrán todos los estados y se generará un reporte para el nuevo encargado.
                   </p>
-                  
+
                   <label className="block text-sm font-medium text-amber-800 mb-2">
                     Migrar leads a: *
                   </label>
@@ -4970,7 +4966,7 @@ export default function Dashboard() {
                   </select>
                 </div>
               )}
-              
+
               <div className="flex gap-3">
                 <button
                   onClick={() => setLocalShowDeleteModal(null)}
@@ -4990,7 +4986,7 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-        
+
         {/* Modal Desactivar Usuario con Migración */}
         {localShowDeactivateModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -5004,12 +5000,12 @@ export default function Dashboard() {
                   <p className="text-slate-500 text-sm">El usuario no podrá acceder al sistema</p>
                 </div>
               </div>
-              
+
               <div className="bg-slate-50 rounded-xl p-4 mb-4">
                 <p className="font-semibold text-slate-800">{localShowDeactivateModal.user.nombre}</p>
                 <p className="text-sm text-slate-500">{localShowDeactivateModal.user.email}</p>
               </div>
-              
+
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Icon name="AlertCircle" className="text-amber-600" size={20} />
@@ -5017,11 +5013,11 @@ export default function Dashboard() {
                     Este usuario tiene {localShowDeactivateModal.leadsCount} lead{localShowDeactivateModal.leadsCount !== 1 ? 's' : ''} asignado{localShowDeactivateModal.leadsCount !== 1 ? 's' : ''}
                   </p>
                 </div>
-                
+
                 <p className="text-sm text-amber-700 mb-3">
                   Antes de desactivar, debes migrar los leads a otro encargado para que sigan siendo atendidos.
                 </p>
-                
+
                 <label className="block text-sm font-medium text-amber-800 mb-2">
                   Migrar leads a: *
                 </label>
@@ -5038,7 +5034,7 @@ export default function Dashboard() {
                   ))}
                 </select>
               </div>
-              
+
               <div className="flex gap-3">
                 <button
                   onClick={() => setLocalShowDeactivateModal(null)}
@@ -5089,7 +5085,7 @@ export default function Dashboard() {
         red: { bg: 'bg-red-500', light: 'bg-red-100' },
       }
       const c = colorClasses[porcentaje >= 90 ? 'red' : porcentaje >= 70 ? 'amber' : color]
-      
+
       return (
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
@@ -5097,7 +5093,7 @@ export default function Dashboard() {
             <span className="font-medium text-slate-800">{usado} / {maximo}</span>
           </div>
           <div className={`h-3 ${c.light} rounded-full overflow-hidden`}>
-            <div 
+            <div
               className={`h-full ${c.bg} rounded-full transition-all duration-500`}
               style={{ width: `${porcentaje}%` }}
             />
@@ -5125,7 +5121,7 @@ Datos actuales:
 - Usuarios actuales: ${uso.usuarios}
 
 Gracias.`)
-      
+
       window.open(`mailto:contacto@admitio.cl?subject=${asunto}&body=${cuerpo}`, '_blank')
     }
 
@@ -5181,27 +5177,27 @@ Gracias.`)
               {planActual.nombre}
             </span>
           </div>
-          
+
           <p className="text-slate-500 mb-6">{planActual.descripcion}</p>
 
           {/* Barras de uso */}
           <div className="space-y-6">
-            <BarraUso 
-              label="Leads" 
-              usado={uso.leads} 
-              maximo={limites.max_leads} 
+            <BarraUso
+              label="Leads"
+              usado={uso.leads}
+              maximo={limites.max_leads}
               color="violet"
             />
-            <BarraUso 
-              label="Usuarios" 
-              usado={uso.usuarios} 
-              maximo={limites.max_usuarios} 
+            <BarraUso
+              label="Usuarios"
+              usado={uso.usuarios}
+              maximo={limites.max_usuarios}
               color="blue"
             />
-            <BarraUso 
-              label="Formularios" 
-              usado={uso.formularios} 
-              maximo={limites.max_formularios} 
+            <BarraUso
+              label="Formularios"
+              usado={uso.formularios}
+              maximo={limites.max_formularios}
               color="emerald"
             />
           </div>
@@ -5302,29 +5298,29 @@ Gracias.`)
     const [copiado, setCopiado] = useState(false)
     const [showScript, setShowScript] = useState(false)
     const [mostrarKey, setMostrarKey] = useState(false)
-    
+
     // Cargar API Key existente
     useEffect(() => {
       cargarApiKey()
     }, [user?.institucion_id])
-    
+
     const cargarApiKey = async () => {
       if (!user?.institucion_id) {
         console.log('No hay institucion_id, no se puede cargar API Key')
         setLoading(false)
         return
       }
-      
+
       console.log('Cargando API Key para institucion:', user.institucion_id)
-      
+
       try {
         // Usar función RPC para bypass RLS seguro
         const { data, error } = await supabase.rpc('obtener_api_key', {
           p_institucion_id: user.institucion_id
         })
-        
+
         console.log('Resultado obtener_api_key:', { data, error })
-        
+
         if (error) {
           console.error('Error en RPC:', error)
           // Fallback: intentar query directo
@@ -5334,7 +5330,7 @@ Gracias.`)
             .eq('institucion_id', user.institucion_id)
             .eq('activa', true)
             .order('created_at', { ascending: false })
-          
+
           if (directData && directData.length > 0) {
             setApiKey(directData[0])
           }
@@ -5352,7 +5348,7 @@ Gracias.`)
       }
       setLoading(false)
     }
-    
+
     const generarNuevaKey = async () => {
       setGenerando(true)
       try {
@@ -5360,17 +5356,17 @@ Gracias.`)
           p_institucion_id: user?.institucion_id,
           p_usuario_id: user?.id
         })
-        
+
         console.log('Resultado generar key:', data, error)
-        
+
         if (error) throw error
-        
+
         if (data && data.success) {
           // Guardar la key generada y mostrarla
-          setApiKey({ 
-            api_key: data.api_key, 
+          setApiKey({
+            api_key: data.api_key,
             created_at: new Date().toISOString(),
-            id: data.key_id 
+            id: data.key_id
           })
           setMostrarKey(true) // Mostrar la key recién generada
           setNotification({ type: 'success', message: 'API Key generada correctamente' })
@@ -5383,7 +5379,7 @@ Gracias.`)
       }
       setGenerando(false)
     }
-    
+
     const copiarAlPortapapeles = async (texto) => {
       try {
         await navigator.clipboard.writeText(texto)
@@ -5401,15 +5397,15 @@ Gracias.`)
         setTimeout(() => setCopiado(false), 2000)
       }
     }
-    
+
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://tu-proyecto.supabase.co'
     const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'tu-anon-key'
-    
+
     // Ocultar parte de la key para seguridad
-    const keyOculta = apiKey?.api_key 
+    const keyOculta = apiKey?.api_key
       ? `${apiKey.api_key.substring(0, 8)}${'•'.repeat(32)}${apiKey.api_key.substring(apiKey.api_key.length - 8)}`
       : ''
-    
+
     const scriptConfig = `// ============================================
 // CONFIGURACIÓN - EDITAR ESTOS VALORES
 // ============================================
@@ -5422,7 +5418,7 @@ const CONFIG = {
 function getSupabaseAnonKey() {
   return '${supabaseAnonKey}';
 }`
-    
+
     if (loading) {
       return (
         <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
@@ -5436,7 +5432,7 @@ function getSupabaseAnonKey() {
         </div>
       )
     }
-    
+
     return (
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="p-6 bg-gradient-to-r from-emerald-500 to-teal-500 text-white">
@@ -5450,7 +5446,7 @@ function getSupabaseAnonKey() {
             </div>
           </div>
         </div>
-        
+
         <div className="p-6 space-y-6">
           {/* Estado de la API Key */}
           {!apiKey ? (
@@ -5483,7 +5479,7 @@ function getSupabaseAnonKey() {
                     Activa desde {new Date(apiKey.created_at).toLocaleDateString()}
                   </span>
                 </div>
-                
+
                 {/* Input con la key */}
                 <div className="flex items-center gap-2 mb-3">
                   <div className="flex-1 relative">
@@ -5503,31 +5499,30 @@ function getSupabaseAnonKey() {
                   </div>
                   <button
                     onClick={() => copiarAlPortapapeles(apiKey.api_key)}
-                    className={`px-4 py-3 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
-                      copiado 
-                        ? 'bg-emerald-600 text-white' 
+                    className={`px-4 py-3 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${copiado
+                        ? 'bg-emerald-600 text-white'
                         : 'bg-emerald-100 hover:bg-emerald-200 text-emerald-700'
-                    }`}
+                      }`}
                   >
                     <Icon name={copiado ? 'Check' : 'Copy'} size={16} />
                     {copiado ? '¡Copiado!' : 'Copiar'}
                   </button>
                 </div>
-                
+
                 {/* Tip de seguridad */}
                 <p className="text-xs text-emerald-600 flex items-center gap-1">
                   <Icon name="Shield" size={12} />
                   Guarda esta key en un lugar seguro. No la compartas públicamente.
                 </p>
               </div>
-              
+
               {/* Instrucciones */}
               <div className="space-y-4">
                 <h4 className="font-semibold text-slate-800 flex items-center gap-2">
                   <Icon name="BookOpen" size={18} className="text-slate-400" />
                   Instrucciones de configuración
                 </h4>
-                
+
                 <ol className="space-y-3 text-sm text-slate-600">
                   <li className="flex gap-3">
                     <span className="w-6 h-6 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center flex-shrink-0 font-medium">1</span>
@@ -5551,7 +5546,7 @@ function getSupabaseAnonKey() {
                   </li>
                 </ol>
               </div>
-              
+
               {/* Formato de columnas */}
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
                 <h5 className="font-medium text-amber-800 mb-2 flex items-center gap-2">
@@ -5567,7 +5562,7 @@ function getSupabaseAnonKey() {
                 </div>
                 <p className="text-xs text-amber-600 mt-2">* Campo obligatorio. La primera fila debe ser el encabezado.</p>
               </div>
-              
+
               {/* Botón para ver/descargar script */}
               <div className="flex gap-3">
                 <button
@@ -5586,7 +5581,7 @@ function getSupabaseAnonKey() {
                   Descargar
                 </a>
               </div>
-              
+
               {/* Script expandible */}
               {showScript && (
                 <div className="relative">
@@ -5601,7 +5596,7 @@ function getSupabaseAnonKey() {
                   </button>
                 </div>
               )}
-              
+
               {/* Regenerar key */}
               <div className="pt-4 border-t border-slate-100">
                 <button
@@ -5632,13 +5627,13 @@ function getSupabaseAnonKey() {
     const [procesando, setProcesando] = useState(null)
     const [filtro, setFiltro] = useState('pendientes') // pendientes, todos
     const [stats, setStats] = useState({ pendientes: 0, sinConflicto: 0, conConflicto: 0 })
-    
+
     const carreras = store.getCarreras() || []
-    
+
     useEffect(() => {
       cargarImportaciones()
     }, [filtro])
-    
+
     const cargarImportaciones = async () => {
       setLoading(true)
       try {
@@ -5647,23 +5642,23 @@ function getSupabaseAnonKey() {
           .select('*')
           .eq('institucion_id', user?.institucion_id)
           .order('created_at', { ascending: false })
-        
+
         if (filtro === 'pendientes') {
           query = query.eq('estado', 'pendiente')
         }
-        
+
         const { data, error } = await query.limit(100)
-        
+
         if (error) throw error
         setImportaciones(data || [])
-        
+
         // Cargar stats
         const { data: statsData } = await supabase
           .from('v_stats_importacion')
           .select('*')
           .eq('institucion_id', user?.institucion_id)
           .single()
-        
+
         if (statsData) {
           setStats({
             pendientes: statsData.pendientes || 0,
@@ -5676,7 +5671,7 @@ function getSupabaseAnonKey() {
       }
       setLoading(false)
     }
-    
+
     const aprobarLead = async (importacion, carreraId = null, guardarMapeo = false) => {
       setProcesando(importacion.id)
       try {
@@ -5686,9 +5681,9 @@ function getSupabaseAnonKey() {
           p_carrera_id: carreraId,
           p_guardar_mapeo: guardarMapeo
         })
-        
+
         if (error) throw error
-        
+
         if (data.success) {
           setNotification({ type: 'success', message: 'Lead aprobado correctamente' })
           cargarImportaciones()
@@ -5699,19 +5694,19 @@ function getSupabaseAnonKey() {
       }
       setProcesando(null)
     }
-    
+
     const rechazarLead = async (importacionId) => {
       if (!confirm('¿Rechazar este lead? No se creará en el sistema.')) return
-      
+
       setProcesando(importacionId)
       try {
         const { data, error } = await supabase.rpc('rechazar_lead_importado', {
           p_lead_importado_id: importacionId,
           p_usuario_id: user?.id
         })
-        
+
         if (error) throw error
-        
+
         setNotification({ type: 'info', message: 'Lead rechazado' })
         cargarImportaciones()
       } catch (e) {
@@ -5719,7 +5714,7 @@ function getSupabaseAnonKey() {
       }
       setProcesando(null)
     }
-    
+
     const resolverDuplicado = async (importacionId, accion) => {
       setProcesando(importacionId)
       try {
@@ -5746,19 +5741,19 @@ function getSupabaseAnonKey() {
       }
       setProcesando(null)
     }
-    
+
     const aprobarTodosSinConflicto = async () => {
       if (!confirm(`¿Aprobar ${stats.sinConflicto} leads sin conflictos?`)) return
-      
+
       setProcesando('todos')
       try {
         const { data, error } = await supabase.rpc('aprobar_leads_sin_conflicto', {
           p_institucion_id: user?.institucion_id,
           p_usuario_id: user?.id
         })
-        
+
         if (error) throw error
-        
+
         setNotification({ type: 'success', message: `${data.aprobados} leads aprobados` })
         cargarImportaciones()
         loadData()
@@ -5767,16 +5762,16 @@ function getSupabaseAnonKey() {
       }
       setProcesando(null)
     }
-    
+
     // Componente para card de lead importado
     const LeadImportadoCard = ({ item }) => {
       const datos = item.datos_raw || {}
       const [carreraSeleccionada, setCarreraSeleccionada] = useState(item.carrera_mapeada_id || '')
       const [guardarMapeo, setGuardarMapeo] = useState(false)
-      
+
       const tieneConflictoCarrera = item.tipo_conflicto === 'carrera_no_existe' || item.tipo_conflicto === 'multiple'
       const tieneConflictoDuplicado = item.tipo_conflicto === 'duplicado_email' || item.tipo_conflicto === 'duplicado_telefono'
-      
+
       return (
         <div className={`bg-white rounded-xl border ${item.tiene_conflicto ? 'border-amber-200' : 'border-slate-200'} overflow-hidden`}>
           {/* Header con estado */}
@@ -5801,7 +5796,7 @@ function getSupabaseAnonKey() {
               {new Date(item.created_at).toLocaleString()}
             </span>
           </div>
-          
+
           {/* Datos del lead */}
           <div className="p-4 space-y-3">
             <div className="grid grid-cols-2 gap-3 text-sm">
@@ -5824,7 +5819,7 @@ function getSupabaseAnonKey() {
                 </span>
               </div>
             </div>
-            
+
             {/* Conflicto duplicado */}
             {tieneConflictoDuplicado && item.conflicto_detalles && (
               <div className="bg-amber-50 rounded-lg p-3">
@@ -5859,7 +5854,7 @@ function getSupabaseAnonKey() {
                 </div>
               </div>
             )}
-            
+
             {/* Conflicto carrera */}
             {tieneConflictoCarrera && (
               <div className="bg-amber-50 rounded-lg p-3">
@@ -5887,7 +5882,7 @@ function getSupabaseAnonKey() {
                 </label>
               </div>
             )}
-            
+
             {/* Acciones */}
             {!tieneConflictoDuplicado && (
               <div className="flex gap-2 pt-2">
@@ -5916,7 +5911,7 @@ function getSupabaseAnonKey() {
         </div>
       )
     }
-    
+
     return (
       <div className="space-y-6">
         {/* Header */}
@@ -5945,7 +5940,7 @@ function getSupabaseAnonKey() {
             )}
           </div>
         </div>
-        
+
         {/* Filtros */}
         <div className="flex gap-2">
           <button
@@ -5967,7 +5962,7 @@ function getSupabaseAnonKey() {
             <Icon name="RefreshCw" size={18} />
           </button>
         </div>
-        
+
         {/* Lista */}
         {loading ? (
           <div className="text-center py-12">
@@ -6008,18 +6003,18 @@ function getSupabaseAnonKey() {
     const [importData, setImportData] = useState(null)
     const [importError, setImportError] = useState(null)
     const [deleteError, setDeleteError] = useState(null)
-    
+
     const carreras = store.getCarreras() || []
-    
-    const carrerasFiltradas = carreras.filter(c => 
+
+    const carrerasFiltradas = carreras.filter(c =>
       c.nombre?.toLowerCase().includes(searchTerm.toLowerCase())
     )
-    
+
     // Contar leads por carrera
     const leadsCount = (carreraId) => {
       return (consultas || []).filter(c => c.carrera_id === carreraId).length
     }
-    
+
     // Colores disponibles para carreras
     const coloresDisponibles = [
       { id: 'bg-violet-500', nombre: 'Violeta', hex: '#8b5cf6' },
@@ -6033,7 +6028,7 @@ function getSupabaseAnonKey() {
       { id: 'bg-indigo-500', nombre: 'Índigo', hex: '#6366f1' },
       { id: 'bg-teal-500', nombre: 'Teal', hex: '#14b8a6' },
     ]
-    
+
     const handleCreate = async (data) => {
       const result = await store.createCarrera(data)
       if (result?.error) {
@@ -6046,7 +6041,7 @@ function getSupabaseAnonKey() {
         loadData()
       }
     }
-    
+
     const handleUpdate = async (id, data) => {
       const result = await store.updateCarrera(id, data)
       if (result?.error) {
@@ -6058,7 +6053,7 @@ function getSupabaseAnonKey() {
         loadData()
       }
     }
-    
+
     const handleDelete = async (id) => {
       const result = await store.deleteCarrera(id)
       if (result.error === 'TIENE_LEADS') {
@@ -6072,23 +6067,23 @@ function getSupabaseAnonKey() {
         loadData()
       }
     }
-    
+
     const handleFileUpload = (e) => {
       const file = e.target.files[0]
       if (!file) return
-      
+
       const reader = new FileReader()
       reader.onload = (event) => {
         try {
           const text = event.target.result
           const lines = text.split('\n').filter(line => line.trim())
-          
+
           // Detectar si tiene header
           const firstLine = lines[0].toLowerCase()
           const hasHeader = firstLine.includes('nombre') || firstLine.includes('carrera') || firstLine.includes('curso')
-          
+
           const dataLines = hasHeader ? lines.slice(1) : lines
-          
+
           const carreras = dataLines.map((line, idx) => {
             const cols = line.split(/[,;\t]/).map(c => c.trim().replace(/"/g, ''))
             return {
@@ -6096,12 +6091,12 @@ function getSupabaseAnonKey() {
               color: cols[1] || coloresDisponibles[idx % coloresDisponibles.length].id
             }
           }).filter(c => c.nombre)
-          
+
           if (carreras.length === 0) {
             setImportError('No se encontraron datos válidos en el archivo')
             return
           }
-          
+
           setImportData(carreras)
           setImportError(null)
         } catch (err) {
@@ -6110,10 +6105,10 @@ function getSupabaseAnonKey() {
       }
       reader.readAsText(file)
     }
-    
+
     const handleImport = async () => {
       if (!importData || importData.length === 0) return
-      
+
       const result = await store.importarCarreras(importData)
       if (result?.error) {
         setImportError(result.error)
@@ -6124,7 +6119,7 @@ function getSupabaseAnonKey() {
         loadData()
       }
     }
-    
+
     const handleExport = () => {
       const csv = 'nombre,color\n' + carreras.map(c => `"${c.nombre}","${c.color}"`).join('\n')
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -6133,12 +6128,12 @@ function getSupabaseAnonKey() {
       link.download = `carreras_${new Date().toISOString().split('T')[0]}.csv`
       link.click()
     }
-    
+
     // Modal de Crear/Editar
     const ProgramaModal = ({ programa, onSave, onClose }) => {
       const [nombre, setNombre] = useState(programa?.nombre || '')
       const [color, setColor] = useState(programa?.color || 'bg-violet-500')
-      
+
       return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
@@ -6152,7 +6147,7 @@ function getSupabaseAnonKey() {
                 </button>
               </div>
             </div>
-            
+
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -6167,7 +6162,7 @@ function getSupabaseAnonKey() {
                   autoFocus
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Color identificador
@@ -6177,16 +6172,15 @@ function getSupabaseAnonKey() {
                     <button
                       key={c.id}
                       onClick={() => setColor(c.id)}
-                      className={`w-full aspect-square rounded-lg ${c.id} transition-all ${
-                        color === c.id ? 'ring-2 ring-offset-2 ring-slate-800 scale-110' : 'hover:scale-105'
-                      }`}
+                      className={`w-full aspect-square rounded-lg ${c.id} transition-all ${color === c.id ? 'ring-2 ring-offset-2 ring-slate-800 scale-110' : 'hover:scale-105'
+                        }`}
                       title={c.nombre}
                     />
                   ))}
                 </div>
               </div>
             </div>
-            
+
             <div className="p-6 border-t border-slate-100 flex justify-end gap-3">
               <button
                 onClick={onClose}
@@ -6206,7 +6200,7 @@ function getSupabaseAnonKey() {
         </div>
       )
     }
-    
+
     return (
       <div className="space-y-6">
         {/* Header */}
@@ -6248,7 +6242,7 @@ function getSupabaseAnonKey() {
             </div>
           </div>
         </div>
-        
+
         {/* Alerta de error */}
         {deleteError && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3">
@@ -6259,7 +6253,7 @@ function getSupabaseAnonKey() {
             </button>
           </div>
         )}
-        
+
         {/* Búsqueda */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
           <div className="relative">
@@ -6273,7 +6267,7 @@ function getSupabaseAnonKey() {
             />
           </div>
         </div>
-        
+
         {/* Lista de programas */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
           {carrerasFiltradas.length === 0 ? (
@@ -6316,20 +6310,18 @@ function getSupabaseAnonKey() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className={`px-2 py-1 rounded-full text-sm ${
-                        leadsCount(carrera.id) > 0 
-                          ? 'bg-violet-100 text-violet-700' 
+                      <span className={`px-2 py-1 rounded-full text-sm ${leadsCount(carrera.id) > 0
+                          ? 'bg-violet-100 text-violet-700'
                           : 'bg-slate-100 text-slate-500'
-                      }`}>
+                        }`}>
                         {leadsCount(carrera.id)}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className={`px-2 py-1 rounded-full text-xs ${
-                        carrera.activa !== false
+                      <span className={`px-2 py-1 rounded-full text-xs ${carrera.activa !== false
                           ? 'bg-emerald-100 text-emerald-700'
                           : 'bg-slate-100 text-slate-500'
-                      }`}>
+                        }`}>
                         {carrera.activa !== false ? 'Activo' : 'Inactivo'}
                       </span>
                     </td>
@@ -6361,7 +6353,7 @@ function getSupabaseAnonKey() {
             </table>
           )}
         </div>
-        
+
         {/* Estadísticas */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
@@ -6385,12 +6377,12 @@ function getSupabaseAnonKey() {
             <p className="text-2xl font-bold text-blue-600">{(consultas || []).length}</p>
           </div>
         </div>
-        
+
         {/* Modal Crear/Editar */}
         {(showModal || editingPrograma) && (
           <ProgramaModal
             programa={editingPrograma}
-            onSave={editingPrograma 
+            onSave={editingPrograma
               ? (data) => handleUpdate(editingPrograma.id, data)
               : handleCreate
             }
@@ -6400,7 +6392,7 @@ function getSupabaseAnonKey() {
             }}
           />
         )}
-        
+
         {/* Modal Importar CSV */}
         {showImportModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -6408,32 +6400,32 @@ function getSupabaseAnonKey() {
               <div className="p-6 border-b border-slate-100">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xl font-bold text-slate-800">Importar desde CSV</h2>
-                  <button 
+                  <button
                     onClick={() => {
                       setShowImportModal(false)
                       setImportData(null)
                       setImportError(null)
-                    }} 
+                    }}
                     className="p-2 hover:bg-slate-100 rounded-lg"
                   >
                     <Icon name="X" size={20} />
                   </button>
                 </div>
               </div>
-              
+
               <div className="p-6 space-y-4">
                 <div className="bg-slate-50 rounded-lg p-4">
                   <p className="text-sm text-slate-600 mb-2">
                     <strong>Formato esperado:</strong> Una columna con el nombre del programa.
                   </p>
                   <code className="text-xs text-slate-500 block">
-                    nombre<br/>
-                    Ingeniería Civil<br/>
-                    Medicina<br/>
+                    nombre<br />
+                    Ingeniería Civil<br />
+                    Medicina<br />
                     1° Básico
                   </code>
                 </div>
-                
+
                 <div>
                   <input
                     type="file"
@@ -6442,13 +6434,13 @@ function getSupabaseAnonKey() {
                     className="w-full px-4 py-3 border border-slate-200 rounded-xl"
                   />
                 </div>
-                
+
                 {importError && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-700 text-sm">
                     {importError}
                   </div>
                 )}
-                
+
                 {importData && (
                   <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
                     <p className="text-emerald-700 font-medium mb-2">
@@ -6465,7 +6457,7 @@ function getSupabaseAnonKey() {
                   </div>
                 )}
               </div>
-              
+
               <div className="p-6 border-t border-slate-100 flex justify-end gap-3">
                 <button
                   onClick={() => {
@@ -6495,641 +6487,639 @@ function getSupabaseAnonKey() {
   // IMPORTAR VIEW - Con Historial de Importaciones
   // ============================================
 
-const ImportarView = () => {
-  const [importFile, setImportFile] = useState(null)
-  const [importResult, setImportResult] = useState(null)
-  const [importing, setImporting] = useState(false)
-  const [showSuccessModal, setShowSuccessModal] = useState(false)
-  const [historialImportaciones, setHistorialImportaciones] = useState([])
-  const [estadisticasImport, setEstadisticasImport] = useState(null)
-  const [selectedImportacion, setSelectedImportacion] = useState(null)
-  const [encargadoSeleccionado, setEncargadoSeleccionado] = useState('auto') // 'auto' = asignación automática
-  
-  // Obtener lista de encargados activos
-  const encargadosActivos = store.getEncargadosActivos() || []
-  
-  // Cargar historial al montar
-  useEffect(() => {
-    cargarHistorial()
-  }, [])
-  
-  const cargarHistorial = () => {
-    setHistorialImportaciones(store.getHistorialImportaciones(10))
-    setEstadisticasImport(store.getEstadisticasImportaciones())
-  }
-  
-const handleImportCSV = async () => {
-    if (!importFile) return
-    
-    setImporting(true)
-    setImportResult(null)
-    
-    const reader = new FileReader()
-    
-    reader.onload = async (e) => {
-      const csvData = e.target.result
-      
-      // Pasar opciones con el encargado seleccionado
-      const opciones = {
-        asignarA: encargadoSeleccionado !== 'auto' ? encargadoSeleccionado : null
-      }
-      
-      const result = store.importarLeadsCSV(csvData, user?.id, {}, opciones)
-      
-      setImportResult(result)
-      setImporting(false)
-      
-      if (result.success && result.importados > 0) {
-        // Obtener nombre del encargado si se seleccionó uno específico
-        const encargadoNombre = encargadoSeleccionado !== 'auto' 
-          ? encargadosActivos.find(e => e.id === encargadoSeleccionado)?.nombre 
-          : null
-        
-        // Notificación de éxito
-        setNotification({ 
-          type: 'success', 
-          message: `✅ ${result.importados} leads importados${encargadoNombre ? ` y asignados a ${encargadoNombre}` : ''}${result.duplicados > 0 ? ` (${result.duplicados} duplicados omitidos)` : ''}` 
-        })
-        setTimeout(() => setNotification(null), 5000)
-        cargarHistorial()
-        
-        // IMPORTANTE: Recargar desde Supabase para ver los nuevos leads
-        try {
-          await reloadFromSupabase()
-        } catch (err) {
-          console.error('Error recargando:', err)
+  const ImportarView = () => {
+    const [importFile, setImportFile] = useState(null)
+    const [importResult, setImportResult] = useState(null)
+    const [importing, setImporting] = useState(false)
+    const [showSuccessModal, setShowSuccessModal] = useState(false)
+    const [historialImportaciones, setHistorialImportaciones] = useState([])
+    const [estadisticasImport, setEstadisticasImport] = useState(null)
+    const [selectedImportacion, setSelectedImportacion] = useState(null)
+    const [encargadoSeleccionado, setEncargadoSeleccionado] = useState('auto') // 'auto' = asignación automática
+
+    // Obtener lista de encargados activos
+    const encargadosActivos = store.getEncargadosActivos() || []
+
+    // Cargar historial al montar
+    useEffect(() => {
+      cargarHistorial()
+    }, [])
+
+    const cargarHistorial = () => {
+      setHistorialImportaciones(store.getHistorialImportaciones(10))
+      setEstadisticasImport(store.getEstadisticasImportaciones())
+    }
+
+    const handleImportCSV = async () => {
+      if (!importFile) return
+
+      setImporting(true)
+      setImportResult(null)
+
+      const reader = new FileReader()
+
+      reader.onload = async (e) => {
+        const csvData = e.target.result
+
+        // Pasar opciones con el encargado seleccionado
+        const opciones = {
+          asignarA: encargadoSeleccionado !== 'auto' ? encargadoSeleccionado : null
         }
-        loadData()
-        
-        // Cerrar modal de importación
-        if (typeof setShowImportModal === 'function') setShowImportModal(false)
+
+        const result = store.importarLeadsCSV(csvData, user?.id, {}, opciones)
+
+        setImportResult(result)
+        setImporting(false)
+
+        if (result.success && result.importados > 0) {
+          // Obtener nombre del encargado si se seleccionó uno específico
+          const encargadoNombre = encargadoSeleccionado !== 'auto'
+            ? encargadosActivos.find(e => e.id === encargadoSeleccionado)?.nombre
+            : null
+
+          // Notificación de éxito
+          setNotification({
+            type: 'success',
+            message: `✅ ${result.importados} leads importados${encargadoNombre ? ` y asignados a ${encargadoNombre}` : ''}${result.duplicados > 0 ? ` (${result.duplicados} duplicados omitidos)` : ''}`
+          })
+          setTimeout(() => setNotification(null), 5000)
+          cargarHistorial()
+
+          // IMPORTANTE: Recargar desde Supabase para ver los nuevos leads
+          try {
+            await reloadFromSupabase()
+          } catch (err) {
+            console.error('Error recargando:', err)
+          }
+          loadData()
+
+          // Cerrar modal de importación
+          if (typeof setShowImportModal === 'function') setShowImportModal(false)
+        }
       }
+
+      reader.onerror = () => {
+        setImporting(false)
+        setImportResult({ success: false, error: 'Error al leer el archivo' })
+      }
+
+      reader.readAsText(importFile)
     }
-    
-    reader.onerror = () => {
-      setImporting(false)
-      setImportResult({ success: false, error: 'Error al leer el archivo' })
-    }
-    
-    reader.readAsText(importFile)
-}
-  const descargarPlantilla = () => {
-    const plantilla = `nombre,email,telefono,carrera,notas
+    const descargarPlantilla = () => {
+      const plantilla = `nombre,email,telefono,carrera,notas
 "Juan Pérez","juan@email.com","+56912345678","Guitarra Eléctrica","Interesado en clases presenciales"
 "María García","maria@email.com","+56987654321","Canto Popular","Consulta por horarios"`
-    
-    const blob = new Blob([plantilla], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = 'plantilla_importacion_admitio.csv'
-    link.click()
-  }
-  
-  const formatFechaHora = (fecha) => {
-    if (!fecha) return '-'
-    return new Date(fecha).toLocaleString('es-CL', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
-  
-  return (
-    <div className="space-y-6">
-      {/* Header con ícono */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-6 text-white">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
-            <Icon name="Upload" className="text-white" size={28} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold">Importar Base de Datos</h1>
-            <p className="text-blue-200">Carga tu Excel o CSV para comenzar rápidamente</p>
-          </div>
-        </div>
-      </div>
-      
-      {/* Estadísticas de importaciones */}
-      {estadisticasImport && estadisticasImport.totalImportaciones > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
-            <p className="text-slate-500 text-sm">Total Importaciones</p>
-            <p className="text-2xl font-bold text-slate-800">{estadisticasImport.totalImportaciones}</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
-            <p className="text-slate-500 text-sm">Leads Importados</p>
-            <p className="text-2xl font-bold text-emerald-600">{estadisticasImport.totalLeadsImportados}</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
-            <p className="text-slate-500 text-sm">Duplicados Detectados</p>
-            <p className="text-2xl font-bold text-amber-600">{estadisticasImport.totalDuplicados}</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
-            <p className="text-slate-500 text-sm">Última Importación</p>
-            <p className="text-sm font-medium text-slate-800">
-              {estadisticasImport.ultimaImportacion 
-                ? formatFechaHora(estadisticasImport.ultimaImportacion.fecha)
-                : 'Nunca'}
-            </p>
-          </div>
-        </div>
-      )}
-      
-      {/* Importación de Datos */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-            <Icon name="Upload" className="text-blue-600" size={20} />
-          </div>
-          <div>
-            <h3 className="font-semibold text-slate-800">Importar Base de Datos</h3>
-            <p className="text-sm text-slate-500">Carga masiva de leads desde un archivo CSV</p>
-          </div>
-        </div>
-        
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
-          <p className="text-sm text-blue-800 mb-2 font-medium">📋 Formato del archivo CSV:</p>
-          <ul className="text-sm text-blue-700 space-y-1 ml-4">
-            <li>• <strong>nombre</strong> (requerido): Nombre completo del lead</li>
-            <li>• <strong>email</strong>: Correo electrónico</li>
-            <li>• <strong>telefono</strong>: Número de teléfono</li>
-            <li>• <strong>carrera</strong>: Nombre del instrumento/carrera</li>
-            <li>• <strong>notas</strong>: Observaciones o comentarios</li>
-          </ul>
-          <button
-            onClick={descargarPlantilla}
-            className="mt-3 text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
-          >
-            <Icon name="Download" size={14} />
-            Descargar plantilla de ejemplo
-          </button>
-        </div>
-        
-        {/* Selector de encargado para asignación */}
-        <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 mb-4">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-violet-100 rounded-lg">
-              <Icon name="UserPlus" size={20} className="text-violet-600" />
+
+      const blob = new Blob([plantilla], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = 'plantilla_importacion_admitio.csv'
+      link.click()
+    }
+
+    const formatFechaHora = (fecha) => {
+      if (!fecha) return '-'
+      return new Date(fecha).toLocaleString('es-CL', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    }
+
+    return (
+      <div className="space-y-6">
+        {/* Header con ícono */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-6 text-white">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
+              <Icon name="Upload" className="text-white" size={28} />
             </div>
-            <div className="flex-1">
-              <p className="text-sm text-violet-800 font-medium mb-2">Asignar leads a:</p>
-              <select
-                value={encargadoSeleccionado}
-                onChange={(e) => setEncargadoSeleccionado(e.target.value)}
-                className="w-full px-4 py-2.5 border border-violet-300 rounded-lg text-slate-700 bg-white focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
-              >
-                <option value="auto">🔄 Asignación automática (round-robin)</option>
-                <option value="" disabled>──────────────────</option>
-                {encargadosActivos.map(enc => (
-                  <option key={enc.id} value={enc.id}>
-                    👤 {enc.nombre}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-violet-600 mt-2">
-                {encargadoSeleccionado === 'auto' 
-                  ? 'Los leads se distribuirán automáticamente entre los encargados activos'
-                  : `Todos los leads se asignarán a ${encargadosActivos.find(e => e.id === encargadoSeleccionado)?.nombre || 'el encargado seleccionado'}`
-                }
+            <div>
+              <h1 className="text-2xl font-bold">Importar Base de Datos</h1>
+              <p className="text-blue-200">Carga tu Excel o CSV para comenzar rápidamente</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Estadísticas de importaciones */}
+        {estadisticasImport && estadisticasImport.totalImportaciones > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+              <p className="text-slate-500 text-sm">Total Importaciones</p>
+              <p className="text-2xl font-bold text-slate-800">{estadisticasImport.totalImportaciones}</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+              <p className="text-slate-500 text-sm">Leads Importados</p>
+              <p className="text-2xl font-bold text-emerald-600">{estadisticasImport.totalLeadsImportados}</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+              <p className="text-slate-500 text-sm">Duplicados Detectados</p>
+              <p className="text-2xl font-bold text-amber-600">{estadisticasImport.totalDuplicados}</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+              <p className="text-slate-500 text-sm">Última Importación</p>
+              <p className="text-sm font-medium text-slate-800">
+                {estadisticasImport.ultimaImportacion
+                  ? formatFechaHora(estadisticasImport.ultimaImportacion.fecha)
+                  : 'Nunca'}
               </p>
             </div>
           </div>
-        </div>
-        
-        <div className="flex items-center gap-4">
-          <label className="flex-1">
-            <input
-              type="file"
-              accept=".csv"
-              onChange={(e) => {
-                setImportFile(e.target.files[0])
-                setImportResult(null)
-              }}
-              className="hidden"
-            />
-            <div className={`flex items-center gap-3 px-4 py-3 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
-              importFile 
-                ? 'border-blue-400 bg-blue-50' 
-                : 'border-slate-300 hover:border-blue-400 hover:bg-blue-50'
-            }`}>
-              <Icon name={importFile ? "FileCheck" : "File"} className={importFile ? "text-blue-500" : "text-slate-400"} size={24} />
-              <div>
-                <p className="font-medium text-slate-700">
-                  {importFile ? importFile.name : 'Seleccionar archivo CSV'}
-                </p>
-                <p className="text-xs text-slate-400">
-                  {importFile ? `${(importFile.size / 1024).toFixed(1)} KB` : 'Click para seleccionar'}
+        )}
+
+        {/* Importación de Datos */}
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+              <Icon name="Upload" className="text-blue-600" size={20} />
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-800">Importar Base de Datos</h3>
+              <p className="text-sm text-slate-500">Carga masiva de leads desde un archivo CSV</p>
+            </div>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+            <p className="text-sm text-blue-800 mb-2 font-medium">📋 Formato del archivo CSV:</p>
+            <ul className="text-sm text-blue-700 space-y-1 ml-4">
+              <li>• <strong>nombre</strong> (requerido): Nombre completo del lead</li>
+              <li>• <strong>email</strong>: Correo electrónico</li>
+              <li>• <strong>telefono</strong>: Número de teléfono</li>
+              <li>• <strong>carrera</strong>: Nombre del instrumento/carrera</li>
+              <li>• <strong>notas</strong>: Observaciones o comentarios</li>
+            </ul>
+            <button
+              onClick={descargarPlantilla}
+              className="mt-3 text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+            >
+              <Icon name="Download" size={14} />
+              Descargar plantilla de ejemplo
+            </button>
+          </div>
+
+          {/* Selector de encargado para asignación */}
+          <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 mb-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-violet-100 rounded-lg">
+                <Icon name="UserPlus" size={20} className="text-violet-600" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm text-violet-800 font-medium mb-2">Asignar leads a:</p>
+                <select
+                  value={encargadoSeleccionado}
+                  onChange={(e) => setEncargadoSeleccionado(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-violet-300 rounded-lg text-slate-700 bg-white focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
+                >
+                  <option value="auto">🔄 Asignación automática (round-robin)</option>
+                  <option value="" disabled>──────────────────</option>
+                  {encargadosActivos.map(enc => (
+                    <option key={enc.id} value={enc.id}>
+                      👤 {enc.nombre}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-violet-600 mt-2">
+                  {encargadoSeleccionado === 'auto'
+                    ? 'Los leads se distribuirán automáticamente entre los encargados activos'
+                    : `Todos los leads se asignarán a ${encargadosActivos.find(e => e.id === encargadoSeleccionado)?.nombre || 'el encargado seleccionado'}`
+                  }
                 </p>
               </div>
-              {importFile && (
-                <button 
-                  onClick={(e) => { e.preventDefault(); setImportFile(null); setImportResult(null); }}
-                  className="ml-auto p-1 text-slate-400 hover:text-red-500"
-                >
-                  <Icon name="X" size={18} />
-                </button>
-              )}
             </div>
-          </label>
-          
-          <button
-            onClick={handleImportCSV}
-            disabled={!importFile || importing}
-            className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 min-w-[140px] justify-center"
-          >
-            {importing ? (
-              <>
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Importando...
-              </>
-            ) : (
-              <>
-                <Icon name="Upload" size={20} />
-                Importar
-              </>
-            )}
-          </button>
-        </div>
-        
-        {/* Resultado de importación inline (cuando no es exitoso o hay errores) */}
-        {importResult && !showSuccessModal && (
-          <div className={`mt-4 p-4 rounded-xl ${
-            importResult.success 
-              ? importResult.importados === 0 
-                ? 'bg-amber-50 border border-amber-200' 
-                : 'bg-emerald-50 border border-emerald-200'
-              : 'bg-red-50 border border-red-200'
-          }`}>
-            {importResult.success ? (
-              importResult.importados === 0 ? (
+          </div>
+
+          <div className="flex items-center gap-4">
+            <label className="flex-1">
+              <input
+                type="file"
+                accept=".csv"
+                onChange={(e) => {
+                  setImportFile(e.target.files[0])
+                  setImportResult(null)
+                }}
+                className="hidden"
+              />
+              <div className={`flex items-center gap-3 px-4 py-3 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${importFile
+                  ? 'border-blue-400 bg-blue-50'
+                  : 'border-slate-300 hover:border-blue-400 hover:bg-blue-50'
+                }`}>
+                <Icon name={importFile ? "FileCheck" : "File"} className={importFile ? "text-blue-500" : "text-slate-400"} size={24} />
+                <div>
+                  <p className="font-medium text-slate-700">
+                    {importFile ? importFile.name : 'Seleccionar archivo CSV'}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {importFile ? `${(importFile.size / 1024).toFixed(1)} KB` : 'Click para seleccionar'}
+                  </p>
+                </div>
+                {importFile && (
+                  <button
+                    onClick={(e) => { e.preventDefault(); setImportFile(null); setImportResult(null); }}
+                    className="ml-auto p-1 text-slate-400 hover:text-red-500"
+                  >
+                    <Icon name="X" size={18} />
+                  </button>
+                )}
+              </div>
+            </label>
+
+            <button
+              onClick={handleImportCSV}
+              disabled={!importFile || importing}
+              className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 min-w-[140px] justify-center"
+            >
+              {importing ? (
                 <>
-                  <p className="font-medium text-amber-800 flex items-center gap-2">
-                    <Icon name="AlertTriangle" size={20} />
-                    No se importaron leads
-                  </p>
-                  <p className="text-sm text-amber-700 mt-1">
-                    {importResult.duplicados > 0 
-                      ? `Todos los ${importResult.duplicados} registros ya existen en la base de datos.`
-                      : 'El archivo no contenía datos válidos para importar.'}
-                  </p>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Importando...
                 </>
               ) : (
                 <>
-                  <p className="font-medium text-emerald-800 flex items-center gap-2">
-                    <Icon name="CheckCircle" size={20} />
-                    Importación completada
-                  </p>
-                  <div className="mt-2 text-sm text-emerald-700">
-                    <p>✓ {importResult.importados} leads importados</p>
-                    {importResult.duplicados > 0 && <p>⚠️ {importResult.duplicados} duplicados omitidos</p>}
-                  </div>
+                  <Icon name="Upload" size={20} />
+                  Importar
                 </>
-              )
-            ) : (
-              <p className="text-red-800 flex items-center gap-2">
-                <Icon name="AlertCircle" size={20} />
-                Error: {importResult.error}
-              </p>
-            )}
-            
-            {/* Mostrar errores detallados */}
-            {importResult.errores?.length > 0 && (
-              <details className="mt-3">
-                <summary className="cursor-pointer text-sm text-slate-600 hover:text-slate-800">
-                  Ver {importResult.errores.length} advertencia{importResult.errores.length !== 1 ? 's' : ''}
-                </summary>
-                <ul className="mt-2 ml-4 text-xs text-slate-600 space-y-1 max-h-32 overflow-y-auto">
-                  {importResult.errores.slice(0, 15).map((err, i) => (
-                    <li key={i} className="flex items-start gap-1">
-                      <Icon name="ChevronRight" size={12} className="mt-0.5 flex-shrink-0" />
-                      {err}
-                    </li>
+              )}
+            </button>
+          </div>
+
+          {/* Resultado de importación inline (cuando no es exitoso o hay errores) */}
+          {importResult && !showSuccessModal && (
+            <div className={`mt-4 p-4 rounded-xl ${importResult.success
+                ? importResult.importados === 0
+                  ? 'bg-amber-50 border border-amber-200'
+                  : 'bg-emerald-50 border border-emerald-200'
+                : 'bg-red-50 border border-red-200'
+              }`}>
+              {importResult.success ? (
+                importResult.importados === 0 ? (
+                  <>
+                    <p className="font-medium text-amber-800 flex items-center gap-2">
+                      <Icon name="AlertTriangle" size={20} />
+                      No se importaron leads
+                    </p>
+                    <p className="text-sm text-amber-700 mt-1">
+                      {importResult.duplicados > 0
+                        ? `Todos los ${importResult.duplicados} registros ya existen en la base de datos.`
+                        : 'El archivo no contenía datos válidos para importar.'}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-medium text-emerald-800 flex items-center gap-2">
+                      <Icon name="CheckCircle" size={20} />
+                      Importación completada
+                    </p>
+                    <div className="mt-2 text-sm text-emerald-700">
+                      <p>✓ {importResult.importados} leads importados</p>
+                      {importResult.duplicados > 0 && <p>⚠️ {importResult.duplicados} duplicados omitidos</p>}
+                    </div>
+                  </>
+                )
+              ) : (
+                <p className="text-red-800 flex items-center gap-2">
+                  <Icon name="AlertCircle" size={20} />
+                  Error: {importResult.error}
+                </p>
+              )}
+
+              {/* Mostrar errores detallados */}
+              {importResult.errores?.length > 0 && (
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-sm text-slate-600 hover:text-slate-800">
+                    Ver {importResult.errores.length} advertencia{importResult.errores.length !== 1 ? 's' : ''}
+                  </summary>
+                  <ul className="mt-2 ml-4 text-xs text-slate-600 space-y-1 max-h-32 overflow-y-auto">
+                    {importResult.errores.slice(0, 15).map((err, i) => (
+                      <li key={i} className="flex items-start gap-1">
+                        <Icon name="ChevronRight" size={12} className="mt-0.5 flex-shrink-0" />
+                        {err}
+                      </li>
+                    ))}
+                    {importResult.errores.length > 15 && (
+                      <li className="text-slate-400">... y {importResult.errores.length - 15} más</li>
+                    )}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Historial de Importaciones */}
+        {historialImportaciones.length > 0 && (
+          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center">
+                  <Icon name="History" className="text-violet-600" size={20} />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-800">Historial de Importaciones</h3>
+                  <p className="text-sm text-slate-500">Últimas {historialImportaciones.length} importaciones realizadas</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-left text-sm text-slate-500 border-b border-slate-100">
+                    <th className="pb-3 font-medium">Fecha</th>
+                    <th className="pb-3 font-medium">Usuario</th>
+                    <th className="pb-3 font-medium text-center">Importados</th>
+                    <th className="pb-3 font-medium text-center">Duplicados</th>
+                    <th className="pb-3 font-medium text-center">Errores</th>
+                    <th className="pb-3 font-medium text-center">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historialImportaciones.map((imp) => (
+                    <tr key={imp.id} className="border-b border-slate-50 hover:bg-slate-50">
+                      <td className="py-3">
+                        <p className="font-medium text-slate-800">{formatFechaHora(imp.fecha)}</p>
+                        <p className="text-xs text-slate-400">ID: {imp.id}</p>
+                      </td>
+                      <td className="py-3 text-slate-600">{imp.usuario_nombre}</td>
+                      <td className="py-3 text-center">
+                        <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium">
+                          {imp.importados}
+                        </span>
+                      </td>
+                      <td className="py-3 text-center">
+                        {imp.duplicados > 0 ? (
+                          <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-medium">
+                            {imp.duplicados}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
+                      </td>
+                      <td className="py-3 text-center">
+                        {imp.errores > 0 ? (
+                          <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-sm font-medium">
+                            {imp.errores}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
+                      </td>
+                      <td className="py-3 text-center">
+                        <button
+                          onClick={() => setSelectedImportacion(imp)}
+                          className="p-2 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors"
+                          title="Ver detalles"
+                        >
+                          <Icon name="Eye" size={18} />
+                        </button>
+                      </td>
+                    </tr>
                   ))}
-                  {importResult.errores.length > 15 && (
-                    <li className="text-slate-400">... y {importResult.errores.length - 15} más</li>
-                  )}
-                </ul>
-              </details>
-            )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
-      </div>
-      
-      {/* Historial de Importaciones */}
-      {historialImportaciones.length > 0 && (
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center">
-                <Icon name="History" className="text-violet-600" size={20} />
-              </div>
-              <div>
-                <h3 className="font-semibold text-slate-800">Historial de Importaciones</h3>
-                <p className="text-sm text-slate-500">Últimas {historialImportaciones.length} importaciones realizadas</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="text-left text-sm text-slate-500 border-b border-slate-100">
-                  <th className="pb-3 font-medium">Fecha</th>
-                  <th className="pb-3 font-medium">Usuario</th>
-                  <th className="pb-3 font-medium text-center">Importados</th>
-                  <th className="pb-3 font-medium text-center">Duplicados</th>
-                  <th className="pb-3 font-medium text-center">Errores</th>
-                  <th className="pb-3 font-medium text-center">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {historialImportaciones.map((imp) => (
-                  <tr key={imp.id} className="border-b border-slate-50 hover:bg-slate-50">
-                    <td className="py-3">
-                      <p className="font-medium text-slate-800">{formatFechaHora(imp.fecha)}</p>
-                      <p className="text-xs text-slate-400">ID: {imp.id}</p>
-                    </td>
-                    <td className="py-3 text-slate-600">{imp.usuario_nombre}</td>
-                    <td className="py-3 text-center">
-                      <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium">
-                        {imp.importados}
-                      </span>
-                    </td>
-                    <td className="py-3 text-center">
-                      {imp.duplicados > 0 ? (
-                        <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-medium">
-                          {imp.duplicados}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">-</span>
-                      )}
-                    </td>
-                    <td className="py-3 text-center">
-                      {imp.errores > 0 ? (
-                        <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-sm font-medium">
-                          {imp.errores}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">-</span>
-                      )}
-                    </td>
-                    <td className="py-3 text-center">
-                      <button
-                        onClick={() => setSelectedImportacion(imp)}
-                        className="p-2 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors"
-                        title="Ver detalles"
-                      >
-                        <Icon name="Eye" size={18} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-      
-      {/* Guía de migración */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center">
-            <Icon name="HelpCircle" className="text-violet-600" size={20} />
-          </div>
-          <div>
-            <h3 className="font-semibold text-slate-800">Guía de Migración desde Excel/Google Sheets</h3>
-            <p className="text-sm text-slate-500">Pasos para importar tu base de datos existente</p>
-          </div>
-        </div>
-        
-        <div className="space-y-4">
-          <div className="flex gap-4">
-            <div className="w-8 h-8 bg-violet-100 rounded-full flex items-center justify-center text-violet-600 font-bold text-sm flex-shrink-0">1</div>
-            <div>
-              <p className="font-medium text-slate-800">Prepara tu archivo</p>
-              <p className="text-sm text-slate-500">Abre tu Excel o Google Sheets y asegúrate de que la primera fila tenga los nombres de las columnas (nombre, email, telefono, etc.)</p>
-            </div>
-          </div>
-          
-          <div className="flex gap-4">
-            <div className="w-8 h-8 bg-violet-100 rounded-full flex items-center justify-center text-violet-600 font-bold text-sm flex-shrink-0">2</div>
-            <div>
-              <p className="font-medium text-slate-800">Exporta a CSV</p>
-              <p className="text-sm text-slate-500">En Excel: Archivo → Guardar como → CSV. En Google Sheets: Archivo → Descargar → CSV (.csv)</p>
-            </div>
-          </div>
-          
-          <div className="flex gap-4">
-            <div className="w-8 h-8 bg-violet-100 rounded-full flex items-center justify-center text-violet-600 font-bold text-sm flex-shrink-0">3</div>
-            <div>
-              <p className="font-medium text-slate-800">Sube el archivo</p>
-              <p className="text-sm text-slate-500">Usa el botón de arriba para seleccionar tu archivo CSV y haz click en "Importar"</p>
-            </div>
-          </div>
-          
-          <div className="flex gap-4">
-            <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 font-bold text-sm flex-shrink-0">✓</div>
-            <div>
-              <p className="font-medium text-slate-800">Revisa los resultados</p>
-              <p className="text-sm text-slate-500">El sistema detectará automáticamente duplicados y te mostrará un resumen de la importación</p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-          <p className="text-sm text-amber-800">
-            <strong>💡 Tip:</strong> Si tus columnas tienen nombres diferentes (ej: "Nombre Completo" en vez de "nombre"), el sistema intentará reconocerlas automáticamente. Si no funciona, renombra las columnas en tu archivo original.
-          </p>
-        </div>
-      </div>
 
-      {/* Reset de datos */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-        <h3 className="font-semibold text-slate-800 mb-4 text-red-600 flex items-center gap-2">
-          <Icon name="AlertTriangle" size={20} />
-          Zona de Peligro
-        </h3>
-        <p className="text-slate-500 mb-4">Resetear la base de datos a los datos iniciales de prueba. Esta acción eliminará todos los leads y actividad actual.</p>
-        <button 
-          onClick={() => { 
-            if(confirm('¿Estás seguro? Esta acción eliminará TODOS los datos actuales y no se puede deshacer.')) { 
-              store.resetStore(); 
-              loadData(); 
-              cargarHistorial();
-              setNotification({ type: 'info', message: 'Datos reseteados' }); 
-              setTimeout(() => setNotification(null), 2000); 
-            }
-          }}
-          className="px-4 py-2 bg-red-50 text-red-600 rounded-lg font-medium hover:bg-red-100 flex items-center gap-2 border border-red-200"
-        >
-          <Icon name="RefreshCw" size={20} /> Resetear Datos
-        </button>
-      </div>
-      
-      {/* ============================================ */}
-      {/* MODAL DE ÉXITO - Aparece cuando importa bien */}
-      {/* ============================================ */}
-      {showSuccessModal && importResult && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowSuccessModal(false)}>
-          <div className="bg-white rounded-2xl p-8 w-full max-w-md text-center animate-bounce-in" onClick={e => e.stopPropagation()}>
-            {/* Icono animado */}
-            <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
-              <Icon name="CheckCircle" className="text-emerald-600" size={48} />
+        {/* Guía de migración */}
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center">
+              <Icon name="HelpCircle" className="text-violet-600" size={20} />
             </div>
-            
-            <h3 className="text-2xl font-bold text-slate-800 mb-2">¡Importación Exitosa!</h3>
-            <p className="text-slate-500 mb-6">Los leads han sido agregados a tu base de datos</p>
-            
-            {/* Estadísticas */}
-            <div className="grid grid-cols-3 gap-4 mb-6">
-              <div className="bg-emerald-50 rounded-xl p-4">
-                <p className="text-3xl font-bold text-emerald-600">{importResult.importados}</p>
-                <p className="text-sm text-emerald-700">Importados</p>
-              </div>
-              <div className="bg-amber-50 rounded-xl p-4">
-                <p className="text-3xl font-bold text-amber-600">{importResult.duplicados}</p>
-                <p className="text-sm text-amber-700">Duplicados</p>
-              </div>
-              <div className="bg-slate-50 rounded-xl p-4">
-                <p className="text-3xl font-bold text-slate-600">{importResult.errores?.length || 0}</p>
-                <p className="text-sm text-slate-700">Errores</p>
-              </div>
-            </div>
-            
-            {/* Info del registro */}
-            {importResult.registro && (
-              <div className="text-sm text-slate-500 mb-6 p-3 bg-slate-50 rounded-lg">
-                <p>Registro: <span className="font-mono text-xs">{importResult.registro.id}</span></p>
-                <p>Fecha: {formatFechaHora(importResult.registro.fecha)}</p>
-              </div>
-            )}
-            
-            {/* Botones */}
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setShowSuccessModal(false)
-                  setImportFile(null)
-                  setImportResult(null)
-                }}
-                className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 rounded-xl font-medium hover:bg-slate-50"
-              >
-                Importar Otro
-              </button>
-              <button
-                onClick={() => {
-                  setShowSuccessModal(false)
-                  setActiveTab('consultas')
-                }}
-                className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 flex items-center justify-center gap-2"
-              >
-                <Icon name="Users" size={18} />
-                Ver Leads
-              </button>
+            <div>
+              <h3 className="font-semibold text-slate-800">Guía de Migración desde Excel/Google Sheets</h3>
+              <p className="text-sm text-slate-500">Pasos para importar tu base de datos existente</p>
             </div>
           </div>
+
+          <div className="space-y-4">
+            <div className="flex gap-4">
+              <div className="w-8 h-8 bg-violet-100 rounded-full flex items-center justify-center text-violet-600 font-bold text-sm flex-shrink-0">1</div>
+              <div>
+                <p className="font-medium text-slate-800">Prepara tu archivo</p>
+                <p className="text-sm text-slate-500">Abre tu Excel o Google Sheets y asegúrate de que la primera fila tenga los nombres de las columnas (nombre, email, telefono, etc.)</p>
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+              <div className="w-8 h-8 bg-violet-100 rounded-full flex items-center justify-center text-violet-600 font-bold text-sm flex-shrink-0">2</div>
+              <div>
+                <p className="font-medium text-slate-800">Exporta a CSV</p>
+                <p className="text-sm text-slate-500">En Excel: Archivo → Guardar como → CSV. En Google Sheets: Archivo → Descargar → CSV (.csv)</p>
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+              <div className="w-8 h-8 bg-violet-100 rounded-full flex items-center justify-center text-violet-600 font-bold text-sm flex-shrink-0">3</div>
+              <div>
+                <p className="font-medium text-slate-800">Sube el archivo</p>
+                <p className="text-sm text-slate-500">Usa el botón de arriba para seleccionar tu archivo CSV y haz click en "Importar"</p>
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+              <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 font-bold text-sm flex-shrink-0">✓</div>
+              <div>
+                <p className="font-medium text-slate-800">Revisa los resultados</p>
+                <p className="text-sm text-slate-500">El sistema detectará automáticamente duplicados y te mostrará un resumen de la importación</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+            <p className="text-sm text-amber-800">
+              <strong>💡 Tip:</strong> Si tus columnas tienen nombres diferentes (ej: "Nombre Completo" en vez de "nombre"), el sistema intentará reconocerlas automáticamente. Si no funciona, renombra las columnas en tu archivo original.
+            </p>
+          </div>
         </div>
-      )}
-      
-      {/* ============================================ */}
-      {/* MODAL DE DETALLES DE IMPORTACIÓN */}
-      {/* ============================================ */}
-      {selectedImportacion && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedImportacion(null)}>
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="p-6 border-b border-slate-100">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-bold text-slate-800">Detalles de Importación</h3>
-                  <p className="text-slate-500 text-sm">{formatFechaHora(selectedImportacion.fecha)}</p>
+
+        {/* Reset de datos */}
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+          <h3 className="font-semibold text-slate-800 mb-4 text-red-600 flex items-center gap-2">
+            <Icon name="AlertTriangle" size={20} />
+            Zona de Peligro
+          </h3>
+          <p className="text-slate-500 mb-4">Resetear la base de datos a los datos iniciales de prueba. Esta acción eliminará todos los leads y actividad actual.</p>
+          <button
+            onClick={() => {
+              if (confirm('¿Estás seguro? Esta acción eliminará TODOS los datos actuales y no se puede deshacer.')) {
+                store.resetStore();
+                loadData();
+                cargarHistorial();
+                setNotification({ type: 'info', message: 'Datos reseteados' });
+                setTimeout(() => setNotification(null), 2000);
+              }
+            }}
+            className="px-4 py-2 bg-red-50 text-red-600 rounded-lg font-medium hover:bg-red-100 flex items-center gap-2 border border-red-200"
+          >
+            <Icon name="RefreshCw" size={20} /> Resetear Datos
+          </button>
+        </div>
+
+        {/* ============================================ */}
+        {/* MODAL DE ÉXITO - Aparece cuando importa bien */}
+        {/* ============================================ */}
+        {showSuccessModal && importResult && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowSuccessModal(false)}>
+            <div className="bg-white rounded-2xl p-8 w-full max-w-md text-center animate-bounce-in" onClick={e => e.stopPropagation()}>
+              {/* Icono animado */}
+              <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
+                <Icon name="CheckCircle" className="text-emerald-600" size={48} />
+              </div>
+
+              <h3 className="text-2xl font-bold text-slate-800 mb-2">¡Importación Exitosa!</h3>
+              <p className="text-slate-500 mb-6">Los leads han sido agregados a tu base de datos</p>
+
+              {/* Estadísticas */}
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="bg-emerald-50 rounded-xl p-4">
+                  <p className="text-3xl font-bold text-emerald-600">{importResult.importados}</p>
+                  <p className="text-sm text-emerald-700">Importados</p>
                 </div>
-                <button onClick={() => setSelectedImportacion(null)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
-                  <Icon name="X" size={24} />
+                <div className="bg-amber-50 rounded-xl p-4">
+                  <p className="text-3xl font-bold text-amber-600">{importResult.duplicados}</p>
+                  <p className="text-sm text-amber-700">Duplicados</p>
+                </div>
+                <div className="bg-slate-50 rounded-xl p-4">
+                  <p className="text-3xl font-bold text-slate-600">{importResult.errores?.length || 0}</p>
+                  <p className="text-sm text-slate-700">Errores</p>
+                </div>
+              </div>
+
+              {/* Info del registro */}
+              {importResult.registro && (
+                <div className="text-sm text-slate-500 mb-6 p-3 bg-slate-50 rounded-lg">
+                  <p>Registro: <span className="font-mono text-xs">{importResult.registro.id}</span></p>
+                  <p>Fecha: {formatFechaHora(importResult.registro.fecha)}</p>
+                </div>
+              )}
+
+              {/* Botones */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowSuccessModal(false)
+                    setImportFile(null)
+                    setImportResult(null)
+                  }}
+                  className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 rounded-xl font-medium hover:bg-slate-50"
+                >
+                  Importar Otro
+                </button>
+                <button
+                  onClick={() => {
+                    setShowSuccessModal(false)
+                    setActiveTab('consultas')
+                  }}
+                  className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 flex items-center justify-center gap-2"
+                >
+                  <Icon name="Users" size={18} />
+                  Ver Leads
                 </button>
               </div>
             </div>
-            
-            <div className="p-6 overflow-y-auto max-h-[calc(80vh-100px)]">
-              {/* Resumen */}
-              <div className="grid grid-cols-4 gap-4 mb-6">
-                <div className="bg-slate-50 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-slate-700">{selectedImportacion.total_procesados}</p>
-                  <p className="text-xs text-slate-500">Procesados</p>
-                </div>
-                <div className="bg-emerald-50 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-emerald-600">{selectedImportacion.importados}</p>
-                  <p className="text-xs text-emerald-700">Importados</p>
-                </div>
-                <div className="bg-amber-50 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-amber-600">{selectedImportacion.duplicados}</p>
-                  <p className="text-xs text-amber-700">Duplicados</p>
-                </div>
-                <div className="bg-red-50 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-red-600">{selectedImportacion.errores}</p>
-                  <p className="text-xs text-red-700">Errores</p>
+          </div>
+        )}
+
+        {/* ============================================ */}
+        {/* MODAL DE DETALLES DE IMPORTACIÓN */}
+        {/* ============================================ */}
+        {selectedImportacion && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedImportacion(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="p-6 border-b border-slate-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-800">Detalles de Importación</h3>
+                    <p className="text-slate-500 text-sm">{formatFechaHora(selectedImportacion.fecha)}</p>
+                  </div>
+                  <button onClick={() => setSelectedImportacion(null)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
+                    <Icon name="X" size={24} />
+                  </button>
                 </div>
               </div>
-              
-              {/* Info */}
-              <div className="mb-6 p-4 bg-slate-50 rounded-lg">
-                <p className="text-sm"><strong>Usuario:</strong> {selectedImportacion.usuario_nombre}</p>
-                <p className="text-sm"><strong>ID:</strong> <span className="font-mono text-xs">{selectedImportacion.id}</span></p>
-              </div>
-              
-              {/* Leads importados */}
-              {selectedImportacion.leads_creados?.length > 0 && (
-                <div className="mb-6">
-                  <h4 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                    <Icon name="UserPlus" size={18} className="text-emerald-500" />
-                    Leads Importados ({selectedImportacion.leads_creados.length})
-                  </h4>
-                  <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-lg">
-                    <table className="w-full text-sm">
-                      <tbody>
-                        {selectedImportacion.leads_creados.map((lead, i) => (
-                          <tr key={lead.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                            <td className="px-3 py-2 font-medium text-slate-700">{lead.nombre}</td>
-                            <td className="px-3 py-2 text-slate-400 text-xs font-mono">{lead.id}</td>
-                          </tr>
+
+              <div className="p-6 overflow-y-auto max-h-[calc(80vh-100px)]">
+                {/* Resumen */}
+                <div className="grid grid-cols-4 gap-4 mb-6">
+                  <div className="bg-slate-50 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-slate-700">{selectedImportacion.total_procesados}</p>
+                    <p className="text-xs text-slate-500">Procesados</p>
+                  </div>
+                  <div className="bg-emerald-50 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-emerald-600">{selectedImportacion.importados}</p>
+                    <p className="text-xs text-emerald-700">Importados</p>
+                  </div>
+                  <div className="bg-amber-50 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-amber-600">{selectedImportacion.duplicados}</p>
+                    <p className="text-xs text-amber-700">Duplicados</p>
+                  </div>
+                  <div className="bg-red-50 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-red-600">{selectedImportacion.errores}</p>
+                    <p className="text-xs text-red-700">Errores</p>
+                  </div>
+                </div>
+
+                {/* Info */}
+                <div className="mb-6 p-4 bg-slate-50 rounded-lg">
+                  <p className="text-sm"><strong>Usuario:</strong> {selectedImportacion.usuario_nombre}</p>
+                  <p className="text-sm"><strong>ID:</strong> <span className="font-mono text-xs">{selectedImportacion.id}</span></p>
+                </div>
+
+                {/* Leads importados */}
+                {selectedImportacion.leads_creados?.length > 0 && (
+                  <div className="mb-6">
+                    <h4 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                      <Icon name="UserPlus" size={18} className="text-emerald-500" />
+                      Leads Importados ({selectedImportacion.leads_creados.length})
+                    </h4>
+                    <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-lg">
+                      <table className="w-full text-sm">
+                        <tbody>
+                          {selectedImportacion.leads_creados.map((lead, i) => (
+                            <tr key={lead.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                              <td className="px-3 py-2 font-medium text-slate-700">{lead.nombre}</td>
+                              <td className="px-3 py-2 text-slate-400 text-xs font-mono">{lead.id}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Errores */}
+                {selectedImportacion.detalles_errores?.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                      <Icon name="AlertCircle" size={18} className="text-red-500" />
+                      Errores/Advertencias ({selectedImportacion.detalles_errores.length})
+                    </h4>
+                    <div className="max-h-48 overflow-y-auto border border-red-200 rounded-lg bg-red-50">
+                      <ul className="p-3 space-y-1">
+                        {selectedImportacion.detalles_errores.map((err, i) => (
+                          <li key={i} className="text-sm text-red-700 flex items-start gap-2">
+                            <Icon name="ChevronRight" size={14} className="mt-0.5 flex-shrink-0" />
+                            {err}
+                          </li>
                         ))}
-                      </tbody>
-                    </table>
+                      </ul>
+                    </div>
                   </div>
-                </div>
-              )}
-              
-              {/* Errores */}
-              {selectedImportacion.detalles_errores?.length > 0 && (
-                <div>
-                  <h4 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                    <Icon name="AlertCircle" size={18} className="text-red-500" />
-                    Errores/Advertencias ({selectedImportacion.detalles_errores.length})
-                  </h4>
-                  <div className="max-h-48 overflow-y-auto border border-red-200 rounded-lg bg-red-50">
-                    <ul className="p-3 space-y-1">
-                      {selectedImportacion.detalles_errores.map((err, i) => (
-                        <li key={i} className="text-sm text-red-700 flex items-start gap-2">
-                          <Icon name="ChevronRight" size={14} className="mt-0.5 flex-shrink-0" />
-                          {err}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
-  )
-}
+        )}
+      </div>
+    )
+  }
 
 
 
-// ============================================
+  // ============================================
   // COMPONENTES AUXILIARES
   // ============================================
   const StatCard = ({ title, value, icon, color, sub, onClick }) => {
@@ -7144,7 +7134,7 @@ const handleImportCSV = async () => {
       purple: { bg: 'bg-purple-100', text: 'text-purple-600', hover: 'hover:bg-purple-50' },
     }
     const c = colorClasses[color] || colorClasses.slate
-    
+
     const content = (
       <>
         <div className="flex items-center justify-between">
@@ -7159,7 +7149,7 @@ const handleImportCSV = async () => {
         {sub && <p className={`${c.text} text-sm mt-2`}>{sub}</p>}
       </>
     )
-    
+
     if (onClick) {
       return (
         <button onClick={onClick} className={`bg-white rounded-xl p-5 shadow-sm border border-slate-100 text-left transition-all ${c.hover} hover:shadow-md hover:scale-[1.02] active:scale-[0.98]`}>
@@ -7167,7 +7157,7 @@ const handleImportCSV = async () => {
         </button>
       )
     }
-    
+
     return (
       <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
         {content}
@@ -7177,22 +7167,22 @@ const handleImportCSV = async () => {
 
   const InfoCard = ({ icon, label, value, iconColor, copiable, leadId }) => {
     const [copied, setCopied] = React.useState(false)
-    
+
     const handleCopy = () => {
       if (!value) return
       navigator.clipboard.writeText(value)
       setCopied(true)
-      
+
       // Registrar acción si es teléfono o email
       if (leadId && (label === 'Teléfono' || label === 'Email')) {
         const tipoAccion = label === 'Teléfono' ? 'copiar_telefono' : 'copiar_email'
         store.registrarAccionContacto(leadId, user?.id, tipoAccion)
         loadData()
       }
-      
+
       setTimeout(() => setCopied(false), 2000)
     }
-    
+
     // Detectar copiado con Ctrl+C / Cmd+C
     const handleKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
@@ -7209,9 +7199,9 @@ const handleImportCSV = async () => {
         }
       }
     }
-    
+
     return (
-      <div 
+      <div
         className={`flex items-center gap-3 p-3 bg-slate-50 rounded-lg group relative ${copiable ? 'cursor-pointer hover:bg-slate-100 transition-colors' : ''}`}
         onClick={copiable ? handleCopy : undefined}
         onKeyDown={copiable ? handleKeyDown : undefined}
@@ -7223,13 +7213,12 @@ const handleImportCSV = async () => {
           <p className="font-medium text-slate-800 truncate select-all">{value || '-'}</p>
         </div>
         {copiable && value && (
-          <button 
+          <button
             onClick={(e) => { e.stopPropagation(); handleCopy(); }}
-            className={`p-1.5 rounded-lg transition-all ${
-              copied 
-                ? 'bg-emerald-100 text-emerald-600' 
+            className={`p-1.5 rounded-lg transition-all ${copied
+                ? 'bg-emerald-100 text-emerald-600'
                 : 'bg-slate-200 text-slate-500 opacity-0 group-hover:opacity-100 hover:bg-slate-300'
-            }`}
+              }`}
             title="Copiar"
           >
             <Icon name={copied ? "Check" : "Copy"} size={14} />
@@ -7247,7 +7236,7 @@ const handleImportCSV = async () => {
   // ============================================
   // RENDER PRINCIPAL
   // ============================================
-  
+
   // Vista especial para Asistente (solo crear leads)
   if (isAsistente) {
     // Contar leads creados hoy por este usuario
@@ -7257,9 +7246,9 @@ const handleImportCSV = async () => {
       const creado = new Date(c.created_at)
       return creado >= hoy
     }).length
-    
+
     const ultimoLead = store.getConsultas()[0] // El más reciente
-    
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-violet-50 to-indigo-100 flex items-center justify-center p-4">
         <div className="w-full max-w-lg">
@@ -7271,7 +7260,7 @@ const handleImportCSV = async () => {
               <h1 className="text-2xl font-bold text-slate-800">Ingresar Nueva Consulta</h1>
               <p className="text-slate-500 mt-1">Hola, {user?.nombre?.split(' ')[0]}</p>
             </div>
-            
+
             {/* Stats del día */}
             <div className="bg-violet-50 rounded-xl p-4 mb-6">
               <div className="flex items-center justify-between">
@@ -7293,7 +7282,7 @@ const handleImportCSV = async () => {
                 </div>
               )}
             </div>
-            
+
             <button
               onClick={handleNuevoLead}
               className="w-full py-4 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl font-semibold hover:from-violet-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 transition-all flex items-center justify-center gap-3"
@@ -7301,7 +7290,7 @@ const handleImportCSV = async () => {
               <Icon name="Plus" size={24} />
               Nueva Consulta
             </button>
-            
+
             <button
               onClick={() => signOut()}
               className="w-full mt-4 py-3 border border-slate-200 text-slate-600 rounded-xl font-medium hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
@@ -7310,21 +7299,21 @@ const handleImportCSV = async () => {
               Cerrar Sesión
             </button>
           </div>
-          
+
           <p className="text-center text-sm text-slate-400 mt-6">
             Rol: Asistente • Solo puede ingresar consultas
           </p>
         </div>
-        
+
         {/* Modal nueva consulta */}
-        <ModalNuevaConsulta 
-          isOpen={showModal} 
+        <ModalNuevaConsulta
+          isOpen={showModal}
           onClose={() => setShowModal(false)}
           onCreated={(newLead) => {
             setShowModal(false)
-            setNotification({ 
-              type: 'success', 
-              message: `¡Lead registrado! Asignado a ${newLead?.encargado?.nombre || store.getUsuarioById(newLead?.asignado_a)?.nombre || 'automáticamente'}` 
+            setNotification({
+              type: 'success',
+              message: `¡Lead registrado! Asignado a ${newLead?.encargado?.nombre || store.getUsuarioById(newLead?.asignado_a)?.nombre || 'automáticamente'}`
             })
             setTimeout(() => setNotification(null), 4000)
           }}
@@ -7332,7 +7321,7 @@ const handleImportCSV = async () => {
           userId={user?.id}
           userRol={user?.rol_id}
         />
-        
+
         {/* Notificación */}
         {notification && (
           <div className="fixed bottom-4 right-4 z-50 animate-bounce">
@@ -7345,15 +7334,15 @@ const handleImportCSV = async () => {
       </div>
     )
   }
-  
+
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Mobile Header */}
       <MobileHeader />
-      
+
       {/* Sidebar */}
       <Sidebar />
-      
+
       {/* Contenido principal - responsive */}
       <div className={`
         transition-all duration-300
@@ -7386,7 +7375,7 @@ const handleImportCSV = async () => {
 
           <div className="flex items-center gap-3">
             <span className="text-sm text-slate-400">Asignar a:</span>
-            <select 
+            <select
               className="bg-slate-800 border-none rounded-lg text-sm px-3 py-2 focus:ring-2 focus:ring-violet-500 outline-none"
               onChange={(e) => handleBulkAssign(e.target.value)}
               defaultValue=""
@@ -7398,7 +7387,7 @@ const handleImportCSV = async () => {
             </select>
           </div>
 
-          <button 
+          <button
             onClick={() => setSelectedLeads([])}
             className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
             title="Cancelar selección"
@@ -7407,17 +7396,17 @@ const handleImportCSV = async () => {
           </button>
         </div>
       )}
-      
+
       {/* Modal nueva consulta */}
-      <ModalNuevaConsulta 
-        isOpen={showModal} 
+      <ModalNuevaConsulta
+        isOpen={showModal}
         onClose={() => setShowModal(false)}
         onCreated={() => loadData()}
         isKeyMaster={isKeyMaster}
         userId={user?.id}
         userRol={user?.rol_id}
       />
-      
+
       {/* Modal Leads a Contactar Hoy */}
       {showLeadsHoyModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowLeadsHoyModal(false)}>
@@ -7438,7 +7427,7 @@ const handleImportCSV = async () => {
                 </button>
               </div>
             </div>
-            
+
             <div className="p-6 overflow-y-auto max-h-[calc(80vh-120px)]">
               {safeLeadsHoy.length === 0 ? (
                 <div className="text-center py-8">
@@ -7457,11 +7446,10 @@ const handleImportCSV = async () => {
                         setShowLeadsHoyModal(false)
                         selectConsulta(c.id)
                       }}
-                      className={`p-4 rounded-xl cursor-pointer transition-all hover:shadow-md ${
-                        c.nuevoInteres ? 'bg-violet-50 border border-violet-200' :
-                        c.atrasado ? 'bg-red-50 border border-red-200' :
-                        'bg-slate-50 border border-slate-200'
-                      }`}
+                      className={`p-4 rounded-xl cursor-pointer transition-all hover:shadow-md ${c.nuevoInteres ? 'bg-violet-50 border border-violet-200' :
+                          c.atrasado ? 'bg-red-50 border border-red-200' :
+                            'bg-slate-50 border border-slate-200'
+                        }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -7510,7 +7498,7 @@ const handleImportCSV = async () => {
           </div>
         </div>
       )}
-      
+
       {/* Modal de límite de plan alcanzado */}
       {limiteAlerta && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -7546,15 +7534,14 @@ const handleImportCSV = async () => {
           </div>
         </div>
       )}
-      
+
       {/* Notificación */}
       {notification && (
         <div className="fixed bottom-4 right-4 z-50 animate-bounce">
-          <div className={`px-6 py-4 rounded-xl shadow-lg flex items-center gap-3 ${
-            notification.type === 'success' ? 'bg-emerald-600 text-white' : 
-            notification.type === 'info' ? 'bg-blue-600 text-white' :
-            'bg-violet-600 text-white'
-          }`}>
+          <div className={`px-6 py-4 rounded-xl shadow-lg flex items-center gap-3 ${notification.type === 'success' ? 'bg-emerald-600 text-white' :
+              notification.type === 'info' ? 'bg-blue-600 text-white' :
+                'bg-violet-600 text-white'
+            }`}>
             <Icon name={notification.type === 'success' ? 'CheckCircle' : notification.type === 'info' ? 'Info' : 'Bell'} size={24} />
             <div>
               <p className="font-medium">{notification.message}</p>
@@ -7565,9 +7552,9 @@ const handleImportCSV = async () => {
           </div>
         </div>
       )}
-      
+
       {/* Botón flotante actualizar */}
-      <button 
+      <button
         onClick={() => {
           store.reloadStore() // Recargar desde localStorage (sincroniza con otras pestañas)
           loadData()

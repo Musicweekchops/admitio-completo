@@ -474,7 +474,8 @@ export function syncCrearAccion(leadId, accion, usuarioId) {
     const insertData = {
       lead_id: leadId,
       tipo: accion.tipo,
-      descripcion: accion.descripcion
+      descripcion: accion.descripcion,
+      usuario_nombre: accion.user_nombre || null
     };
     
     // Solo agregar usuario_id si parece UUID válido
