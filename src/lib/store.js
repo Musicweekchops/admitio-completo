@@ -273,6 +273,66 @@ export function createUsuario(data) {
   return nuevoUsuario
 }
 
+// Invitar usuario real vía Edge Function (crea Auth + DB)
+export async function invitarUsuario(data) {
+  console.log('📝 Invitando usuario vía Edge Function:', data.email)
+  
+  try {
+    // Mapear rol a nombre legible
+    const rolesNombres = {
+      'superadmin': 'Administrador',
+      'keymaster': 'Administrador',
+      'rector': 'Rector/Director',
+      'encargado': 'Encargado de Admisión',
+      'asistente': 'Asistente'
+    }
+    const rolNombre = rolesNombres[data.rol_id] || data.rol_id
+    
+    const { data: response, error } = await supabase.functions.invoke('invite-user', {
+      body: {
+        email: data.email?.toLowerCase().trim(),
+        nombre: data.nombre,
+        password: data.password,
+        rol: data.rol_id,
+        rol_nombre: rolNombre,
+        institucion_id: data.institucion_id,
+        institucion_nombre: 'Admitio', // Podríamos obtener el nombre real si fuera necesario
+        invitado_por: data.invitado_por
+      }
+    })
+
+    if (error) {
+      console.error('❌ Error llamando a invite-user:', error)
+      return { error: error.message || 'Error al invitar usuario' }
+    }
+
+    if (!response?.success) {
+      return { error: response?.error || 'Error en la respuesta de invitacion' }
+    }
+
+    // Si tuvo éxito, el usuario ya debería estar en la tabla 'usuarios' de Supabase
+    // Pero para que aparezca en el store local de inmediato, podemos cargarlo o agregarlo
+    const newUser = {
+      id: response.user?.id,
+      nombre: data.nombre,
+      email: data.email,
+      rol_id: data.rol_id,
+      activo: true,
+      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(data.nombre)}&background=7c3aed&color=fff`
+    }
+    
+    if (!store.usuarios.find(u => u.id === newUser.id)) {
+      store.usuarios.push(newUser)
+      saveStore()
+    }
+    
+    return { success: true, user: newUser }
+  } catch (err) {
+    console.error('💥 Error crítico en invitarUsuario:', err)
+    return { error: err.message || 'Error inesperado' }
+  }
+}
+
 export function updateUsuario(id, updates) {
   const index = store.usuarios.findIndex(u => u.id === id)
   if (index === -1) return null

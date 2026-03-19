@@ -243,6 +243,13 @@ const UsuariosView = memo(({
                 <label className="block text-sm font-medium text-slate-700 mb-1">Email (será su usuario)</label>
                 <input required type="email" value={userFormData.email} onChange={e => setUserFormData({...userFormData, email: e.target.value})} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-violet-500" />
               </div>
+              {!localEditingUser && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Contraseña Inicial</label>
+                  <input required={!localEditingUser} type="text" value={userFormData.password} onChange={e => setUserFormData({...userFormData, password: e.target.value})} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-violet-500" placeholder="Mínimo 6 caracteres" />
+                  <p className="text-[10px] text-slate-400 mt-1">El usuario podrá cambiarla después.</p>
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Rol</label>
                 <select value={userFormData.rol_id} onChange={e => setUserFormData({...userFormData, rol_id: e.target.value})} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-violet-500">
