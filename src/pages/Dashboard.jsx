@@ -148,6 +148,21 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
     // Actualizar contador de uso
     if (actualizarUso) actualizarUso('leads', 1)
 
+    // Notificar al encargado si se seleccionó uno
+    if (formData.asignado_a) {
+      const encargado = store.getUsuarios().find(u => u.id === formData.asignado_a)
+      if (encargado?.email) {
+        notifyAssignment({
+          encargadoId: formData.asignado_a,
+          encargadoEmail: encargado.email,
+          encargadoNombre: encargado.nombre,
+          lead: { id: newConsulta.id, nombre: newConsulta.nombre, carrera: newConsulta.carrera_nombre || 'Sin carrera' },
+          isBulk: false,
+          institucionNombre: nombreInstitucion
+        }).catch(e => console.error('Error notificando asignación inicial:', e))
+      }
+    }
+
     setSubmitting(false)
     setSuccess(true)
 

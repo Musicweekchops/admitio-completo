@@ -238,7 +238,45 @@ serve(async (req) => {
       })
     }
 
-    // 6. Actualizar tracking de API Key
+    // 6. Notificar Asignación (NUEVO: Integración con Algoritmo SQL)
+    if (leadId) {
+      // Obtener el lead actualizado con su asignación (el trigger ya actuó)
+      const { data: fullLead } = await supabase
+        .from('leads')
+        .select('*, usuarios!leads_asignado_a_fkey(nombre, email)')
+        .eq('id', leadId)
+        .single();
+
+      if (fullLead && fullLead.asignado_a && fullLead.usuarios) {
+        console.log(`📣 Disparando notificación para encargado: ${fullLead.usuarios.email}`);
+        
+        // Llamar a la función notify-assignment
+        // Lo hacemos de forma asíncrona (sin esperar) para no retrasar el webhook
+        const notifyParams = {
+          encargadoEmail: fullLead.usuarios.email,
+          encargadoNombre: fullLead.usuarios.nombre,
+          lead: {
+            id: fullLead.id,
+            nombre: fullLead.nombre,
+            carrera: fullLead.carrera_nombre || 'No especificada'
+          },
+          isBulk: false,
+          institucionNombre: inst.nombre
+        };
+
+        // Invocación interna (usando la URL del proyecto)
+        fetch(`${supabaseUrl}/functions/v1/notify-assignment`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseServiceKey}`
+          },
+          body: JSON.stringify(notifyParams)
+        }).catch(err => console.error('⚠️ Error disparando notificación:', err));
+      }
+    }
+
+    // 7. Actualizar tracking de API Key
     await supabase.from('instituciones')
       .update({ api_key_last_used: new Date().toISOString() })
       .eq('id', inst.id)
