@@ -694,18 +694,24 @@ export default function Dashboard() {
     const channelName = `admitio-${user.institucion_id}`
     console.log(`🔌 Conectando Realtime a canal: ${channelName}`)
     
+    // Usar un nombre de canal simple y sin filtros en el servidor para evitar que Supabase bloquee la señal
     const channel = supabase
-      .channel(channelName)
-      // ✅ PRINCIPAL: Notificaciones (INSERTs)
+      .channel('admitio-global-updates')
+      // ✅ Notificaciones (INSERTs) - Recibir todo y filtrar en el cliente
       .on('postgres_changes',
         { 
           event: 'INSERT', 
-          schema: 'public', 
-          table: 'lead_notifications',
-          filter: `institucion_id=eq.${user.institucion_id}` 
+          table: 'lead_notifications'
         },
         async (payload) => {
-          console.log('📡 [Notification] RECIBIDA:', payload.new?.event_type, 'para lead:', payload.new?.lead_id)
+          console.log('🔔 EVENTO RECIBIDO EN lead_notifications:', payload.new)
+          
+          // Filtrar por institución en el cliente
+          const payloadInstId = payload.new?.institucion_id;
+          if (payloadInstId && payloadInstId !== user.institucion_id) {
+            console.log('⏭️ Ignorando notificación de otra institución:', payloadInstId)
+            return
+          }
           
           if (!selectedConsultaRef.current) {
             console.log('🔄 Actualizando Dashboard por notificación...')
