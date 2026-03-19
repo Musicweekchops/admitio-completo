@@ -185,13 +185,12 @@ const DetalleView = memo(({
             }}
           />
 
-          {/* Historial log */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+          {/* Historial log */}          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
             <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
               <Icon name="Activity" size={20} className="text-slate-400" />
               Historial de Actividad
             </h3>
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
               {(c.acciones || []).length === 0 ? (
                 <p className="text-center text-slate-400 py-8 text-sm">Sin actividad registrada</p>
               ) : (
