@@ -833,12 +833,12 @@ export default function Dashboard() {
 
     // Escuchar cuando AuthContext carga datos de Supabase
     const handleDataLoaded = () => {
-      console.log('📡 Evento admitio-data-loaded recibido')
+      console.log('📡 Evento admitio-store-updated recibido')
       store.reloadStore() // Recargar store desde localStorage
       loadData() // Recargar datos en el Dashboard
     }
 
-    window.addEventListener('admitio-data-loaded', handleDataLoaded)
+    window.addEventListener('admitio-store-updated', handleDataLoaded)
 
     // Retry después de 500ms por si el store aún no tenía datos
     const timer = setTimeout(() => {
@@ -848,7 +848,7 @@ export default function Dashboard() {
 
     return () => {
       clearTimeout(timer)
-      window.removeEventListener('admitio-data-loaded', handleDataLoaded)
+      window.removeEventListener('admitio-store-updated', handleDataLoaded)
     }
   }, [user])
 

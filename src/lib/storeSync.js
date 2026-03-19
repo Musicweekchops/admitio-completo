@@ -85,16 +85,21 @@ export async function cargarDatosInstitucion(institucionId) {
         tipo_alumno: 'nuevo',
         fecha_creacion: lead.created_at,
         fecha_actualizacion: lead.updated_at,
+        updated_at: lead.updated_at,
         fecha_primer_contacto: lead.fecha_primer_contacto,
         fecha_cierre: lead.fecha_cierre,
         created_at: lead.created_at,
-        historial: acciones
+        acciones: acciones
           .filter(a => a.lead_id === lead.id)
           .map(a => ({
+            id: a.id,
             fecha: a.created_at,
+            created_at: a.created_at,
             tipo: a.tipo,
+            accion: a.descripcion, // El dashboard usa .accion para el texto principal
             descripcion: a.descripcion,
-            usuario_id: a.usuario_id
+            usuario_id: a.usuario_id,
+            realizado_por_nombre: a.usuario_nombre || 'Sistema'
           }))
       })),
       usuarios: usuarios.map(u => ({
