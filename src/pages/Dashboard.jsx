@@ -24,16 +24,10 @@ const NotasTextarea = ({ consulta, userId, onSaved }) => {
 
   const handleSave = async () => {
     if (notas !== (consulta?.notas || '')) {
-      try {
-        console.log('💾 Guardando notas...');
-        // Usar la versión async para asegurar que se guarde en DB antes de continuar
-        await store.updateConsultaAsync(consulta.id, { notas }, userId)
+      const success = await store.updateConsultaAsync(consulta.id, { notas }, userId)
+      if (success) {
         setSaved(true)
-        console.log('✅ Notas guardadas');
         if (onSaved) onSaved()
-      } catch (err) {
-        console.error('❌ Error al guardar notas:', err)
-        // Opcional: mostrar notificación de error
       }
     }
   }
@@ -833,7 +827,7 @@ export default function Dashboard() {
 
     // Escuchar cuando AuthContext carga datos de Supabase
     const handleDataLoaded = () => {
-      console.log('📡 Evento admitio-store-updated recibido')
+      console.log('📡 Evento admitio-data-loaded recibido')
       store.reloadStore() // Recargar store desde localStorage
       loadData() // Recargar datos en el Dashboard
     }
@@ -1527,7 +1521,7 @@ export default function Dashboard() {
           <select value={filterCarrera} onChange={(e) => setFilterCarrera(e.target.value)}
             className="px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
             <option value="todas">Todas las carreras</option>
-            {store.getCarreras().map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
+            {CARRERAS.map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
           </select>
           <select value={filterEstado} onChange={(e) => setFilterEstado(e.target.value)}
             className="px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
