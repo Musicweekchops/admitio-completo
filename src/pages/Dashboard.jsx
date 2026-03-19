@@ -875,8 +875,10 @@ export default function Dashboard() {
     }
 
     const matchTipo = filterTipoAlumno === 'todos' || c.tipo_alumno === filterTipoAlumno
-    const matchSearch = (c.nombre || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (c.email || '').toLowerCase().includes(searchTerm.toLowerCase())
+    const searchLower = searchTerm.toLowerCase()
+    const matchSearch = (c.nombre || '').toLowerCase().includes(searchLower) ||
+      (c.email || '').toLowerCase().includes(searchLower) ||
+      (c.telefono || '').toLowerCase().includes(searchLower)
     return matchCarrera && matchEstado && matchTipo && matchSearch
   })
 
@@ -1485,6 +1487,31 @@ export default function Dashboard() {
     )
   }
 
+  // Componente de búsqueda con Debounce local para evitar re-renders pesados
+  const SearchInput = () => {
+    const [localValue, setLocalValue] = useState(searchTerm)
+
+    useEffect(() => {
+      const handler = setTimeout(() => {
+        setSearchTerm(localValue)
+      }, 300)
+      return () => clearTimeout(handler)
+    }, [localValue])
+
+    return (
+      <div className="flex-1 min-w-[200px] relative">
+        <Icon name="Search" className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" size={20} />
+        <input 
+          type="text" 
+          placeholder="Nombre, email o teléfono..."
+          value={localValue} 
+          onChange={(e) => setLocalValue(e.target.value)}
+          className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" 
+        />
+      </div>
+    )
+  }
+
   // ============================================
   // CONSULTAS VIEW (KANBAN + LISTA)
   // ============================================
@@ -1512,16 +1539,13 @@ export default function Dashboard() {
       {/* Filtros */}
       <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
         <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex-1 min-w-[200px] relative">
-            <Icon name="Search" className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" size={20} />
-            <input type="text" placeholder="Buscar por nombre o email..."
-              value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" />
-          </div>
+          <SearchInput />
           <select value={filterCarrera} onChange={(e) => setFilterCarrera(e.target.value)}
             className="px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
             <option value="todas">Todas las carreras</option>
-            {CARRERAS.map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
+            {(store.getCarreras().length > 0 ? store.getCarreras() : CARRERAS).map(c => (
+              <option key={c.id} value={c.nombre}>{c.nombre}</option>
+            ))}
           </select>
           <select value={filterEstado} onChange={(e) => setFilterEstado(e.target.value)}
             className="px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
