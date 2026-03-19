@@ -942,8 +942,7 @@ const DashboardViewComponent = ({
   MEDIOS,
   canEdit,
   handleNuevoLead,
-  navigateToMatriculados,
-  StatCard
+  navigateToMatriculados
 }) => {
   // Fallback: verificar rol directamente
   const esAdmin = isKeyMaster || user?.rol_id === 'keymaster' || user?.rol_id === 'superadmin'
@@ -2825,7 +2824,6 @@ export default function Dashboard() {
       canEdit={canEdit}
       handleNuevoLead={handleNuevoLead}
       navigateToMatriculados={navigateToMatriculados}
-      StatCard={StatCard}
     />
   )
 
@@ -3253,9 +3251,9 @@ export default function Dashboard() {
         ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}
         p-4 lg:p-8
       `}>
-        {activeTab === 'dashboard' && <DashboardViewComponent isKeyMaster={isKeyMaster} user={user} metricasGlobales={metricasGlobales} metricas={metricas} consultas={consultas} filteredConsultas={filteredConsultas} handleRefreshData={loadData} navigateToEstado={navigateToEstado} setFilterEstado={setFilterEstado} setActiveTab={setActiveTab} safeLeadsHoy={safeLeadsHoy} setShowLeadsHoyModal={setShowLeadsHoyModal} selectConsulta={selectConsulta} formatearTiempoRespuesta={formatearTiempoRespuesta} ESTADOS={ESTADOS} MEDIOS={MEDIOS} canEdit={canEdit} handleNuevoLead={handleNuevoLead} navigateToMatriculados={navigateToMatriculados} StatCard={StatCard} />}
+        {activeTab === 'dashboard' && <DashboardViewComponent isKeyMaster={isKeyMaster} user={user} metricasGlobales={metricasGlobales} metricas={metricas} consultas={consultas} filteredConsultas={filteredConsultas} handleRefreshData={loadData} navigateToEstado={navigateToEstado} setFilterEstado={setFilterEstado} setActiveTab={setActiveTab} safeLeadsHoy={safeLeadsHoy} setShowLeadsHoyModal={setShowLeadsHoyModal} selectConsulta={selectConsulta} formatearTiempoRespuesta={formatearTiempoRespuesta} ESTADOS={ESTADOS} MEDIOS={MEDIOS} canEdit={canEdit} handleNuevoLead={handleNuevoLead} navigateToMatriculados={navigateToMatriculados} />}
         {activeTab === 'consultas' && <ConsultasViewComponent isKeyMaster={isKeyMaster} canEdit={canEdit} handleNuevoLead={handleNuevoLead} searchTerm={searchTerm} setSearchTerm={setSearchTerm} filterCarrera={filterCarrera} setFilterCarrera={setFilterCarrera} filterEstado={filterEstado} setFilterEstado={setFilterEstado} filterTipoAlumno={filterTipoAlumno} setFilterTipoAlumno={setFilterTipoAlumno} viewMode={viewMode} setViewMode={setViewMode} filteredConsultas={filteredConsultas} selectConsulta={selectConsulta} formatDateShort={formatDateShort} selectedLeads={selectedLeads} setSelectedLeads={setSelectedLeads} CARRERAS={CARRERAS} ESTADOS={ESTADOS} MEDIOS={MEDIOS} />}
-        {activeTab === 'detalle' && <DetalleViewComponent consulta={selectedConsulta} user={user} isKeyMaster={isKeyMaster} isSuperAdmin={isRector} onClose={() => setSelectedConsulta(null)} onUpdate={loadData} setNotification={setNotification} handleUpdateEstado={handleUpdateEstado} handleEnviarEmail={handleEnviarEmail} formatDate={formatDate} InfoCard={InfoCard} />}
+        {activeTab === 'detalle' && <DetalleViewComponent selectedConsulta={selectedConsulta} user={user} isKeyMaster={isKeyMaster} isSuperAdmin={isRector} onClose={() => setSelectedConsulta(null)} onUpdate={loadData} setNotification={setNotification} handleUpdateEstado={handleUpdateEstado} handleEnviarEmail={handleEnviarEmail} formatDate={formatDate} InfoCard={InfoCard} />}
         {activeTab === 'historial' && <HistorialViewComponent user={user} loadData={loadData} isKeyMaster={isKeyMaster} formatDate={formatDate} />}
         {activeTab === 'reportes' && <ReportesViewComponent user={user} isRector={isRector} consultas={consultas} isKeyMaster={isKeyMaster} nombreInstitucion={nombreInstitucion} />}
         {activeTab === 'formularios' && <FormulariosViewComponent formularios={formularios} reloadFromSupabase={reloadFromSupabase} setNotification={setNotification} puedeCrearFormulario={puedeCrearFormulario} planInfo={planInfo} setLimiteAlerta={setLimiteAlerta} />}
