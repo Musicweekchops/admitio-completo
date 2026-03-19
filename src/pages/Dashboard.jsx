@@ -8,6 +8,31 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { useLockLead } from '../hooks/useLockLead'
 import { ESTADOS, CARRERAS, MEDIOS, TIPOS_ALUMNO } from '../data/mockData'
 
+// Componente separado para el input de búsqueda (evita re-renders pesados al escribir)
+const SearchInput = ({ initialValue, onSearchChange }) => {
+  const [value, setValue] = useState(initialValue || '')
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onSearchChange(value)
+    }, 400) // 400ms de debounce para fluidez total
+    return () => clearTimeout(timer)
+  }, [value, onSearchChange])
+
+  return (
+    <div className="flex-1 min-w-[200px] relative">
+      <Icon name="Search" className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" size={20} />
+      <input 
+        type="text" 
+        placeholder="Buscar por nombre o email..."
+        value={value} 
+        onChange={(e) => setValue(e.target.value)}
+        className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" 
+      />
+    </div>
+  )
+}
+
 // Componente separado para el textarea de notas (evita re-renders)
 const NotasTextarea = ({ consulta, userId, onSaved, disabled = false, lockedByName = null }) => {
   const [notas, setNotas] = useState(consulta?.notas || '')
@@ -1520,12 +1545,7 @@ export default function Dashboard() {
       {/* Filtros */}
       <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
         <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex-1 min-w-[200px] relative">
-            <Icon name="Search" className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" size={20} />
-            <input type="text" placeholder="Buscar por nombre o email..."
-              value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" />
-          </div>
+          <SearchInput initialValue={searchTerm} onSearchChange={setSearchTerm} />
           <select value={filterCarrera} onChange={(e) => setFilterCarrera(e.target.value)}
             className="px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
             <option value="todas">Todas las carreras</option>
