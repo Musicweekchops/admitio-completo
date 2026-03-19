@@ -5,7 +5,7 @@
 // Permite que el Dashboard funcione de forma síncrona
 // mientras los datos persisten en la nube
 
-import { supabase } from './supabase';
+import { supabase, isSupabaseConfigured } from './supabase';
 
 const STORAGE_KEY = 'admitio_data';
 
