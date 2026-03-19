@@ -569,6 +569,8 @@ export function createConsulta(data, userId, userRol = null) {
   let en_cola = false
   
   if (!asignado_a) {
+    // La asignación ahora ocurre en la base de datos (Trigger: tr_asignar_lead)
+    /*
     const resultado = asignarLeadInteligente()
     if (resultado.enCola) {
       en_cola = true
@@ -576,6 +578,9 @@ export function createConsulta(data, userId, userRol = null) {
     } else {
       asignado_a = resultado.userId
     }
+    */
+    asignado_a = null
+    en_cola = false
   }
   
   // Obtener info del creador
