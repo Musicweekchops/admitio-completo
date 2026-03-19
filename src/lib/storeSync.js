@@ -357,18 +357,25 @@ async function triggerRealtimeNotification(leadId, eventType) {
   if (!isSupabaseConfigured() || !leadId) return;
   
   const institucionId = getInstitucionIdFromStore();
-  if (!institucionId) return;
+  if (!institucionId) {
+    console.warn('⚠️ No se pudo disparar notificación: institucionId no encontrado');
+    return;
+  }
 
   try {
-    // Los INSERTs en Supabase son el método más confiable para Realtime
-    await supabase.from('lead_notifications').insert({
+    const { error } = await supabase.from('lead_notifications').insert({
       lead_id: leadId,
       event_type: eventType,
       institucion_id: institucionId
     });
-    console.log(`📡 Notificación enviada: ${eventType} para lead ${leadId}`);
+    
+    if (error) {
+      console.error('❌ Error enviando notificación realtime:', error);
+    } else {
+      console.log(`📡 Notificación enviada: ${eventType} para lead ${leadId} (Inst: ${institucionId})`);
+    }
   } catch (err) {
-    console.error('⚠️ Error enviando notificación realtime:', err);
+    console.error('⚠️ Excepción enviando notificación realtime:', err);
   }
 }
 

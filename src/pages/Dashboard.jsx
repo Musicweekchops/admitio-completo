@@ -691,35 +691,43 @@ export default function Dashboard() {
   useEffect(() => {
     if (!isSupabaseConfigured() || !user?.institucion_id) return
 
-    console.log('🔌 Conectando Supabase Realtime...')
+    const channelName = `admitio-${user.institucion_id}`
+    console.log(`🔌 Conectando Realtime a canal: ${channelName}`)
     
     const channel = supabase
-      .channel('admitio-updates')
-      // ✅ PRINCIPAL: lead_notifications usa INSERTs que SIEMPRE funcionan con Realtime
+      .channel(channelName)
+      // ✅ PRINCIPAL: Notificaciones (INSERTs)
       .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'lead_notifications' },
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'lead_notifications',
+          filter: `institucion_id=eq.${user.institucion_id}` 
+        },
         async (payload) => {
-          // Filtrar por institución en el cliente
-          if (payload.new?.institucion_id && payload.new.institucion_id !== user.institucion_id) return
-          console.log('📡 [Notification] Lead actualizado:', payload.new?.lead_id, payload.new?.event_type)
+          console.log('📡 [Notification] RECIBIDA:', payload.new?.event_type, 'para lead:', payload.new?.lead_id)
+          
           if (!selectedConsultaRef.current) {
+            console.log('🔄 Actualizando Dashboard por notificación...')
             await reloadFromSupabase()
             store.reloadStore()
             loadData()
             setLastUpdate(new Date())
           } else {
+            console.log('⚠️ Lead abierto, mostrando aviso de actualización pendiente')
             setNotification({ type: 'info', message: '🔄 Hay cambios en otros leads. Cierra esta ficha para actualizar.' })
             setTimeout(() => setNotification(null), 6000)
           }
         }
       )
-      // Respaldo: postgres_changes de leads/acciones (puede fallar según config)
+      // Respaldo: Cambios directos en leads (sin filtro servidor para evitar líos de Replica Identity Full)
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'leads' },
         async (payload) => {
           const payloadInstId = payload.new?.institucion_id || payload.old?.institucion_id
           if (payloadInstId && payloadInstId !== user.institucion_id) return
-          console.log('📡 [DB] Cambio en leads:', payload.eventType)
+          
+          console.log('📡 [DB] Cambio directo en leads:', payload.eventType)
           if (!selectedConsultaRef.current) {
             await reloadFromSupabase()
             store.reloadStore()
@@ -728,20 +736,10 @@ export default function Dashboard() {
           }
         }
       )
-      // Respaldo: Broadcast directo entre navegadores
-      .on('broadcast', { event: 'lead-updated' }, async (msg) => {
-        console.log('📡 [Broadcast] Lead actualizado:', msg.payload?.leadId)
-        if (!selectedConsultaRef.current) {
-          await reloadFromSupabase()
-          store.reloadStore()
-          loadData()
-          setLastUpdate(new Date())
-        }
-      })
       .subscribe((status) => {
-        console.log('📡 Realtime status:', status)
+        console.log(`📡 Realtime (${channelName}) status:`, status)
         if (status === 'SUBSCRIBED') {
-          console.log('✅ Realtime activo')
+          console.log('✅ Realtime activo y filtrado por institución')
         }
       })
 
