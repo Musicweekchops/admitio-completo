@@ -707,6 +707,9 @@ const KanbanView = ({ filteredConsultas, selectConsulta, isKeyMaster, selectedLe
           </div>
         )
       })}
+    </div>
+  )
+}
 
 const ListView = ({ filteredConsultas, selectConsulta, isKeyMaster, selectedLeads, setSelectedLeads, formatDateShort, ESTADOS }) => (
   <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-x-auto">
