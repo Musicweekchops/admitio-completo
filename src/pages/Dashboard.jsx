@@ -807,9 +807,9 @@ export default function Dashboard() {
               setViewMode={setViewMode}
               filteredConsultas={filteredConsultas}
               selectConsulta={selectConsulta}
-              handleReasignar={handleReasignar}
-              handleRefreshData={handleRefreshData}
-              carreras={store.getCarreras()}
+              selectedLeads={selectedLeads}
+              setSelectedLeads={setSelectedLeads}
+              formatDateShort={formatDateShort}
             />
           )}
 

@@ -394,7 +394,7 @@ const ReportesView = memo(({
       contactado: leadsReporte.filter(c => c.estado === 'contactado' && !c.matriculado && !c.descartado).length,
       seguimiento: leadsReporte.filter(c => c.estado === 'seguimiento' && !c.matriculado && !c.descartado).length,
       examen_admision: leadsReporte.filter(c => c.estado === 'examen_admision' && !c.matriculado && !c.descartado).length,
-      matriculado,
+      matriculado: matriculados,
       descartado: descartados
     }
 
