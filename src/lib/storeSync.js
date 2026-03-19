@@ -358,7 +358,7 @@ async function triggerRealtimeNotification(leadId, eventType) {
   
   const institucionId = getInstitucionIdFromStore();
   if (!institucionId) {
-    console.warn('⚠️ No se pudo disparar notificación: institucionId no encontrado');
+    console.warn('⚠️ [rt-v4] No se pudo disparar notificación: institucionId no encontrado');
     return;
   }
 
@@ -370,12 +370,12 @@ async function triggerRealtimeNotification(leadId, eventType) {
     });
     
     if (error) {
-      console.error('❌ Error enviando notificación realtime:', error);
+      console.error('❌ [rt-v4] Error enviando notificación:', error);
     } else {
-      console.log(`📡 Notificación enviada: ${eventType} para lead ${leadId} (Inst: ${institucionId})`);
+      console.log(`📡 [rt-v4] Notificación enviada: ${eventType} para lead ${leadId}`);
     }
   } catch (err) {
-    console.error('⚠️ Excepción enviando notificación realtime:', err);
+    console.error('⚠️ [rt-v4] Excepción enviando notificación:', err);
   }
 }
 
