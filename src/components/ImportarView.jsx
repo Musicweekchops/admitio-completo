@@ -1,0 +1,273 @@
+import React, { useState } from 'react'
+import Icon from './Icon'
+import { supabase } from '../lib/supabase'
+import * as store from '../lib/store'
+
+const ImportarView = ({ user, loadData, setNotification }) => {
+  const [file, setFile] = useState(null)
+  const [importing, setImporting] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [results, setResults] = useState(null)
+  const [error, setError] = useState(null)
+  const [asignarA, setAsignarA] = useState('')
+
+  const usuarios = store.getUsuarios() || []
+
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files[0]
+    if (selectedFile && selectedFile.type === 'text/csv') {
+      setFile(selectedFile)
+      setError(null)
+    } else {
+      setError('Por favor selecciona un archivo CSV válido')
+      setFile(null)
+    }
+  }
+
+  const procesarCSV = async () => {
+    if (!file) return
+    setImporting(true)
+    setProgress(10)
+    setError(null)
+
+    try {
+      const text = await file.text()
+      const rows = text.split('\n').map(row => row.split(',').map(cell => cell.trim()))
+      const headers = rows[0]
+
+      // Validar headers mínimos
+      if (!headers.includes('nombre')) {
+        throw new Error('El CSV debe incluir al menos la columna "nombre"')
+      }
+
+      setProgress(30)
+
+      const jsonLeads = rows.slice(1)
+        .filter(row => row.length === headers.length && row[headers.indexOf('nombre')])
+        .map(row => {
+          const lead = {}
+          headers.forEach((header, i) => {
+            lead[header.toLowerCase()] = row[i]
+          })
+          return lead
+        })
+
+      if (jsonLeads.length === 0) {
+        throw new Error('No se encontraron datos válidos en el CSV')
+      }
+
+      setProgress(50)
+
+      // Simular importación masiva (en producción usaríamos un RPC de Supabase)
+      let exitosos = 0
+      let fallidos = 0
+
+      for (const lead of jsonLeads) {
+        try {
+          // Si hay asignación manual, usarla. Si no, dejar que el store decida
+          const asignacionManual = asignarA || null
+
+          store.createConsulta({
+            nombre: lead.nombre,
+            email: lead.email || '',
+            telefono: lead.telefono || '',
+            carrera_nombre: lead.carrera || '',
+            medio_nombre: lead.medio || 'CSV',
+            notas: lead.notas || '',
+            asignado_a: asignacionManual,
+            tipo_alumno: lead.tipo_alumno || 'nuevo'
+          }, user.id)
+          exitosos++
+        } catch (e) {
+          console.error('Error importando lead:', e)
+          fallidos++
+        }
+        setProgress(50 + (exitosos / jsonLeads.length) * 40)
+      }
+
+      setResults({ total: jsonLeads.length, exitosos, fallidos })
+      if (setNotification) setNotification({ type: 'success', message: `Importación finalizada: ${exitosos} exitosos` })
+      loadData()
+      setProgress(100)
+    } catch (e) {
+      setError(e.message)
+      if (setNotification) setNotification({ type: 'error', message: 'Error en la importación: ' + e.message })
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  const descargarPlantilla = () => {
+    const csvContent = "data:text/csv;charset=utf-8,"
+      + "nombre,email,telefono,carrera,medio,notas,tipo_alumno\n"
+      + "Juan Perez,juan@example.com,987654321,Guitarra,Facebook,Interesado en nivel inicial,nuevo\n"
+      + "Maria Lopez,maria@example.com,123456789,Piano,Sitio Web,,antiguo"
+
+    const encodedUri = encodeURI(csvContent)
+    const link = document.createElement("a")
+    link.setAttribute("href", encodedUri)
+    link.setAttribute("download", "plantilla_leads_admitio.csv")
+    document.body.appendChild(link)
+    link.click()
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-2xl p-6 text-white shadow-lg">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
+            <Icon name="Upload" className="text-white" size={28} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold">Importar Leads</h1>
+            <p className="text-emerald-100">Carga masiva de consultas desde archivos CSV</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-6">
+        <div className="md:col-span-2 space-y-6">
+          {/* Instrucciones y Pasos */}
+          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+            <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+              <Icon name="Info" size={20} className="text-emerald-500" />
+              Pasos para la importación
+            </h3>
+            <div className="space-y-4">
+              <div className="flex gap-4">
+                <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0 font-bold">1</div>
+                <div>
+                  <p className="font-medium text-slate-700">Prepara tu archivo</p>
+                  <p className="text-sm text-slate-500">Asegúrate de que el CSV tenga los encabezados correctos. Puedes descargar nuestra plantilla.</p>
+                  <button
+                    onClick={descargarPlantilla}
+                    className="mt-2 text-sm text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
+                  >
+                    <Icon name="Download" size={14} />
+                    Descargar plantilla CSV
+                  </button>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0 font-bold">2</div>
+                <div className="flex-1">
+                  <p className="font-medium text-slate-700">Sube el archivo</p>
+                  <div className={`mt-2 border-2 border-dashed rounded-xl p-8 text-center transition-all ${file ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-slate-50 hover:border-emerald-400'}`}>
+                    <input
+                      type="file"
+                      id="csv-file"
+                      accept=".csv"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                    <label htmlFor="csv-file" className="cursor-pointer block">
+                      <Icon name="FileText" size={32} className={`mx-auto mb-2 ${file ? 'text-emerald-500' : 'text-slate-400'}`} />
+                      {file ? (
+                        <div className="text-emerald-700 font-medium">
+                          {file.name}
+                          <p className="text-xs font-normal">Haga clic para cambiar de archivo</p>
+                        </div>
+                      ) : (
+                        <p className="text-slate-500 text-sm">Arrastra tu CSV aquí o haz clic para buscar</p>
+                      )}
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0 font-bold">3</div>
+                <div>
+                  <p className="font-medium text-slate-700">Asignación de leads (Opcional)</p>
+                  <p className="text-sm text-slate-500 mb-2">Selecciona un operador para asignar todos los leads importados.</p>
+                  <select
+                    value={asignarA}
+                    onChange={e => setAsignarA(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm"
+                  >
+                    <option value="">-- Distribución automática --</option>
+                    {usuarios.map(u => (
+                      <option key={u.id} value={u.id}>{u.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 pt-6 border-t border-slate-100">
+              {importing ? (
+                <div className="space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600 font-medium">Procesando leads...</span>
+                    <span className="text-emerald-600 font-bold">{Math.round(progress)}%</span>
+                  </div>
+                  <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 transition-all duration-300"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={procesarCSV}
+                  disabled={!file}
+                  className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-200 transition-all"
+                >
+                  Procesar Importación
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          {/* Resultados */}
+          {results && (
+            <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+              <h3 className="font-semibold text-slate-800 mb-4">Último Resultado</h3>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg">
+                  <span className="text-slate-600">Total leídos</span>
+                  <span className="font-bold text-slate-800">{results.total}</span>
+                </div>
+                <div className="flex justify-between items-center bg-emerald-50 p-3 rounded-lg">
+                  <span className="text-emerald-700">Exitosos</span>
+                  <span className="font-bold text-emerald-700">{results.exitosos}</span>
+                </div>
+                {results.fallidos > 0 && (
+                  <div className="flex justify-between items-center bg-red-50 p-3 rounded-lg">
+                    <span className="text-red-700">Fallidos</span>
+                    <span className="font-bold text-red-700">{results.fallidos}</span>
+                  </div>
+                )}
+                <button
+                  onClick={() => setResults(null)}
+                  className="w-full py-2 text-sm text-slate-400 hover:text-slate-600"
+                >
+                  Limpiar resultados
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Advertencias */}
+          <div className="bg-amber-50 rounded-xl p-6 border border-amber-100">
+            <h4 className="flex items-center gap-2 text-amber-700 font-bold mb-3">
+              <Icon name="AlertTriangle" size={18} />
+              Importante
+            </h4>
+            <ul className="text-sm text-amber-700 space-y-2 list-disc pl-4">
+              <li>El archivo debe estar en formato .csv</li>
+              <li>La primera fila debe contener los nombres de las columnas</li>
+              <li>Se validará si el email o teléfono ya existe</li>
+              <li>No cierres el navegador mientras dure el proceso</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default ImportarView
