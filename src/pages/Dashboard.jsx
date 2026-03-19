@@ -992,7 +992,7 @@ export default function Dashboard() {
   // ============================================
   // SIDEBAR - Responsive y Colapsable
   // ============================================
-  const Sidebar = () => {
+  const renderSidebar = () => {
     // Restringir pestañas de configuración estricta solo a Admins
     const esAdmin = ['superowner', 'keymaster', 'superadmin'].includes(user?.rol_id)
     const esRector = isRector || user?.rol_id === 'rector'
@@ -1163,7 +1163,7 @@ export default function Dashboard() {
   // ============================================
   // MOBILE HEADER
   // ============================================
-  const MobileHeader = () => (
+  const renderMobileHeader = () => (
     <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-100 flex items-center justify-between px-4 z-30">
       <button
         onClick={() => setMobileMenuOpen(true)}
@@ -1191,7 +1191,7 @@ export default function Dashboard() {
   // ============================================
   // DASHBOARD VIEW - Para Encargados y KeyMaster
   // ============================================
-  const DashboardView = () => {
+  const renderDashboardView = () => {
     // Fallback: verificar rol directamente
     const esAdmin = isKeyMaster || user?.rol_id === 'keymaster' || user?.rol_id === 'superadmin'
 
@@ -1521,7 +1521,7 @@ export default function Dashboard() {
   // ============================================
   // CONSULTAS VIEW (KANBAN + LISTA)
   // ============================================
-  const ConsultasView = () => (
+  const renderConsultasView = () => (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-4">
@@ -1787,7 +1787,7 @@ export default function Dashboard() {
   // ============================================
   // HISTORIAL VIEW
   // ============================================
-  const HistorialView = () => {
+  const renderHistorialView = () => {
     const matriculados = (consultas || []).filter(c => c.matriculado)
     const descartados = (consultas || []).filter(c => c.descartado)
     const [historialTab, setHistorialTab] = useState('matriculados')
@@ -1969,7 +1969,7 @@ export default function Dashboard() {
   // ============================================
   // DETALLE VIEW - Con notas editables y sistema de locks
   // ============================================
-  const DetalleView = () => {
+  const renderDetalleView = () => {
     if (!selectedConsulta) return null
     const c = selectedConsulta
     const encargados = store.getUsuarios().filter(u => u.rol_id === 'encargado')
@@ -2573,7 +2573,7 @@ export default function Dashboard() {
   // ============================================
   // REPORTES VIEW - Funnel-Centric Dashboard (Rediseño v2)
   // ============================================
-  const ReportesView = () => {
+  const renderReportesView = () => {
     // Estados principales
     const [periodo, setPeriodo] = useState('mes') // 'semana', 'mes', 'trimestre', 'año'
     const [activeTab, setActiveTab] = useState('embudo') // 'embudo', 'tendencia', 'carreras', 'medios', 'encargados'
@@ -4178,7 +4178,7 @@ export default function Dashboard() {
   // ============================================
   // FORMULARIOS VIEW - Editor mejorado sin re-renders
   // ============================================
-  const FormulariosView = () => {
+  const renderFormulariosView = () => {
     const [editingForm, setEditingForm] = useState(null)
     const [localShowModal, setLocalShowModal] = useState(false)
 
@@ -4302,7 +4302,7 @@ export default function Dashboard() {
   // ============================================
   // USUARIOS VIEW
   // ============================================
-  const UsuariosView = () => {
+  const renderUsuariosView = () => {
     const isSuperAdmin = user?.rol_id === 'superadmin'
     const [usuarios, setUsuarios] = useState(store.getUsuarios(user?.id, isSuperAdmin))
     const [localEditingUser, setLocalEditingUser] = useState(null)
@@ -5078,7 +5078,7 @@ export default function Dashboard() {
   // ============================================
   // CONFIGURACIÓN VIEW - Plan y Uso
   // ============================================
-  const ConfiguracionView = () => {
+  const renderConfiguracionView = () => {
     const PLANES_INFO = {
       free: { nombre: 'Gratis', color: 'slate', descripcion: 'Ideal para probar la plataforma' },
       prueba: { nombre: 'Prueba', color: 'slate', descripcion: 'Plan de prueba gratuito' },
@@ -5638,7 +5638,7 @@ function getSupabaseAnonKey() {
   // ============================================
   // IMPORTACIONES SHEETS VIEW - Cola de revisión
   // ============================================
-  const ImportacionesSheetsView = () => {
+  const renderImportacionesSheetsView = () => {
     const [importaciones, setImportaciones] = useState([])
     const [loading, setLoading] = useState(true)
     const [procesando, setProcesando] = useState(null)
@@ -6012,7 +6012,7 @@ function getSupabaseAnonKey() {
   // ============================================
   // PROGRAMAS VIEW - Gestión de Carreras/Cursos
   // ============================================
-  const ProgramasView = () => {
+  const renderProgramasView = () => {
     const [showModal, setShowModal] = useState(false)
     const [editingPrograma, setEditingPrograma] = useState(null)
     const [searchTerm, setSearchTerm] = useState('')
@@ -6504,7 +6504,7 @@ function getSupabaseAnonKey() {
   // IMPORTAR VIEW - Con Historial de Importaciones
   // ============================================
 
-  const ImportarView = () => {
+  const renderImportarView = () => {
     const [importFile, setImportFile] = useState(null)
     const [importResult, setImportResult] = useState(null)
     const [importing, setImporting] = useState(false)
@@ -7355,10 +7355,10 @@ function getSupabaseAnonKey() {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Mobile Header */}
-      <MobileHeader />
+      {renderMobileHeader()}
 
       {/* Sidebar */}
-      <Sidebar />
+      {renderSidebar()}
 
       {/* Contenido principal - responsive */}
       <div className={`
@@ -7367,17 +7367,17 @@ function getSupabaseAnonKey() {
         ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}
         p-4 lg:p-8
       `}>
-        {activeTab === 'dashboard' && <DashboardView />}
-        {activeTab === 'consultas' && <ConsultasView />}
-        {activeTab === 'detalle' && <DetalleView />}
-        {activeTab === 'historial' && <HistorialView />}
-        {activeTab === 'reportes' && <ReportesView />}
-        {activeTab === 'formularios' && <FormulariosView />}
-        {activeTab === 'usuarios' && <UsuariosView />}
-        {activeTab === 'programas' && <ProgramasView />}
-        {activeTab === 'importaciones_sheets' && <ImportacionesSheetsView />}
-        {activeTab === 'importar' && <ImportarView />}
-        {activeTab === 'configuracion' && <ConfiguracionView />}
+        {activeTab === 'dashboard' && renderDashboardView()}
+        {activeTab === 'consultas' && renderConsultasView()}
+        {activeTab === 'detalle' && renderDetalleView()}
+        {activeTab === 'historial' && renderHistorialView()}
+        {activeTab === 'reportes' && renderReportesView()}
+        {activeTab === 'formularios' && renderFormulariosView()}
+        {activeTab === 'usuarios' && renderUsuariosView()}
+        {activeTab === 'programas' && renderProgramasView()}
+        {activeTab === 'importaciones_sheets' && renderImportacionesSheetsView()}
+        {activeTab === 'importar' && renderImportarView()}
+        {activeTab === 'configuracion' && renderConfiguracionView()}
       </div>
 
       {/* Barra de Acciones Masivas */}
