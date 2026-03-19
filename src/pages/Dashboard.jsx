@@ -22,11 +22,19 @@ const NotasTextarea = ({ consulta, userId, onSaved }) => {
     setSaved(e.target.value === (consulta?.notas || ''))
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (notas !== (consulta?.notas || '')) {
-      store.updateConsulta(consulta.id, { notas }, userId)
-      setSaved(true)
-      if (onSaved) onSaved()
+      try {
+        console.log('💾 Guardando notas...');
+        // Usar la versión async para asegurar que se guarde en DB antes de continuar
+        await store.updateConsultaAsync(consulta.id, { notas }, userId)
+        setSaved(true)
+        console.log('✅ Notas guardadas');
+        if (onSaved) onSaved()
+      } catch (err) {
+        console.error('❌ Error al guardar notas:', err)
+        // Opcional: mostrar notificación de error
+      }
     }
   }
 
@@ -1519,7 +1527,7 @@ export default function Dashboard() {
           <select value={filterCarrera} onChange={(e) => setFilterCarrera(e.target.value)}
             className="px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
             <option value="todas">Todas las carreras</option>
-            {CARRERAS.map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
+            {store.getCarreras().map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
           </select>
           <select value={filterEstado} onChange={(e) => setFilterEstado(e.target.value)}
             className="px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">

@@ -162,7 +162,7 @@ export async function cargarDatosInstitucion(institucionId) {
 
     // Guardar en localStorage
     localStorage.setItem(STORAGE_KEY, JSON.stringify(storeData));
-    localStorage.setItem('admitio_version', '2.6');
+    localStorage.setItem('admitio_version', '2.7');
     
     // Disparar evento para que el Dashboard recargue
     window.dispatchEvent(new CustomEvent('admitio-store-updated', { 
@@ -470,6 +470,12 @@ export async function syncActualizarLeadDirecto(leadId, updates) {
     return { success: true };
   } catch (err) {
     console.error('❌ Excepción en sync directo:', err);
+    // Loguear el error completo para diagnóstico en staging
+    console.error('Detalles del error:', {
+      leadId,
+      updates: Object.keys(supabaseUpdates),
+      error: err
+    });
     return { success: false, error: err.message || 'Error de conexión' };
   }
 }
