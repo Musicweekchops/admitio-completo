@@ -924,6 +924,15 @@ export function updateConsulta(id, updates, userId) {
   }
   
   syncActualizarLeadDirecto(id, syncUpdates)
+  
+  // Notificar a otros navegadores via Broadcast (no depende de pg_publication)
+  if (window._admitioChannel) {
+    window._admitioChannel.send({
+      type: 'broadcast',
+      event: 'lead-updated',
+      payload: { leadId: id, fields: Object.keys(syncUpdates) }
+    }).catch(() => {}) // silenciar errores de broadcast
+  }
   // ========================================
   
   return newConsulta

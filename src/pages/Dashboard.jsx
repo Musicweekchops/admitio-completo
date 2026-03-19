@@ -694,34 +694,26 @@ export default function Dashboard() {
     console.log('🔌 Conectando Supabase Realtime...')
     
     const channel = supabase
-      .channel('db-changes')
+      .channel('admitio-updates')
+      // Escuchar postgres_changes como respaldo (puede no funcionar según config)
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'leads' },
         async (payload) => {
-          // Solo procesar cambios de nuestra institución
           const payloadInstId = payload.new?.institucion_id || payload.old?.institucion_id
           if (payloadInstId && payloadInstId !== user.institucion_id) return
-
-          console.log('📡 Cambio en leads:', payload.eventType, payload.new?.nombre || payload.old?.id)
+          console.log('📡 [DB] Cambio en leads:', payload.eventType)
           if (!selectedConsultaRef.current) {
-            // Sin ficha abierta: actualizar en silencio
             await reloadFromSupabase()
             store.reloadStore()
             loadData()
             setLastUpdate(new Date())
-            console.log('✅ Dashboard actualizado automáticamente')
-          } else {
-            // Con ficha abierta: avisar sin interrumpir
-            setNotification({ type: 'info', message: '🔄 Hay cambios en otros leads. Cierra esta ficha para actualizar.' })
-            setTimeout(() => setNotification(null), 6000)
-            console.log('⚠️ Cambio pendiente - lead abierto, usuario notificado')
           }
         }
       )
       .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'usuarios', filter: `institucion_id=eq.${user.institucion_id}` },
+        { event: 'INSERT', schema: 'public', table: 'acciones_lead' },
         async (payload) => {
-          console.log('📡 Cambio en usuarios:', payload.eventType)
+          console.log('📡 [DB] Nueva acción:', payload.new?.tipo)
           if (!selectedConsultaRef.current) {
             await reloadFromSupabase()
             store.reloadStore()
@@ -729,28 +721,33 @@ export default function Dashboard() {
           }
         }
       )
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'acciones_lead' },
-        async (payload) => {
-          console.log('📡 Nueva acción en historial:', payload.eventType)
+      // ✅ Broadcast: mensajes directos entre navegadores (no depende de DB)
+      .on('broadcast', { event: 'lead-updated' }, async (msg) => {
+        console.log('📡 [Broadcast] Lead actualizado:', msg.payload?.leadId)
+        if (!selectedConsultaRef.current) {
           await reloadFromSupabase()
           store.reloadStore()
           loadData()
+          setLastUpdate(new Date())
+        } else {
+          setNotification({ type: 'info', message: '🔄 Hay cambios en otros leads. Cierra esta ficha para actualizar.' })
+          setTimeout(() => setNotification(null), 6000)
         }
-      )
+      })
       .subscribe((status) => {
         console.log('📡 Realtime status:', status)
         if (status === 'SUBSCRIBED') {
-          console.log('✅ Realtime completo - leads, usuarios y actividad en vivo')
-        }
-        if (status === 'CHANNEL_ERROR') {
-          console.warn('⚠️ Error en canal Realtime, reconectando...')
+          console.log('✅ Realtime activo - leads en tiempo real')
         }
       })
+
+    // Guardar referencia al canal para usarlo en broadcasts
+    window._admitioChannel = channel
 
     return () => {
       console.log('🔌 Desconectando Realtime...')
       supabase.removeChannel(channel)
+      window._admitioChannel = null
     }
   }, [user?.institucion_id])
   // ========================================
