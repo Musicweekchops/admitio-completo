@@ -715,9 +715,6 @@ export default function Dashboard() {
             store.reloadStore()
             loadData()
             setLastUpdate(new Date())
-          } else {
-            setNotification({ type: 'info', message: '🔄 Hay cambios en otros leads. Cierra esta ficha para actualizar.' })
-            setTimeout(() => setNotification(null), 6000)
           }
         }
       )
