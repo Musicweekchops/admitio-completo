@@ -350,6 +350,29 @@ export function syncActualizarLead(leadId, updates) {
 }
 
 // ============================================
+// NOTIFICACIONES REALTIME (Bus de eventos)
+// ============================================
+
+async function triggerRealtimeNotification(leadId, eventType) {
+  if (!isSupabaseConfigured() || !leadId) return;
+  
+  const institucionId = getInstitucionIdFromStore();
+  if (!institucionId) return;
+
+  try {
+    // Los INSERTs en Supabase son el método más confiable para Realtime
+    await supabase.from('lead_notifications').insert({
+      lead_id: leadId,
+      event_type: eventType,
+      institucion_id: institucionId
+    });
+    console.log(`📡 Notificación enviada: ${eventType} para lead ${leadId}`);
+  } catch (err) {
+    console.error('⚠️ Error enviando notificación realtime:', err);
+  }
+}
+
+// ============================================
 // SYNC DIRECTO (espera respuesta de Supabase)
 // ============================================
 // Usar esta función cuando necesites confirmar que el cambio se guardó
@@ -433,6 +456,10 @@ export async function syncActualizarLeadDirecto(leadId, updates) {
     }
     
     console.log('✅ Sync directo exitoso:', leadId);
+
+    // Disparar notificación para otros navegadores
+    triggerRealtimeNotification(leadId, 'lead_updated');
+
     return { success: true };
   } catch (err) {
     console.error('❌ Excepción en sync directo:', err);
@@ -495,6 +522,9 @@ export async function syncCrearAccion(leadId, accion, usuarioId) {
       return;
     }
     console.log('✅ Acción sincronizada:', data);
+
+    // Disparar notificación para otros navegadores
+    triggerRealtimeNotification(leadId, 'accion_creada');
   } catch (err) {
     console.error('❌ Excepción sincronizando acción:', err);
   }

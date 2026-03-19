@@ -695,7 +695,25 @@ export default function Dashboard() {
     
     const channel = supabase
       .channel('admitio-updates')
-      // Escuchar postgres_changes como respaldo (puede no funcionar según config)
+      // ✅ PRINCIPAL: lead_notifications usa INSERTs que SIEMPRE funcionan con Realtime
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'lead_notifications' },
+        async (payload) => {
+          // Filtrar por institución en el cliente
+          if (payload.new?.institucion_id && payload.new.institucion_id !== user.institucion_id) return
+          console.log('📡 [Notification] Lead actualizado:', payload.new?.lead_id, payload.new?.event_type)
+          if (!selectedConsultaRef.current) {
+            await reloadFromSupabase()
+            store.reloadStore()
+            loadData()
+            setLastUpdate(new Date())
+          } else {
+            setNotification({ type: 'info', message: '🔄 Hay cambios en otros leads. Cierra esta ficha para actualizar.' })
+            setTimeout(() => setNotification(null), 6000)
+          }
+        }
+      )
+      // Respaldo: postgres_changes de leads/acciones (puede fallar según config)
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'leads' },
         async (payload) => {
@@ -710,18 +728,7 @@ export default function Dashboard() {
           }
         }
       )
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'acciones_lead' },
-        async (payload) => {
-          console.log('📡 [DB] Nueva acción:', payload.new?.tipo)
-          if (!selectedConsultaRef.current) {
-            await reloadFromSupabase()
-            store.reloadStore()
-            loadData()
-          }
-        }
-      )
-      // ✅ Broadcast: mensajes directos entre navegadores (no depende de DB)
+      // Respaldo: Broadcast directo entre navegadores
       .on('broadcast', { event: 'lead-updated' }, async (msg) => {
         console.log('📡 [Broadcast] Lead actualizado:', msg.payload?.leadId)
         if (!selectedConsultaRef.current) {
@@ -729,15 +736,12 @@ export default function Dashboard() {
           store.reloadStore()
           loadData()
           setLastUpdate(new Date())
-        } else {
-          setNotification({ type: 'info', message: '🔄 Hay cambios en otros leads. Cierra esta ficha para actualizar.' })
-          setTimeout(() => setNotification(null), 6000)
         }
       })
       .subscribe((status) => {
         console.log('📡 Realtime status:', status)
         if (status === 'SUBSCRIBED') {
-          console.log('✅ Realtime activo - leads en tiempo real')
+          console.log('✅ Realtime activo')
         }
       })
 
