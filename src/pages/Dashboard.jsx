@@ -587,6 +587,36 @@ const PieChart = ({ data, size = 200 }) => {
   )
 }
 
+// Componente de búsqueda con Debounce local para evitar re-renders pesados
+const SearchInput = memo(({ searchTerm, setSearchTerm }) => {
+  const [localValue, setLocalValue] = useState(searchTerm)
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setSearchTerm(localValue)
+    }, 300)
+    return () => clearTimeout(handler)
+  }, [localValue, setSearchTerm])
+
+  // Sincronizar si el searchTerm cambia desde fuera (ej: limpiar filtros)
+  useEffect(() => {
+    setLocalValue(searchTerm)
+  }, [searchTerm])
+
+  return (
+    <div className="flex-1 min-w-[200px] relative">
+      <Icon name="Search" className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" size={20} />
+      <input 
+        type="text" 
+        placeholder="Nombre, email o teléfono..."
+        value={localValue} 
+        onChange={(e) => setLocalValue(e.target.value)}
+        className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" 
+      />
+    </div>
+  )
+})
+
 export default function Dashboard() {
   const { user, institucion, signOut, isKeyMaster, isRector, isEncargado, isAsistente, canViewAll, canEdit, canConfig, canCreateLeads, canReasignar, reloadFromSupabase, planInfo, actualizarUso, puedeCrearLead, puedeCrearUsuario, puedeCrearFormulario, inviteUser, notifyAssignment, resendVerification } = useAuth()
 
@@ -1487,30 +1517,7 @@ export default function Dashboard() {
     )
   }
 
-  // Componente de búsqueda con Debounce local para evitar re-renders pesados
-  const SearchInput = () => {
-    const [localValue, setLocalValue] = useState(searchTerm)
 
-    useEffect(() => {
-      const handler = setTimeout(() => {
-        setSearchTerm(localValue)
-      }, 300)
-      return () => clearTimeout(handler)
-    }, [localValue])
-
-    return (
-      <div className="flex-1 min-w-[200px] relative">
-        <Icon name="Search" className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" size={20} />
-        <input 
-          type="text" 
-          placeholder="Nombre, email o teléfono..."
-          value={localValue} 
-          onChange={(e) => setLocalValue(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" 
-        />
-      </div>
-    )
-  }
 
   // ============================================
   // CONSULTAS VIEW (KANBAN + LISTA)
@@ -1539,7 +1546,7 @@ export default function Dashboard() {
       {/* Filtros */}
       <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
         <div className="flex items-center gap-4 flex-wrap">
-          <SearchInput />
+          <SearchInput searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
           <select value={filterCarrera} onChange={(e) => setFilterCarrera(e.target.value)}
             className="px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
             <option value="todas">Todas las carreras</option>
