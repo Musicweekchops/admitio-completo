@@ -2224,6 +2224,7 @@ export default function Dashboard() {
       </div>
     )
   }
+  }
 
   // ============================================
   // REPORTES VIEW - Funnel-Centric Dashboard (Rediseño v2)
