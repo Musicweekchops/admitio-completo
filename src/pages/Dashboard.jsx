@@ -254,6 +254,14 @@ export default function Dashboard() {
     }
     setMetricasGlobales(store.getMetricasGlobales())
     setFormularios(store.getFormularios() || [])
+
+    // ✅ Actualizar consulta seleccionada para refrescar historial/acciones
+    if (selectedConsulta) {
+      const updated = store.getConsultaById(selectedConsulta.id)
+      if (updated) {
+        setSelectedConsulta(updated)
+      }
+    }
   }
 
   // Cargar datos inicial y escuchar eventos de datos cargados

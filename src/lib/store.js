@@ -545,11 +545,21 @@ export function getConsultaById(id) {
   const consulta = store.consultas.find(c => c.id === id)
   if (!consulta) return null
   
+  const actividad = (store.actividad || [])
+    .filter(a => a.lead_id === id)
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+
+  // Mapear para compatibilidad con DetalleView que espera .acciones y .accion
+  const acciones = actividad.map(a => ({
+    ...a,
+    accion: a.accion || a.descripcion,
+    realizado_por_nombre: a.user_nombre || a.realizado_por_nombre || 'Sistema'
+  }))
+
   return {
     ...enrichConsulta(consulta),
-    actividad: store.actividad
-      .filter(a => a.lead_id === id)
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    actividad,
+    acciones
   }
 }
 
@@ -1204,15 +1214,30 @@ function addActividad(leadId, userId, tipo, descripcion, metadata = {}) {
     lead_id: leadId,
     user_id: userId,
     user_nombre: usuario?.nombre,
+    realizado_por_nombre: usuario?.nombre || 'Sistema',
     tipo,
+    accion: descripcion, // Para compatibilidad con UI
     descripcion,
     metadata,
     created_at: new Date().toISOString()
   }
+  
+  // 1. Agregar al log global
+  if (!store.actividad) store.actividad = []
   store.actividad.push(actividad)
   
+  // 2. Agregar al array .acciones del lead específico si existe en store.consultas
+  const leadIndex = store.consultas.findIndex(c => c.id === leadId)
+  if (leadIndex !== -1) {
+    if (!store.consultas[leadIndex].acciones) {
+      store.consultas[leadIndex].acciones = []
+    }
+    // Agregar al principio (más reciente primero)
+    store.consultas[leadIndex].acciones.unshift(actividad)
+  }
+  
   // ========== SYNC CON SUPABASE ==========
-  syncCrearAccion(leadId, { tipo, descripcion }, userId)
+  syncCrearAccion(leadId, { tipo, descripcion, user_nombre: usuario?.nombre }, userId)
   // ========================================
 }
 
