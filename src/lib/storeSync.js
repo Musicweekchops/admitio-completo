@@ -131,9 +131,13 @@ export async function cargarDatosInstitucion(institucionId) {
         id: a.id,
         tipo: a.tipo,
         descripcion: a.descripcion,
+        accion: a.descripcion, // Fallback para UI
         fecha: a.created_at,
+        created_at: a.created_at, // Consistencia con addActividad
         usuario_id: a.usuario_id,
-        consulta_id: a.lead_id
+        realizado_por_nombre: a.usuario_nombre || 'Sistema', // Importante para la UI
+        consulta_id: a.lead_id,
+        lead_id: a.lead_id // Consistencia
       })),
       // Datos por defecto
       medios: [

@@ -553,7 +553,8 @@ export function getConsultaById(id) {
   const acciones = actividad.map(a => ({
     ...a,
     accion: a.accion || a.descripcion,
-    realizado_por_nombre: a.user_nombre || a.realizado_por_nombre || 'Sistema'
+    created_at: a.created_at || a.fecha, // Fallback importante
+    realizado_por_nombre: a.realizado_por_nombre || a.user_nombre || 'Sistema'
   }))
 
   return {
