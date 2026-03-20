@@ -193,12 +193,12 @@ async function processSyncQueue() {
   dispatchSyncStatus('syncing');
 
   while (syncQueue.length > 0) {
-    // SEGURIDAD: Validar sesión antes de cada tarea en la cola para evitar 401/pérdida de datos silente
-    const { data: { session } } = await supabase.auth.getSession();
+    // SEGURIDAD: Validar sesión real antes de cada tarea en la cola
+    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
     
-    // Si no hay sesión real, bloqueamos de inmediato para avisar al usuario
-    if (!session) {
-      console.warn('⚠️ No hay sesión de Supabase activa para procesar la cola');
+    // Si no hay sesión o hay error de autenticación, bloqueamos de inmediato
+    if (!authUser || authError) {
+      console.warn('⚠️ Sesión pérdida o inválida detectada en el procesador de cola');
       dispatchSyncError('auth', { status: 401, message: 'Sesión no encontrada o expirada' });
       dispatchSyncStatus('error');
       isSyncing = false;

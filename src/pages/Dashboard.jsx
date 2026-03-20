@@ -192,21 +192,25 @@ export default function Dashboard() {
     }
   }, [user?.id])
 
-  // Chequeo preventivo de sesión (cada 10 seg)
+  // Chequeo preventivo de sesión (cada 5 seg)
   useEffect(() => {
     if (!user?.id || !isSupabaseConfigured()) return;
 
     const sessionCheck = setInterval(async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        console.warn('⚠️ Sesión perdida detectada por el vigilante');
+      // Usar getUser() es más confiable que getSession() en tiempo real
+      // ya que verifica más estrictamente el estado del cliente
+      const { data: { user: authUser }, error } = await supabase.auth.getUser();
+      
+      // Si no hay usuario en Auth o hay error de autenticación (401/403)
+      if (!authUser || error) {
+        console.warn('⚠️ Sesión perdida detectada por el vigilante:', error?.message);
         setNotification({
           type: 'error',
-          message: 'Tu sesión ha expirado. Para proteger tus cambios, por favor inicia sesión de nuevo.',
+          message: 'Tu sesión ha expirado. Por seguridad y para no perder tus cambios, por favor inicia sesión de nuevo.',
           isBlocking: true
         });
       }
-    }, 10000); // 10 segundos
+    }, 5000); // 5 segundos
 
     return () => clearInterval(sessionCheck);
   }, [user?.id]);
