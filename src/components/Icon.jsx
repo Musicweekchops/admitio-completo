@@ -260,6 +260,30 @@ const icons = {
       <circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>
     </svg>
   ),
+  Cloud: (props) => (
+    <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.5 19c2.5 0 4.5-2 4.5-4.5 0-2.4-1.8-4.4-4.2-4.5C17.4 6.1 14.1 3 10 3 6.6 3 3.8 5 3.1 8 1.3 9 0 10.8 0 13c0 3.3 2.7 6 6 6"/>
+    </svg>
+  ),
+  CloudCheck: (props) => (
+    <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.5 19c2.5 0 4.5-2 4.5-4.5 0-2.4-1.8-4.4-4.2-4.5C17.4 6.1 14.1 3 10 3 6.6 3 3.8 5 3.1 8 1.3 9 0 10.8 0 13c0 3.3 2.7 6 6 6"/>
+      <path d="m9 13 2 2 4-4"/>
+    </svg>
+  ),
+  CloudOff: (props) => (
+    <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m2 2 20 20"/>
+      <path d="M5.782 5.782A7 7 0 0 0 9 19h8.5a4.5 4.5 0 0 0 1.307-.193"/>
+      <path d="M21.532 16.5A4.5 4.5 0 0 0 17.5 10h-1.79A7.008 7.008 0 0 0 10 3.13"/>
+      <path d="M3.1 8a7 7 0 0 0-2.321 4.341"/>
+    </svg>
+  ),
+  Menu: (props) => (
+    <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/>
+    </svg>
+  ),
 }
 
 export default function Icon({ name, className = "", size = 24 }) {
