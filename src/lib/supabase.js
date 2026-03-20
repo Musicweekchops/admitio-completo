@@ -59,7 +59,9 @@ if (isConfigured) {
     }
   })
   
-  console.log('✅ Cliente Supabase inicializado correctamente')
+  const maskedUrl = supabaseUrl?.replace(/(https:\/\/).{4}(.*)/, '$1****$2')
+  console.log(`✅ Cliente Supabase inicializado correctamente`)
+  console.log(`🔗 Conectado a proyecto: ${maskedUrl}`)
 }
 
 // Exportar el cliente (puede ser null si no está configurado)
