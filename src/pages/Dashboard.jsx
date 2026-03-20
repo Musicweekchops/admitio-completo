@@ -20,6 +20,7 @@ import HistorialView from '../components/HistorialView'
 import DetalleView from '../components/DetalleView'
 import ModalNuevaConsulta from '../components/ModalNuevaConsulta'
 import PieChart from '../components/PieChart'
+import { getSyncStatus } from '../lib/storeSync'
 
 
 export default function Dashboard() {
@@ -451,11 +452,11 @@ export default function Dashboard() {
       setMobileMenuOpen(false) // Cerrar en mobile
     }
 
-  // ============================================
-  // INDICADOR DE ESTADO DE SINCRONIZACIÓN
-  // ============================================
+    // ============================================
+    // INDICADOR DE ESTADO DE SINCRONIZACIÓN (DENTRO DE SIDEBAR)
+    // ============================================
     const SyncStatusIndicator = ({ isMobile = false }) => {
-      const sync = store.getSyncStatus?.() || { status: syncStatus };
+      const sync = getSyncStatus() || { status: syncStatus };
       let icon = "Cloud";
       let color = "text-slate-400";
       let label = "Conectando...";
@@ -484,8 +485,6 @@ export default function Dashboard() {
         </div>
       );
     };
-
-  const Sidebar = () => {
     return (
       <>
         {mobileMenuOpen && (
@@ -629,17 +628,51 @@ export default function Dashboard() {
     )
   }
 
-  const MobileHeader = () => (
-    <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-100 flex items-center justify-between px-4 z-30">
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => setMobileMenuOpen(true)}
-          className="p-2 bg-red-500 text-white hover:bg-red-600 rounded-lg shadow-sm"
-        >
-          <Icon name="Menu" size={24} />
-        </button>
-        <SyncStatusIndicator isMobile={true} />
-      </div>
+  const MobileHeader = () => {
+    // Definir localmente o pasar por prop si fuera necesario, 
+    // pero para simplicidad lo definimos igual que en Sidebar
+    const SyncStatusIndicatorLocal = ({ isMobile = true }) => {
+      const sync = getSyncStatus() || { status: syncStatus };
+      let icon = "Cloud";
+      let color = "text-slate-400";
+      let label = "Conectando...";
+      let pulse = "";
+
+      if (syncStatus === 'syncing' || sync.isSyncing) {
+        icon = "RefreshCw";
+        color = "text-amber-500";
+        label = "Sincronizando...";
+        pulse = "animate-spin";
+      } else if (syncStatus === 'synced') {
+        icon = "CloudCheck";
+        color = "text-emerald-500";
+        const time = sync.lastSync ? new Date(sync.lastSync).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        label = `Sincronizado ${time}`;
+      } else if (syncStatus === 'error') {
+        icon = "CloudOff";
+        color = "text-red-500";
+        label = "Error de conexión";
+      }
+
+      return (
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-100" title={label}>
+          <Icon name={icon} size={18} className={`${color} ${pulse}`} />
+          <span className={`text-[10px] uppercase tracking-wider font-bold ${color}`}>{label}</span>
+        </div>
+      );
+    };
+
+    return (
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-100 flex items-center justify-between px-4 z-30">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setMobileMenuOpen(true)}
+            className="p-2 bg-red-500 text-white hover:bg-red-600 rounded-lg shadow-sm"
+          >
+            <Icon name="Menu" size={24} />
+          </button>
+          <SyncStatusIndicatorLocal isMobile={true} />
+        </div>
 
       <div className="flex items-center gap-2">
         <div className="w-8 h-8 bg-gradient-to-br from-violet-600 to-purple-600 rounded-lg flex items-center justify-center">
@@ -656,6 +689,7 @@ export default function Dashboard() {
       </button>
     </div>
   )
+}
   // Handler para seleccionar consulta
   const selectConsulta = useCallback((id) => {
     const consulta = store.getConsultaById(id)
@@ -1142,5 +1176,4 @@ export default function Dashboard() {
       </button>
     </div>
   )
-}
 }
