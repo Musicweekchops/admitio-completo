@@ -648,7 +648,7 @@ export function getSyncStatus() {
   };
 }
 
-export function forcSync() {
+export function forceSync() {
   return processSyncQueue();
 }
 
@@ -877,15 +877,10 @@ export default {
   syncActualizarCarrera,
   syncEliminarCarrera,
   syncImportarCarreras,
-  syncImportarLeads,
-  syncCrearCarrera,
-  syncActualizarCarrera,
-  syncEliminarCarrera,
-  syncImportarCarreras,
   syncCrearFormulario,
   syncActualizarFormulario,
   syncEliminarFormulario,
   getSyncStatus,
-  forcSync,
+  forceSync,
   getInstitucionIdFromStore
 };

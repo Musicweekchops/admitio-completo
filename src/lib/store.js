@@ -2921,5 +2921,3 @@ export function eliminarRegistroImportacion(id) {
 
 // Importar para uso externo
 export { ROLES, ESTADOS, TIPOS_ALUMNO, TIPOS_ACTIVIDAD }
-// Importar para uso externo
-export { ROLES, ESTADOS, TIPOS_ALUMNO, TIPOS_ACTIVIDAD }
