@@ -259,9 +259,9 @@ const UsuariosView = memo(({
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Rol</label>
                 <select value={userFormData.rol_id} onChange={e => setUserFormData({...userFormData, rol_id: e.target.value})} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-violet-500">
-                  <option value="encargado">Encargado</option>
-                  <option value="superadmin">Administrador</option>
-                  <option value="rector">Rector / Solo Lectura</option>
+                  {store.getRolesDisponibles(user?.id).map(rol => (
+                    <option key={rol.id} value={rol.id}>{rol.nombre}</option>
+                  ))}
                 </select>
               </div>
               <div className="flex items-center gap-2 pt-2">
