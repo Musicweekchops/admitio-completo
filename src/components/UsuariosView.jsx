@@ -177,8 +177,14 @@ const UsuariosView = memo(({
               <tr key={u.id} className="border-b border-slate-50 hover:bg-slate-50">
                 <td className="p-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-violet-100 rounded-full flex items-center justify-center text-violet-600 font-bold">
-                      {u.nombre?.charAt(0).toUpperCase()}
+                    <div className="relative">
+                      <div className="w-10 h-10 bg-violet-100 rounded-full flex items-center justify-center text-violet-600 font-bold overflow-hidden">
+                        {u.nombre?.charAt(0).toUpperCase()}
+                      </div>
+                      {/* Círculo verde de usuario activo/online */}
+                      {u.ultimo_activo && (new Date() - new Date(u.ultimo_activo)) < 5 * 60 * 1000 && (
+                        <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full lg:w-3.5 lg:h-3.5" title="En línea"></span>
+                      )}
                     </div>
                     <div>
                       <p className="font-medium text-slate-800">{u.nombre}</p>
@@ -201,7 +207,7 @@ const UsuariosView = memo(({
                   )}
                 </td>
                 <td className="p-4 text-sm text-slate-500">
-                  {u.last_seen ? new Date(u.last_seen).toLocaleString() : 'Nunca'}
+                  {u.ultimo_activo ? new Date(u.ultimo_activo).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Nunca'}
                 </td>
                 <td className="p-4 text-right">
                   <div className="flex items-center justify-end gap-2">
