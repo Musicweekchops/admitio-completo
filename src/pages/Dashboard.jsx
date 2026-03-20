@@ -175,6 +175,22 @@ export default function Dashboard() {
       window._admitioChannel = null
     }
   }, [user?.institucion_id])
+
+  // Escuchar actualizaciones del store (desde storeSync y AuthContext)
+  useEffect(() => {
+    const handleStoreUpdate = () => {
+      console.log('🔄 Reaccionando a actualización del store...')
+      loadData()
+    }
+
+    window.addEventListener('admitio-store-updated', handleStoreUpdate)
+    window.addEventListener('admitio-data-loaded', handleStoreUpdate)
+
+    return () => {
+      window.removeEventListener('admitio-store-updated', handleStoreUpdate)
+      window.removeEventListener('admitio-data-loaded', handleStoreUpdate)
+    }
+  }, [user?.id])
   // ========================================
 
   // Cargar importaciones pendientes (solo Enterprise)

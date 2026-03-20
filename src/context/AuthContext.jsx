@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import * as store from '../lib/store'
 
 const AuthContext = createContext(null)
 
@@ -802,6 +803,9 @@ export function AuthProvider({ children }) {
       }
 
       localStorage.setItem('admitio_data', JSON.stringify(storeData))
+
+      // NUEVO: Sincronizar con el store en memoria
+      store.setAllData(storeData)
 
       // Disparar evento para que el Dashboard recargue
       window.dispatchEvent(new Event('admitio-data-loaded'))

@@ -171,6 +171,21 @@ export function reloadStore() {
   return store
 }
 
+// NUEVO: Setear todos los datos (Usado por AuthContext)
+export function setAllData(newData) {
+  if (!newData) return
+  console.log('📥 setAllData: Actualizando store en memoria con', newData.consultas?.length, 'leads')
+  store = {
+    ...store,
+    ...newData,
+    consultas: newData.consultas || [],
+    usuarios: newData.usuarios || [],
+    carreras: newData.carreras || [],
+    formularios: newData.formularios || [],
+    actividad: newData.actividad || []
+  }
+}
+
 // Debug: ver estado actual del store
 export function debugStore() {
   console.log('📊 Estado actual del store:')
