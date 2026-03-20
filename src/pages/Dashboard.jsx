@@ -454,34 +454,36 @@ export default function Dashboard() {
   // ============================================
   // INDICADOR DE ESTADO DE SINCRONIZACIÓN
   // ============================================
-  const SyncStatusIndicator = ({ isMobile = false }) => {
-    let icon = "Cloud";
-    let color = "text-slate-400";
-    let label = "Conectando...";
-    let pulse = "";
+    const SyncStatusIndicator = ({ isMobile = false }) => {
+      const sync = store.getSyncStatus?.() || { status: syncStatus };
+      let icon = "Cloud";
+      let color = "text-slate-400";
+      let label = "Conectando...";
+      let pulse = "";
 
-    if (syncStatus === 'syncing') {
-      icon = "RefreshCw";
-      color = "text-amber-500";
-      label = "Sincronizando...";
-      pulse = "animate-spin";
-    } else if (syncStatus === 'synced') {
-      icon = "CloudCheck";
-      color = "text-emerald-500";
-      label = "En tiempo real";
-    } else if (syncStatus === 'error') {
-      icon = "CloudOff";
-      color = "text-red-500";
-      label = "Error de conexión";
-    }
+      if (syncStatus === 'syncing' || sync.isSyncing) {
+        icon = "RefreshCw";
+        color = "text-amber-500";
+        label = "Sincronizando...";
+        pulse = "animate-spin";
+      } else if (syncStatus === 'synced') {
+        icon = "CloudCheck";
+        color = "text-emerald-500";
+        const time = sync.lastSync ? new Date(sync.lastSync).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        label = `Sincronizado ${time}`;
+      } else if (syncStatus === 'error') {
+        icon = "CloudOff";
+        color = "text-red-500";
+        label = "Error de conexión";
+      }
 
-    return (
-      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-100 ${sidebarCollapsed && !isMobile ? 'justify-center mx-auto' : ''}`} title={label}>
-        <Icon name={icon} size={isMobile ? 18 : (sidebarCollapsed ? 20 : 16)} className={`${color} ${pulse}`} />
-        {(!sidebarCollapsed || isMobile) && <span className={`text-[10px] uppercase tracking-wider font-bold ${color}`}>{label}</span>}
-      </div>
-    );
-  };
+      return (
+        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-100 ${sidebarCollapsed && !isMobile ? 'justify-center mx-auto' : ''}`} title={label}>
+          <Icon name={icon} size={isMobile ? 18 : (sidebarCollapsed ? 20 : 16)} className={`${color} ${pulse}`} />
+          {(!sidebarCollapsed || isMobile) && <span className={`text-[10px] uppercase tracking-wider font-bold ${color}`}>{label}</span>}
+        </div>
+      );
+    };
 
   const Sidebar = () => {
     return (
@@ -1124,19 +1126,19 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Botón flotante actualizar */}
+      {/* Botón flotante refrescar */}
       <button
         onClick={() => {
           store.reloadStore()
           loadData()
-          setNotification({ type: 'info', message: 'Datos actualizados' })
+          setNotification({ type: 'info', message: 'Datos traídos de la nube' })
           setTimeout(() => setNotification(null), 2000)
         }}
         className="fixed bottom-4 left-72 z-40 flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-full shadow-lg hover:bg-slate-50 hover:shadow-xl transition-all"
-        title="Actualizar datos"
+        title="Traer últimos datos de la nube"
       >
         <Icon name="RefreshCw" size={16} />
-        <span className="text-sm font-medium">Actualizar</span>
+        <span className="text-sm font-medium">Recibir de la Nube</span>
       </button>
     </div>
   )

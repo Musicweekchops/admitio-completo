@@ -8,6 +8,7 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 
 const STORAGE_KEY = 'admitio_data';
+let lastSyncTimestamp = null;
 
 // Despachar evento global de error de sincronización
 const dispatchSyncError = (type, error) => {
@@ -157,6 +158,9 @@ export async function cargarDatosInstitucion(institucionId) {
     };
 
     // SEGURIDAD: Ya no guardamos en localStorage para evitar riesgos de datos en el navegador
+    // Marcar como completado
+    dispatchSyncStatus('synced');
+    lastSyncTimestamp = new Date().toISOString();
     
     // Disparar evento para que el Dashboard recargue
     window.dispatchEvent(new CustomEvent('admitio-store-updated', {
@@ -644,7 +648,7 @@ export function getSyncStatus() {
   return {
     pendingTasks: syncQueue.length,
     isSyncing,
-    lastSync: localStorage.getItem('admitio_last_sync')
+    lastSync: lastSyncTimestamp
   };
 }
 
