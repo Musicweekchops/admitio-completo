@@ -63,6 +63,7 @@ const NotasTextarea = ({ consulta, userId, onSaved }) => {
 const DetalleView = memo(({ 
   selectedConsulta, 
   setSelectedConsulta, 
+  setActiveTab,
   user, 
   loadData, 
   setNotification, 
@@ -79,6 +80,7 @@ const DetalleView = memo(({
   
   const handleBack = () => {
     setSelectedConsulta(null)
+    setActiveTab('consultas')
     loadData()
   }
 

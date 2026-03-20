@@ -834,6 +834,7 @@ export default function Dashboard() {
             <DetalleView 
               selectedConsulta={selectedConsulta}
               setSelectedConsulta={setSelectedConsulta}
+              setActiveTab={setActiveTab}
               user={user}
               loadData={loadData}
               setNotification={setNotification}
