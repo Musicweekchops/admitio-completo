@@ -164,6 +164,13 @@ export default function Dashboard() {
       )
       .subscribe((status) => {
         console.log('📡 [rt-v4] Realtime status:', status)
+        // Reflejar estado del canal en el indicador visual
+        if (status === 'SUBSCRIBED') {
+          setSyncStatus('synced')
+        } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+          console.warn('⚠️ [rt-v4] Canal de tiempo real desconectado:', status)
+          setSyncStatus('error')
+        }
       })
 
     // Guardar referencia al canal para usarlo en broadcasts
@@ -214,6 +221,36 @@ export default function Dashboard() {
 
     return () => clearInterval(sessionCheck);
   }, [user?.id]);
+
+  // Vigilante de conectividad (Navegador)
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log('🌐 Conexión restaurada');
+      setNotification({ type: 'success', message: 'Conexión restaurada' });
+      setTimeout(() => setNotification(null), 3000);
+      setSyncStatus('synced');
+    };
+
+    const handleOffline = () => {
+      console.warn('🌐 Conexión de red perdida');
+      setNotification({ 
+        type: 'error', 
+        message: 'Has perdido la conexión. Los cambios no se sincronizarán hasta volver a estar en línea.' 
+      });
+      setSyncStatus('error');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Estado inicial
+    if (!navigator.onLine) handleOffline();
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
   // ========================================
 
   // Cargar importaciones pendientes (solo Enterprise)
