@@ -9,15 +9,34 @@ import { supabase, isSupabaseConfigured } from './supabase';
 
 const STORAGE_KEY = 'admitio_data';
 
+// Despachar evento global de error de sincronización
+const dispatchSyncError = (type, error) => {
+  window.dispatchEvent(new CustomEvent('admitio-sync-error', { 
+    detail: { 
+      type, 
+      error, 
+      status: error?.status || error?.code || 500,
+      message: error?.message || 'Error de conexión con el servidor'
+    } 
+  }));
+};
+
+// Despachar estado de sincronización (para el indicador visual)
+const dispatchSyncStatus = (status) => {
+  // status: 'syncing' | 'synced' | 'error'
+  window.dispatchEvent(new CustomEvent('admitio-sync-status', { detail: { status } }));
+};
+
 // ============================================
 // CARGAR DATOS DESDE SUPABASE
 // ============================================
 
 export async function cargarDatosInstitucion(institucionId) {
   console.log('📥 Cargando datos desde Supabase...');
-  
+  dispatchSyncStatus('syncing');
+
   try {
-    // Cargar leads
+    // 1. Cargar leads
     const { data: leads, error: leadsError } = await supabase
       .from('leads')
       .select('*')
@@ -26,7 +45,7 @@ export async function cargarDatosInstitucion(institucionId) {
 
     if (leadsError) throw leadsError;
 
-    // Cargar usuarios
+    // 2. Cargar usuarios
     const { data: usuarios, error: usuariosError } = await supabase
       .from('usuarios')
       .select('*')
@@ -34,7 +53,7 @@ export async function cargarDatosInstitucion(institucionId) {
 
     if (usuariosError) throw usuariosError;
 
-    // Cargar carreras
+    // 3. Cargar carreras
     const { data: carreras, error: carrerasError } = await supabase
       .from('carreras')
       .select('*')
@@ -43,25 +62,20 @@ export async function cargarDatosInstitucion(institucionId) {
 
     if (carrerasError) throw carrerasError;
 
-    // Cargar formularios
+    // 4. Cargar formularios
     const { data: formularios, error: formulariosError } = await supabase
       .from('formularios')
       .select('*')
       .eq('institucion_id', institucionId)
       .order('created_at', { ascending: false });
 
-    if (formulariosError) {
-      console.warn('⚠️ Error cargando formularios:', formulariosError);
-      // No lanzar error, continuar con array vacío
-    }
-
-    // Cargar acciones de leads
-    const leadIds = leads.map(l => l.id);
+    // 5. Cargar acciones de leads
+    const leadIds = (leads || []).map(l => l.id);
     let acciones = [];
     if (leadIds.length > 0) {
       const { data: accionesData } = await supabase
         .from('acciones_lead')
-        .select('*')
+        .select('*, usuario:usuarios(nombre)')
         .in('lead_id', leadIds)
         .order('created_at', { ascending: false });
       acciones = accionesData || [];
@@ -69,40 +83,21 @@ export async function cargarDatosInstitucion(institucionId) {
 
     // Convertir formato Supabase → formato Store
     const storeData = {
-      consultas: leads.map(lead => ({
-        id: lead.id,
-        nombre: lead.nombre,
-        email: lead.email,
-        telefono: lead.telefono,
-        carrera_id: lead.carrera_id,
-        carrera_nombre: lead.carrera_nombre,
-        carreras_interes: lead.carreras_interes || [],
-        medio_id: lead.medio ? lead.medio.toLowerCase() : null,
-        estado: lead.estado,
-        prioridad: lead.prioridad,
-        asignado_a: lead.asignado_a,
-        notas: lead.notas,
-        tipo_alumno: 'nuevo',
-        fecha_creacion: lead.created_at,
-        fecha_actualizacion: lead.updated_at,
-        updated_at: lead.updated_at,
-        fecha_primer_contacto: lead.fecha_primer_contacto,
-        fecha_cierre: lead.fecha_cierre,
-        created_at: lead.created_at,
+      consultas: (leads || []).map(lead => ({
+        ...lead,
         acciones: acciones
           .filter(a => a.lead_id === lead.id)
           .map(a => ({
             id: a.id,
-            fecha: a.created_at,
-            created_at: a.created_at,
             tipo: a.tipo,
-            accion: a.descripcion, // El dashboard usa .accion para el texto principal
             descripcion: a.descripcion,
+            accion: a.tipo,
+            created_at: a.created_at,
             usuario_id: a.usuario_id,
-            realizado_por_nombre: a.usuario_nombre || 'Sistema'
+            realizado_por_nombre: a.usuario?.nombre || 'Sistema'
           }))
       })),
-      usuarios: usuarios.map(u => ({
+      usuarios: (usuarios || []).map(u => ({
         id: u.id,
         nombre: u.nombre,
         email: u.email,
@@ -110,7 +105,7 @@ export async function cargarDatosInstitucion(institucionId) {
         activo: u.activo,
         avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.nombre)}&background=7c3aed&color=fff`
       })),
-      carreras: carreras.map(c => ({
+      carreras: (carreras || []).map(c => ({
         id: c.id,
         nombre: c.nombre,
         color: c.color,
@@ -119,37 +114,29 @@ export async function cargarDatosInstitucion(institucionId) {
       formularios: (formularios || []).map(f => ({
         id: f.id,
         nombre: f.nombre,
-        slug: f.slug,
-        campos: f.campos || [],
-        carrera_default: f.carrera_default,
-        activo: f.activo,
-        submissions: f.submissions || 0,
-        created_at: f.created_at,
-        updated_at: f.updated_at
+        activo: f.activo
       })),
       actividad: acciones.slice(0, 50).map(a => ({
         id: a.id,
         tipo: a.tipo,
         descripcion: a.descripcion,
-        accion: a.descripcion, // Fallback para UI
+        accion: a.descripcion,
         fecha: a.created_at,
-        created_at: a.created_at, // Consistencia con addActividad
+        created_at: a.created_at,
         usuario_id: a.usuario_id,
-        realizado_por_nombre: a.usuario_nombre || 'Sistema', // Importante para la UI
-        consulta_id: a.lead_id,
-        lead_id: a.lead_id // Consistencia
+        realizado_por_nombre: a.usuario?.nombre || 'Sistema',
+        lead_id: a.lead_id
       })),
-      // Datos por defecto
       medios: [
-        { id: 'instagram', nombre: 'Instagram', icono: 'Instagram', color: 'text-pink-500' },
-        { id: 'facebook', nombre: 'Facebook', icono: 'Facebook', color: 'text-blue-600' },
-        { id: 'web', nombre: 'Sitio Web', icono: 'Globe', color: 'text-blue-500' },
-        { id: 'referido', nombre: 'Referido', icono: 'Users', color: 'text-green-500' },
         { id: 'llamada', nombre: 'Llamada', icono: 'Phone', color: 'text-amber-500' },
         { id: 'email', nombre: 'Email', icono: 'Mail', color: 'text-red-500' },
         { id: 'whatsapp', nombre: 'WhatsApp', icono: 'MessageCircle', color: 'text-green-600' },
         { id: 'presencial', nombre: 'Presencial', icono: 'MapPin', color: 'text-purple-500' },
         { id: 'google sheets', nombre: 'Google Sheets', icono: 'Table', color: 'text-emerald-600' },
+        { id: 'instagram', nombre: 'Instagram', icono: 'Instagram', color: 'text-pink-500' },
+        { id: 'facebook', nombre: 'Facebook', icono: 'Facebook', color: 'text-blue-600' },
+        { id: 'web', nombre: 'Sitio Web', icono: 'Globe', color: 'text-blue-500' },
+        { id: 'referido', nombre: 'Referido', icono: 'Users', color: 'text-green-500' },
         { id: 'otro', nombre: 'Otro', icono: 'MoreHorizontal', color: 'text-slate-500' }
       ],
       plantillas: [],
@@ -169,20 +156,20 @@ export async function cargarDatosInstitucion(institucionId) {
       _last_sync: new Date().toISOString()
     };
 
-    // Guardar en localStorage
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(storeData));
-    localStorage.setItem('admitio_version', '2.7');
+    // SEGURIDAD: Ya no guardamos en localStorage para evitar riesgos de datos en el navegador
     
     // Disparar evento para que el Dashboard recargue
-    window.dispatchEvent(new CustomEvent('admitio-store-updated', { 
-      detail: { institucionId, leadsCount: leads.length, usuariosCount: usuarios.length }
+    window.dispatchEvent(new CustomEvent('admitio-store-updated', {
+      detail: { institucionId, leadsCount: (leads || []).length, usuariosCount: (usuarios || []).length }
     }));
-    
-    console.log(`✅ Datos cargados: ${leads.length} leads, ${usuarios.length} usuarios, ${carreras.length} carreras, ${(formularios || []).length} formularios`);
+
+    console.log(`✅ Datos cargados: ${(leads || []).length} leads`);
+    dispatchSyncStatus('synced');
     return storeData;
 
   } catch (error) {
     console.error('❌ Error al cargar datos:', error);
+    dispatchSyncStatus('error');
     throw error;
   }
 }
@@ -197,21 +184,39 @@ let isSyncing = false;
 
 async function processSyncQueue() {
   if (isSyncing || syncQueue.length === 0) return;
-  
+
   isSyncing = true;
-  
+  dispatchSyncStatus('syncing');
+
   while (syncQueue.length > 0) {
+    // SEGURIDAD: Validar sesión antes de cada tarea en la cola para evitar 401/pérdida de datos silente
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    // Si no hay sesión real, bloqueamos de inmediato para avisar al usuario
+    if (!session) {
+      console.warn('⚠️ No hay sesión de Supabase activa para procesar la cola');
+      dispatchSyncError('auth', { status: 401, message: 'Sesión no encontrada o expirada' });
+      dispatchSyncStatus('error');
+      isSyncing = false;
+      return;
+    }
+
     const task = syncQueue.shift();
     try {
       await task.execute();
       console.log(`✅ Sincronizado: ${task.type}`);
     } catch (error) {
       console.error(`❌ Error sincronizando ${task.type}:`, error);
-      // Re-encolar si falla? Por ahora no para evitar loops
+      dispatchSyncError(task.type, error);
+      dispatchSyncStatus('error');
+      // No re-encolar para evitar bucles infinitos en caso de 401/403
     }
   }
-  
+
   isSyncing = false;
+  if (syncQueue.length === 0) {
+    dispatchSyncStatus('synced');
+  }
 }
 
 function addToSyncQueue(type, execute) {
@@ -226,12 +231,12 @@ function addToSyncQueue(type, execute) {
 
 export function syncCrearLead(institucionId, leadData) {
   console.log('🔄 Sincronizando nuevo lead a Supabase:', { institucionId, nombre: leadData.nombre });
-  
+
   if (!institucionId) {
     console.error('❌ No se puede sincronizar: institucionId es null');
     return;
   }
-  
+
   addToSyncQueue('crear_lead', async () => {
     // No enviar el ID local - dejar que Supabase genere UUID
     // Tampoco enviar asignado_a si es un ID local (no UUID)
@@ -246,29 +251,29 @@ export function syncCrearLead(institucionId, leadData) {
       prioridad: leadData.prioridad || 'media',
       notas: leadData.notas || null
     };
-    
+
     // Solo incluir carrera_id si es UUID válido (string con guiones y largo)
     if (leadData.carrera_id && typeof leadData.carrera_id === 'string' && leadData.carrera_id.includes('-') && leadData.carrera_id.length > 30) {
       insertData.carrera_id = leadData.carrera_id;
     }
-    
+
     // Solo incluir asignado_a si parece UUID (contiene guiones en formato UUID)
     if (leadData.asignado_a && typeof leadData.asignado_a === 'string' && leadData.asignado_a.includes('-') && leadData.asignado_a.length > 30) {
       insertData.asignado_a = leadData.asignado_a;
     }
-    
+
     // Incluir creado_por si es UUID válido
     if (leadData.creado_por && typeof leadData.creado_por === 'string' && leadData.creado_por.includes('-') && leadData.creado_por.length > 30) {
       insertData.creado_por = leadData.creado_por;
     }
-    
+
     console.log('📤 Enviando a Supabase:', insertData);
-    
+
     const { data, error } = await supabase
       .from('leads')
       .insert(insertData)
       .select();
-    
+
     if (error) {
       console.error('❌ Error sincronizando lead:', error);
       throw error;
@@ -279,16 +284,16 @@ export function syncCrearLead(institucionId, leadData) {
 
 export function syncActualizarLead(leadId, updates) {
   console.log('🔄 syncActualizarLead llamado:', { leadId, updates: Object.keys(updates) });
-  
+
   // Si el leadId es local (no UUID), no podemos actualizar en Supabase
   if (!leadId || !leadId.includes('-') || leadId.startsWith('c-')) {
     console.log('⚠️ Lead con ID local, no se sincroniza actualización:', leadId);
     return;
   }
-  
+
   addToSyncQueue('actualizar_lead', async () => {
     const supabaseUpdates = {};
-    
+
     // Campos básicos
     if (updates.nombre !== undefined) supabaseUpdates.nombre = updates.nombre;
     if (updates.email !== undefined) supabaseUpdates.email = updates.email;
@@ -301,28 +306,28 @@ export function syncActualizarLead(leadId, updates) {
     if (updates.carreras_interes !== undefined) supabaseUpdates.carreras_interes = updates.carreras_interes;
     if (updates.fecha_primer_contacto !== undefined) supabaseUpdates.fecha_primer_contacto = updates.fecha_primer_contacto;
     if (updates.fecha_cierre !== undefined) supabaseUpdates.fecha_cierre = updates.fecha_cierre;
-    
+
     // CAMPOS CRÍTICOS - Estados finales (matriculado/descartado)
     if (updates.matriculado !== undefined) supabaseUpdates.matriculado = updates.matriculado;
     if (updates.descartado !== undefined) supabaseUpdates.descartado = updates.descartado;
     if (updates.motivo_descarte !== undefined) supabaseUpdates.motivo_descarte = updates.motivo_descarte;
-    
+
     // Tipo de alumno
     if (updates.tipo_alumno !== undefined) supabaseUpdates.tipo_alumno = updates.tipo_alumno;
-    
+
     // Nuevo interés (cambio de carrera)
     if (updates.nuevo_interes !== undefined) supabaseUpdates.nuevo_interes = updates.nuevo_interes;
     if (updates.fecha_nuevo_interes !== undefined) supabaseUpdates.fecha_nuevo_interes = updates.fecha_nuevo_interes;
-    
+
     // Medio de contacto
     if (updates.medio_id !== undefined) supabaseUpdates.medio = updates.medio_id;
-    
+
     // Emails enviados
     if (updates.emails_enviados !== undefined) supabaseUpdates.emails_enviados = updates.emails_enviados;
-    
+
     // Fecha próximo contacto
     if (updates.fecha_proximo_contacto !== undefined) supabaseUpdates.fecha_proximo_contacto = updates.fecha_proximo_contacto;
-    
+
     // Solo sincronizar asignado_a si parece UUID
     if (updates.asignado_a !== undefined) {
       console.log('🔄 Sincronizando asignado_a:', updates.asignado_a);
@@ -336,7 +341,7 @@ export function syncActualizarLead(leadId, updates) {
         console.log('⚠️ asignado_a no es UUID válido, NO se sincroniza:', updates.asignado_a);
       }
     }
-    
+
     supabaseUpdates.updated_at = new Date().toISOString();
 
     // Solo hacer update si hay algo que actualizar
@@ -349,7 +354,7 @@ export function syncActualizarLead(leadId, updates) {
       .from('leads')
       .update(supabaseUpdates)
       .eq('id', leadId);
-    
+
     if (error) {
       console.error('❌ Error sincronizando actualización:', error);
       throw error;
@@ -364,7 +369,7 @@ export function syncActualizarLead(leadId, updates) {
 
 async function triggerRealtimeNotification(leadId, eventType) {
   if (!isSupabaseConfigured() || !leadId) return;
-  
+
   const institucionId = getInstitucionIdFromStore();
   if (!institucionId) {
     console.warn('⚠️ [rt-v4] No se pudo disparar notificación: institucionId no encontrado');
@@ -377,7 +382,7 @@ async function triggerRealtimeNotification(leadId, eventType) {
       event_type: eventType,
       institucion_id: institucionId
     });
-    
+
     if (error) {
       console.error('❌ [rt-v4] Error enviando notificación:', error);
     } else {
@@ -400,7 +405,7 @@ export async function syncActualizarLeadDirecto(leadId, updates) {
   }
 
   const supabaseUpdates = {};
-  
+
   // Campos básicos
   if (updates.nombre !== undefined) supabaseUpdates.nombre = updates.nombre;
   if (updates.email !== undefined) supabaseUpdates.email = updates.email;
@@ -413,28 +418,28 @@ export async function syncActualizarLeadDirecto(leadId, updates) {
   if (updates.carreras_interes !== undefined) supabaseUpdates.carreras_interes = updates.carreras_interes;
   if (updates.fecha_primer_contacto !== undefined) supabaseUpdates.fecha_primer_contacto = updates.fecha_primer_contacto;
   if (updates.fecha_cierre !== undefined) supabaseUpdates.fecha_cierre = updates.fecha_cierre;
-  
+
   // CAMPOS CRÍTICOS - Estados finales
   if (updates.matriculado !== undefined) supabaseUpdates.matriculado = updates.matriculado;
   if (updates.descartado !== undefined) supabaseUpdates.descartado = updates.descartado;
   if (updates.motivo_descarte !== undefined) supabaseUpdates.motivo_descarte = updates.motivo_descarte;
-  
+
   // Tipo de alumno
   if (updates.tipo_alumno !== undefined) supabaseUpdates.tipo_alumno = updates.tipo_alumno;
-  
+
   // Nuevo interés
   if (updates.nuevo_interes !== undefined) supabaseUpdates.nuevo_interes = updates.nuevo_interes;
   if (updates.fecha_nuevo_interes !== undefined) supabaseUpdates.fecha_nuevo_interes = updates.fecha_nuevo_interes;
-  
+
   // Medio de contacto
   if (updates.medio_id !== undefined) supabaseUpdates.medio = updates.medio_id;
-  
+
   // Emails enviados
   if (updates.emails_enviados !== undefined) supabaseUpdates.emails_enviados = updates.emails_enviados;
-  
+
   // Fecha próximo contacto
   if (updates.fecha_proximo_contacto !== undefined) supabaseUpdates.fecha_proximo_contacto = updates.fecha_proximo_contacto;
-  
+
   // Solo sincronizar asignado_a si parece UUID
   if (updates.asignado_a !== undefined) {
     if (updates.asignado_a && typeof updates.asignado_a === 'string' && updates.asignado_a.includes('-') && updates.asignado_a.length > 30) {
@@ -443,7 +448,7 @@ export async function syncActualizarLeadDirecto(leadId, updates) {
       supabaseUpdates.asignado_a = null;
     }
   }
-  
+
   supabaseUpdates.updated_at = new Date().toISOString();
 
   // Solo hacer update si hay algo que actualizar
@@ -460,17 +465,17 @@ export async function syncActualizarLeadDirecto(leadId, updates) {
       .eq('id', leadId)
       .select()
       .maybeSingle();
-    
+
     if (error) {
       console.error('❌ Error en sync directo:', error);
       return { success: false, error: error.message };
     }
-    
+
     if (!data) {
       console.warn('⚠️ Update no afectó ninguna fila. ¿El lead existe?', leadId);
       return { success: false, error: 'Lead no encontrado o sin permisos' };
     }
-    
+
     console.log('✅ Sync directo exitoso:', leadId);
 
     // Disparar notificación para otros navegadores
@@ -495,13 +500,13 @@ export function syncEliminarLead(leadId) {
     console.log('⚠️ Lead con ID local, no se sincroniza eliminación:', leadId);
     return;
   }
-  
+
   addToSyncQueue('eliminar_lead', async () => {
     const { error } = await supabase
       .from('leads')
       .delete()
       .eq('id', leadId);
-    
+
     if (error) throw error;
   });
 }
@@ -512,33 +517,33 @@ export async function syncCrearAccion(leadId, accion, usuarioId) {
     console.log('⚠️ Lead con ID local, no se sincroniza acción');
     return;
   }
-  
+
   // Validar que leadId parece UUID
   if (!leadId.includes('-') || leadId.length < 30) {
     console.log('⚠️ Lead ID no parece UUID, no se sincroniza acción:', leadId);
     return;
   }
-  
+
   const insertData = {
     lead_id: leadId,
     tipo: accion.tipo,
     descripcion: accion.descripcion,
     usuario_nombre: accion.user_nombre || null
   };
-  
+
   // Solo agregar usuario_id si parece UUID válido
   if (usuarioId && typeof usuarioId === 'string' && usuarioId.includes('-') && usuarioId.length > 30) {
     insertData.usuario_id = usuarioId;
   }
-  
+
   console.log('📤 Sincronizando acción a Supabase:', insertData);
-  
+
   try {
     const { data, error } = await supabase
       .from('acciones_lead')
       .insert(insertData)
       .select();
-    
+
     if (error) {
       console.error('❌ Error sincronizando acción:', error);
       return;
@@ -557,7 +562,7 @@ export function syncCrearUsuario(institucionId, userData) {
     console.error('❌ No se puede sincronizar usuario: institucionId es null');
     return;
   }
-  
+
   addToSyncQueue('crear_usuario', async () => {
     // No enviar el ID local - dejar que Supabase genere UUID
     const { data, error } = await supabase
@@ -572,7 +577,7 @@ export function syncCrearUsuario(institucionId, userData) {
         password_temporal: true
       })
       .select();
-    
+
     if (error) {
       console.error('❌ Error sincronizando usuario:', error);
       throw error;
@@ -587,22 +592,22 @@ export function syncActualizarUsuario(usuarioId, updates) {
     console.log('⚠️ Usuario con ID local, no se sincroniza actualización:', usuarioId);
     return;
   }
-  
+
   addToSyncQueue('actualizar_usuario', async () => {
     const supabaseUpdates = {};
-    
+
     if (updates.nombre !== undefined) supabaseUpdates.nombre = updates.nombre;
     if (updates.email !== undefined) supabaseUpdates.email = updates.email;
     if (updates.rol_id !== undefined) supabaseUpdates.rol = updates.rol_id;
     if (updates.activo !== undefined) supabaseUpdates.activo = updates.activo;
-    
+
     supabaseUpdates.updated_at = new Date().toISOString();
 
     const { error } = await supabase
       .from('usuarios')
       .update(supabaseUpdates)
       .eq('id', usuarioId);
-    
+
     if (error) throw error;
   });
 }
@@ -626,7 +631,7 @@ export function syncImportarLeads(institucionId, leads) {
     const { error } = await supabase
       .from('leads')
       .insert(leadsParaSupabase);
-    
+
     if (error) throw error;
   });
 }
@@ -656,7 +661,7 @@ export function syncCrearCarrera(institucionId, carreraData) {
     console.error('❌ No se puede sincronizar carrera: institucionId es null');
     return;
   }
-  
+
   addToSyncQueue('crear_carrera', async () => {
     const { data, error } = await supabase
       .from('carreras')
@@ -667,7 +672,7 @@ export function syncCrearCarrera(institucionId, carreraData) {
         activa: true
       })
       .select();
-    
+
     if (error) {
       console.error('❌ Error sincronizando carrera:', error);
       throw error;
@@ -682,18 +687,18 @@ export function syncActualizarCarrera(carreraId, updates) {
     console.log('⚠️ Carrera con ID local, no se sincroniza:', carreraId);
     return;
   }
-  
+
   addToSyncQueue('actualizar_carrera', async () => {
     const supabaseUpdates = {};
     if (updates.nombre !== undefined) supabaseUpdates.nombre = updates.nombre;
     if (updates.color !== undefined) supabaseUpdates.color = updates.color;
     if (updates.activa !== undefined) supabaseUpdates.activa = updates.activa;
-    
+
     const { error } = await supabase
       .from('carreras')
       .update(supabaseUpdates)
       .eq('id', carreraId);
-    
+
     if (error) {
       console.error('❌ Error actualizando carrera:', error);
       throw error;
@@ -707,13 +712,13 @@ export function syncEliminarCarrera(carreraId) {
     console.log('⚠️ Carrera con ID local, no se sincroniza eliminación:', carreraId);
     return;
   }
-  
+
   addToSyncQueue('eliminar_carrera', async () => {
     const { error } = await supabase
       .from('carreras')
       .delete()
       .eq('id', carreraId);
-    
+
     if (error) {
       console.error('❌ Error eliminando carrera:', error);
       throw error;
@@ -727,7 +732,7 @@ export function syncImportarCarreras(institucionId, carreras) {
     console.error('❌ No se puede importar carreras: institucionId es null');
     return;
   }
-  
+
   addToSyncQueue('importar_carreras', async () => {
     const carrerasParaSupabase = carreras.map(c => ({
       institucion_id: institucionId,
@@ -740,7 +745,7 @@ export function syncImportarCarreras(institucionId, carreras) {
       .from('carreras')
       .insert(carrerasParaSupabase)
       .select();
-    
+
     if (error) {
       console.error('❌ Error importando carreras:', error);
       throw error;
@@ -759,7 +764,7 @@ export function syncCrearFormulario(institucionId, formularioData) {
     console.error('❌ No se puede sincronizar formulario: institucionId es null');
     return;
   }
-  
+
   addToSyncQueue('crear_formulario', async () => {
     const { data, error } = await supabase
       .from('formularios')
@@ -772,7 +777,7 @@ export function syncCrearFormulario(institucionId, formularioData) {
         activo: true
       })
       .select();
-    
+
     if (error) {
       console.error('❌ Error sincronizando formulario:', error);
       throw error;
@@ -787,21 +792,21 @@ export function syncActualizarFormulario(formularioId, updates) {
     console.log('⚠️ Formulario con ID local, no se sincroniza:', formularioId);
     return;
   }
-  
+
   addToSyncQueue('actualizar_formulario', async () => {
     const supabaseUpdates = { updated_at: new Date().toISOString() };
-    
+
     if (updates.nombre !== undefined) supabaseUpdates.nombre = updates.nombre;
     if (updates.slug !== undefined) supabaseUpdates.slug = updates.slug;
     if (updates.campos !== undefined) supabaseUpdates.campos = updates.campos;
     if (updates.carrera_default !== undefined) supabaseUpdates.carrera_default = updates.carrera_default;
     if (updates.activo !== undefined) supabaseUpdates.activo = updates.activo;
-    
+
     const { error } = await supabase
       .from('formularios')
       .update(supabaseUpdates)
       .eq('id', formularioId);
-    
+
     if (error) {
       console.error('❌ Error actualizando formulario:', error);
       throw error;
@@ -815,13 +820,13 @@ export function syncEliminarFormulario(formularioId) {
     console.log('⚠️ Formulario con ID local, no se sincroniza eliminación:', formularioId);
     return;
   }
-  
+
   addToSyncQueue('eliminar_formulario', async () => {
     const { error } = await supabase
       .from('formularios')
       .delete()
       .eq('id', formularioId);
-    
+
     if (error) {
       console.error('❌ Error eliminando formulario:', error);
       throw error;
@@ -844,7 +849,7 @@ export function getInstitucionIdFromStore() {
         return data._institucion_id;
       }
     }
-    
+
     // Fallback: buscar en la sesión
     const session = localStorage.getItem('admitio_session');
     if (session) {
@@ -867,6 +872,11 @@ export default {
   syncCrearAccion,
   syncCrearUsuario,
   syncActualizarUsuario,
+  syncImportarLeads,
+  syncCrearCarrera,
+  syncActualizarCarrera,
+  syncEliminarCarrera,
+  syncImportarCarreras,
   syncImportarLeads,
   syncCrearCarrera,
   syncActualizarCarrera,

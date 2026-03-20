@@ -49,7 +49,7 @@ export function AuthProvider({ children }) {
     limites: PLANES_DEFAULT.free,
     uso: { leads: 0, usuarios: 0, formularios: 0 }
   })
-  
+
   // Guards para evitar llamadas duplicadas
   const isLoadingUser = React.useRef(false)
   const initialCheckDone = React.useRef(false)
@@ -75,19 +75,19 @@ export function AuthProvider({ children }) {
     if (isSupabaseConfigured()) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
         console.log('🔔 Auth event:', event, '| initialCheckDone:', initialCheckDone.current)
-        
+
         // No procesar si estamos en /auth/callback (AuthCallback lo maneja)
         if (window.location.pathname === '/auth/callback') {
           console.log('⏸️ Ignorando evento - AuthCallback lo maneja')
           return
         }
-        
+
         // Ignorar SIGNED_IN durante la carga inicial (checkSession lo maneja)
         if (event === 'SIGNED_IN' && !initialCheckDone.current) {
           console.log('⏸️ Ignorando SIGNED_IN - checkSession lo está manejando')
           return
         }
-        
+
         // Solo procesar SIGNED_IN después de la carga inicial (para login manual)
         if (event === 'SIGNED_IN' && session?.user && initialCheckDone.current) {
           await loadUserFromAuth(session.user)
@@ -107,20 +107,20 @@ export function AuthProvider({ children }) {
   // Heartbeat: actualiza ultimo_activo cada 2 minutos si el usuario está logueado
   useEffect(() => {
     if (!user?.id) return
-    
+
     // Actualizar inmediatamente al cargar
     actualizarPresencia()
-    
+
     // Actualizar cada 2 minutos
     const heartbeatInterval = setInterval(() => {
       actualizarPresencia()
     }, 2 * 60 * 1000) // 2 minutos
-    
+
     // Actualizar en eventos de actividad
     const handleActivity = () => {
       actualizarPresencia()
     }
-    
+
     // Escuchar eventos de actividad (throttled)
     let lastActivity = Date.now()
     const throttledActivity = () => {
@@ -130,11 +130,11 @@ export function AuthProvider({ children }) {
         handleActivity()
       }
     }
-    
+
     window.addEventListener('click', throttledActivity)
     window.addEventListener('keydown', throttledActivity)
     window.addEventListener('scroll', throttledActivity)
-    
+
     // Marcar offline al cerrar/salir
     const handleBeforeUnload = () => {
       // Usar sendBeacon para enviar antes de cerrar
@@ -145,7 +145,7 @@ export function AuthProvider({ children }) {
       }
     }
     window.addEventListener('beforeunload', handleBeforeUnload)
-    
+
     return () => {
       clearInterval(heartbeatInterval)
       window.removeEventListener('click', throttledActivity)
@@ -154,10 +154,10 @@ export function AuthProvider({ children }) {
       window.removeEventListener('beforeunload', handleBeforeUnload)
     }
   }, [user?.id])
-  
+
   async function actualizarPresencia() {
     if (!user?.id || !isSupabaseConfigured()) return
-    
+
     try {
       await supabase
         .from('usuarios')
@@ -188,7 +188,7 @@ export function AuthProvider({ children }) {
       }
 
       const { data: { session } } = await supabase.auth.getSession()
-      
+
       if (session?.user) {
         await loadUserFromAuth(session.user)
       } else {
@@ -217,10 +217,10 @@ export function AuthProvider({ children }) {
       return
     }
     isLoadingUser.current = true
-    
+
     try {
       console.log('🔍 Cargando usuario:', authUser.email)
-      
+
       // Buscar usuario SIN filtrar por activo para detectar desactivados
       const { data: initialUser, error } = await supabase
         .from('usuarios')
@@ -239,7 +239,7 @@ export function AuthProvider({ children }) {
         console.error('❌ Error consultando usuario:', error)
         return { success: false, error: 'Error al cargar usuario' }
       }
-      
+
       // Lógica de VINCULACIÓN: Si no se encuentra por auth_id, buscar por email
       if (!usuario) {
         console.log('🔗 Buscando usuario por email para vinculación:', authUser.email)
@@ -248,7 +248,7 @@ export function AuthProvider({ children }) {
           .select('*, instituciones(id, nombre, tipo, pais, ciudad, region, sitio_web, plan)')
           .eq('email', authUser.email)
           .maybeSingle()
-        
+
         if (usuarioPorEmail) {
           console.log('✅ Usuario encontrado por email, vinculando auth_id...')
           // Vincular auth_id para futuras sesiones
@@ -258,21 +258,21 @@ export function AuthProvider({ children }) {
             .eq('id', usuarioPorEmail.id)
             .select('*, instituciones(id, nombre, tipo, pais, ciudad, region, sitio_web, plan)')
             .single()
-          
+
           if (!linkError) {
             usuario = usuarioVinculado
             console.log('🎊 Usuario vinculado exitosamente')
           }
         }
       }
-      
+
       if (!usuario) {
         console.log('⚠️ Usuario no encontrado en tabla usuarios')
         // Cerrar sesión de Auth si el usuario no existe en nuestra tabla
         await supabase.auth.signOut()
         return { success: false, error: 'Usuario no encontrado' }
       }
-      
+
       // Verificar si está desactivado
       if (!usuario.activo) {
         console.log('🚫 Usuario desactivado:', authUser.email)
@@ -328,7 +328,7 @@ export function AuthProvider({ children }) {
 
     try {
       console.log('🔐 Iniciando login para:', email)
-      
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.toLowerCase().trim(),
         password
@@ -346,58 +346,58 @@ export function AuthProvider({ children }) {
       }
 
       console.log('✅ Login Auth exitoso, verificando estado del usuario...')
-      
+
       // ========== VERIFICAR ESTADO DEL USUARIO ==========
       const { data: usuario, error: userError } = await supabase
         .from('usuarios')
         .select('id, activo, email_verificado, rol')
         .eq('auth_id', data.user.id)
         .maybeSingle()
-      
+
       if (userError) {
         console.error('Error verificando usuario:', userError)
         await supabase.auth.signOut()
         return { success: false, error: 'Error al verificar usuario' }
       }
-      
+
       if (!usuario) {
         console.log('⚠️ Usuario no existe en tabla')
         await supabase.auth.signOut()
         return { success: false, error: 'Usuario no encontrado. Contacta al administrador.' }
       }
-      
+
       if (!usuario.activo) {
         console.log('🚫 Usuario desactivado:', email)
         await supabase.auth.signOut()
         return { success: false, error: 'Tu cuenta ha sido desactivada. Contacta al administrador.' }
       }
       // =====================================================
-      
+
       // ========== VERIFICACIÓN DE EMAIL ==========
       if (!usuario.email_verificado) {
         // Si es keymaster (creador de institución) → requiere verificación
         if (usuario.rol === 'keymaster') {
           console.log('🚫 Keymaster sin verificar:', email)
           await supabase.auth.signOut()
-          
+
           // Guardar email para reenvío
           localStorage.setItem('admitio_pending_email', email.toLowerCase().trim())
-          
-          return { 
-            success: false, 
+
+          return {
+            success: false,
             error: 'Debes verificar tu email antes de iniciar sesión. Revisa tu bandeja de entrada.',
             needsVerification: true,
             email: email.toLowerCase().trim()
           }
         }
-        
+
         // Si es invitado (otro rol) → verificar automáticamente en primer login
         try {
           const { error: updateError } = await supabase
             .from('usuarios')
             .update({ email_verificado: true })
             .eq('auth_id', data.user.id)
-          
+
           if (!updateError) {
             console.log('✅ Email verificado automáticamente en primer login (invitado)')
           }
@@ -406,7 +406,7 @@ export function AuthProvider({ children }) {
         }
       }
       // =====================================================
-      
+
       return { success: true, user: data.user }
 
     } catch (error) {
@@ -421,16 +421,16 @@ export function AuthProvider({ children }) {
   }
 
   // ========== SIGN UP ==========
-  async function signUp({ 
-    institucion: nombreInstitucion, 
+  async function signUp({
+    institucion: nombreInstitucion,
     tipo,
     pais,
     ciudad,
     region,
     sitioWeb,
-    nombre, 
-    email, 
-    password 
+    nombre,
+    email,
+    password
   }) {
     if (!isSupabaseConfigured()) {
       return { success: false, error: 'Sistema no configurado. Contacta al administrador.' }
@@ -439,7 +439,7 @@ export function AuthProvider({ children }) {
     const emailNormalizado = email.toLowerCase().trim()
     const nombreInst = nombreInstitucion.trim()
     const nombreUsuario = nombre.trim()
-    
+
     // Generar código único (slug) a partir del nombre
     const generarCodigo = (str) => {
       return str.toLowerCase()
@@ -452,11 +452,11 @@ export function AuthProvider({ children }) {
 
     try {
       // ========== VALIDACIONES PREVIAS ==========
-      
+
       if (!nombreInst || nombreInst.length < 3) {
         return { success: false, error: 'El nombre de la institución debe tener al menos 3 caracteres' }
       }
-      
+
       if (!tipo) {
         return { success: false, error: 'Selecciona el tipo de institución' }
       }
@@ -468,7 +468,7 @@ export function AuthProvider({ children }) {
       if (!ciudad || ciudad.trim().length < 2) {
         return { success: false, error: 'Ingresa la ciudad' }
       }
-      
+
       if (!nombreUsuario || nombreUsuario.length < 2) {
         return { success: false, error: 'El nombre debe tener al menos 2 caracteres' }
       }
@@ -540,15 +540,15 @@ export function AuthProvider({ children }) {
       // ========== CREAR INSTITUCIÓN CON TODOS LOS CAMPOS ==========
       const { data: nuevaInst, error: instError } = await supabase
         .from('instituciones')
-        .insert({ 
-          nombre: nombreInst, 
+        .insert({
+          nombre: nombreInst,
           codigo: codigoInst,
           tipo: tipo,
           pais: pais,
           ciudad: ciudad.trim(),
           region: region || null,
           sitio_web: sitioWeb || null,
-          plan: 'free', 
+          plan: 'free',
           estado: 'activo'
         })
         .select()
@@ -581,7 +581,7 @@ export function AuthProvider({ children }) {
       // ========== ENVIAR EMAIL DE VERIFICACIÓN ==========
       // Guardamos email para poder reenviar si es necesario
       localStorage.setItem('admitio_pending_email', emailNormalizado)
-      
+
       try {
         const { error: resendError } = await supabase.auth.resend({
           type: 'signup',
@@ -590,7 +590,7 @@ export function AuthProvider({ children }) {
             emailRedirectTo: `${window.location.origin}/auth/callback`
           }
         })
-        
+
         if (resendError) {
           console.warn('⚠️ No se pudo enviar email de verificación:', resendError)
         } else {
@@ -611,8 +611,8 @@ export function AuthProvider({ children }) {
       // Cerrar sesión para que verifique primero
       await supabase.auth.signOut()
 
-      return { 
-        success: true, 
+      return {
+        success: true,
         requiresVerification: true,
         message: 'Cuenta creada. Revisa tu correo para verificar tu email.',
         email: emailNormalizado
@@ -630,7 +630,7 @@ export function AuthProvider({ children }) {
       if (isSupabaseConfigured()) {
         // Timeout de 3 segundos para signOut
         const signOutPromise = supabase.auth.signOut()
-        const timeoutPromise = new Promise((_, reject) => 
+        const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Timeout')), 3000)
         )
         await Promise.race([signOutPromise, timeoutPromise]).catch(() => {
@@ -802,10 +802,10 @@ export function AuthProvider({ children }) {
       }
 
       localStorage.setItem('admitio_data', JSON.stringify(storeData))
-      
+
       // Disparar evento para que el Dashboard recargue
       window.dispatchEvent(new Event('admitio-data-loaded'))
-      
+
       console.log('📦 Datos cargados desde Supabase:', {
         leads: storeData.consultas.length,
         usuarios: storeData.usuarios.length,
@@ -872,7 +872,7 @@ export function AuthProvider({ children }) {
     if (!user?.institucion_id || !isSupabaseConfigured()) {
       return false
     }
-    
+
     try {
       await loadInstitucionData(user.institucion_id)
       return true
@@ -913,7 +913,7 @@ export function AuthProvider({ children }) {
 
     try {
       console.log('📝 Creando usuario via Edge Function:', email)
-      
+
       // Mapear rol a nombre legible
       const rolesNombres = {
         'keymaster': 'Administrador',
@@ -922,7 +922,7 @@ export function AuthProvider({ children }) {
         'asistente': 'Asistente'
       }
       const rolNombre = rolesNombres[rol] || rol
-      
+
       // ========== LLAMAR A EDGE FUNCTION ==========
       const { data, error } = await supabase.functions.invoke('invite-user', {
         body: {
@@ -939,7 +939,7 @@ export function AuthProvider({ children }) {
 
       if (error) {
         console.error('Error en Edge Function:', error)
-        
+
         // Intentar obtener el mensaje de error real de la respuesta
         if (error.context && typeof error.context.json === 'function') {
           try {
@@ -949,7 +949,7 @@ export function AuthProvider({ children }) {
             console.error('Error parsing error body:', e)
           }
         }
-        
+
         return { success: false, error: error.message || 'Error al crear usuario' }
       }
 
@@ -975,7 +975,7 @@ export function AuthProvider({ children }) {
 
   async function notifyAssignment(params) {
     if (!isSupabaseConfigured()) return { success: false }
-    
+
     try {
       console.log('📧 Enviando notificación de asignación...')
       const { data, error } = await supabase.functions.invoke('notify-assignment', {
@@ -999,7 +999,7 @@ export function AuthProvider({ children }) {
   const isEncargado = user?.rol_id === 'encargado' || user?.rol_id === 'director'
   const isAsistente = user?.rol_id === 'asistente'
   const isRector = user?.rol_id === 'rector'
-  
+
   const canViewAll = user?.permisos?.ver_todos || isSuperAdmin
   const canViewOwn = user?.permisos?.ver_propios
   const canEdit = user?.permisos?.editar || isSuperAdmin

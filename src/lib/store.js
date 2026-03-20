@@ -51,23 +51,13 @@ const STORAGE_VERSION = '2.7' // Incrementar - Modo Supabase real
 // INICIALIZACIÓN
 // ============================================
 function initStore() {
-  const stored = localStorage.getItem(STORAGE_KEY)
-  const version = localStorage.getItem('admitio_version')
-  const userSession = localStorage.getItem('admitio_user')
+  // SEGURIDAD: Ya no leemos de localStorage para evitar persistencia en el navegador
+  // Limpiamos datos riskosos previos si existen
+  try {
+    localStorage.removeItem(STORAGE_KEY)
+  } catch(e) {}
 
-  // Si hay datos guardados y versión coincide, usarlos
-  if (stored && version === STORAGE_VERSION) {
-    try {
-      const data = JSON.parse(stored)
-      // Verificar estructura básica
-      if (data.consultas !== undefined && data.usuarios !== undefined) {
-        console.log(`📦 Store cargado: ${data.consultas?.length || 0} leads, ${data._supabase_sync ? '(Supabase)' : '(Local)'}`)
-        return data
-      }
-    } catch (e) {
-      console.warn('⚠️ Error al parsear localStorage')
-    }
-  }
+  const userSession = localStorage.getItem('admitio_user')
 
   // Verificar si hay sesión de usuario de Supabase
   let isSupabaseUser = false
@@ -80,13 +70,13 @@ function initStore() {
 
   // Si es usuario de Supabase, inicializar VACÍO (los datos vendrán del login)
   if (isSupabaseUser) {
-    console.log('🔄 Inicializando store vacío para Supabase...')
-    const emptyData = {
+    console.log('🔄 Inicializando store EN MEMORIA para Supabase (Seguridad Activa)...')
+    return {
       consultas: [],
       actividad: [],
       usuarios: [],
       carreras: [],
-      medios: MEDIOS, // Estos son estáticos, los mantenemos
+      medios: MEDIOS,
       plantillas: [],
       formularios: [],
       config: { nombre: 'Mi Institución' },
@@ -98,19 +88,19 @@ function initStore() {
       importaciones: [],
       _supabase_sync: true
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(emptyData))
-    localStorage.setItem('admitio_version', STORAGE_VERSION)
-    return emptyData
   }
 
-  // Si NO hay usuario de Supabase, cargar mockData (modo demo)
-  console.log('🔄 Inicializando datos de demostración...')
+  // Datos iniciales demo (solo si no es Supabase)
   const initialData = {
     consultas: CONSULTAS_INICIALES,
     actividad: ACTIVIDAD_INICIAL,
     usuarios: USUARIOS,
     carreras: CARRERAS,
     medios: MEDIOS,
+    roles: ROLES,
+    estados: ESTADOS,
+    tipos_alumno: TIPOS_ALUMNO,
+    tipos_actividad: TIPOS_ACTIVIDAD,
     plantillas: PLANTILLAS_CORREO,
     formularios: FORMULARIOS,
     config: CONFIG_ORG,
@@ -123,28 +113,35 @@ function initStore() {
     _supabase_sync: false
   }
 
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(initialData))
-  localStorage.setItem('admitio_version', STORAGE_VERSION)
-  console.log(`✅ Datos demo cargados: ${initialData.consultas.length} leads`)
+  console.log(`✅ Store demo inicializado en memoria: ${initialData.consultas.length} leads`)
   return initialData
 }
 
 let store = initStore()
 
 function saveStore() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(store))
+  // SEGURIDAD: Ya no guardamos en localStorage para evitar riesgos de datos en el navegador
+  // El store permanece solo en la memoria RAM del navegador mientras la pestaña esté abierta
 }
 
 export function resetStore() {
-  localStorage.removeItem(STORAGE_KEY)
-  localStorage.removeItem('admitio_version')
+  try {
+    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem('admitio_version')
+  } catch(e) {}
+  
   store = initStore()
-  console.log('🔄 Store reseteado a datos iniciales')
+  console.log('🔄 Store reseteado (Memoria Limpia)')
   return store
 }
 
-// Recargar datos desde localStorage (útil para sincronizar entre pestañas)
+// Recargar datos (en modo Supabase solo limpia para asegurar frescura)
 export function reloadStore() {
+  if (store?._supabase_sync) {
+    console.log('🛡️ reloadStore: Ignorando localStorage por seguridad (Modo Supabase)')
+    return store
+  }
+
   const stored = localStorage.getItem(STORAGE_KEY)
   if (stored) {
     try {
@@ -167,14 +164,11 @@ export function reloadStore() {
         metricas_encargados: data.metricas_encargados || {},
         config: data.config || { nombre: 'Mi Institución' }
       }
-      console.log(`🔄 Store recargado desde localStorage (${store.consultas?.length || 0} leads)`)
-      return true
     } catch (e) {
-      console.warn('⚠️ Error al recargar store:', e)
-      return false
+      console.error('Error al recargar store:', e)
     }
   }
-  return false
+  return store
 }
 
 // Debug: ver estado actual del store
@@ -1332,7 +1326,8 @@ export function registrarIntentoWhatsApp(leadId, userId) {
   // Generar URL de WhatsApp
   const telefono = lead.telefono.replace(/\D/g, '')
   const mensaje = encodeURIComponent(`Hola ${lead.nombre}, soy ${store.usuarios.find(u => u.id === userId)?.nombre} de ${store.config?.nombre || 'nuestra institución'}. Me comunico por tu consulta sobre ${lead.carrera?.nombre || 'nuestras carreras'}.`)
-  return `whatsapp://send?phone=${telefono}&text=${mensaje}`
+  if (!telefono) return null
+  return `https://api.whatsapp.com/send?phone=${telefono}&text=${mensaje}`
 }
 
 export function registrarResultadoWhatsApp(leadId, userId, resultado) {
@@ -2924,5 +2919,7 @@ export function eliminarRegistroImportacion(id) {
   return true
 }
 
+// Importar para uso externo
+export { ROLES, ESTADOS, TIPOS_ALUMNO, TIPOS_ACTIVIDAD }
 // Importar para uso externo
 export { ROLES, ESTADOS, TIPOS_ALUMNO, TIPOS_ACTIVIDAD }

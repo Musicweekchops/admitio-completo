@@ -135,22 +135,22 @@ export default function Dashboard() {
 
     const channelName = `admitio-${user.institucion_id}`
     console.log(`🔌 Conectando Realtime a canal: ${channelName}`)
-    
+
     const channel = supabase
       .channel('admitio-notifications-v4')
       .on('postgres_changes',
-        { 
-          event: 'INSERT', 
+        {
+          event: 'INSERT',
           table: 'lead_notifications'
         },
         async (payload) => {
           console.log('📡 [rt-v4] RECIBIDA:', payload.new)
-          
+
           // Filtrar por institución en el cliente (más robusto)
           if (payload.new?.institucion_id && payload.new.institucion_id !== user.institucion_id) {
             return
           }
-          
+
           if (!selectedConsultaRef.current) {
             console.log('🔄 [rt-v4] Refrescando Dashboard...')
             await reloadFromSupabase()
@@ -268,24 +268,44 @@ export default function Dashboard() {
   useEffect(() => {
     loadData()
 
-    // Escuchar cuando AuthContext carga datos de Supabase
+    // Escuchar cuando el store se actualiza desde la nube
     const handleDataLoaded = () => {
-      console.log('📡 Evento admitio-data-loaded recibido')
-      store.reloadStore() // Recargar store desde localStorage
+      console.log('📡 Evento admitio-store-updated recibido')
+      // Ya no llamamos a reloadStore() porque lee de localStorage y queremos memoria limpia
       loadData() // Recargar datos en el Dashboard
     }
 
-    window.addEventListener('admitio-store-updated', handleDataLoaded)
+    // Escuchar estado de sincronización para el indicador visual
+    const handleSyncStatus = (event) => {
+      setSyncStatus(event.detail.status)
+    }
 
-    // Retry después de 500ms por si el store aún no tenía datos
+    // Escuchar errores críticos (401/403) para bloquear UI y evitar pérdida de datos
+    const handleSyncError = (event) => {
+      const { detail } = event
+      if (detail.status === 401 || detail.status === 403 || detail.error?.includes('Unauthorized')) {
+        setNotification({
+          type: 'error',
+          message: 'Tu sesión ha expirado. Para proteger tus cambios, por favor inicia sesión de nuevo.',
+          isBlocking: true
+        })
+      }
+    }
+
+    window.addEventListener('admitio-store-updated', handleDataLoaded)
+    window.addEventListener('admitio-sync-status', handleSyncStatus)
+    window.addEventListener('admitio-sync-error', handleSyncError)
+
+    // Retry inicial para asegurar datos
     const timer = setTimeout(() => {
-      store.reloadStore()
       loadData()
     }, 500)
 
     return () => {
       clearTimeout(timer)
       window.removeEventListener('admitio-store-updated', handleDataLoaded)
+      window.removeEventListener('admitio-sync-status', handleSyncStatus)
+      window.removeEventListener('admitio-sync-error', handleSyncError)
     }
   }, [user])
 
@@ -430,6 +450,38 @@ export default function Dashboard() {
       setMobileMenuOpen(false) // Cerrar en mobile
     }
 
+    // ============================================
+    // INDICADOR DE ESTADO DE SINCRONIZACIÓN
+    // ============================================
+    const SyncStatusIndicator = ({ isMobile = false }) => {
+      let icon = "Cloud";
+      let color = "text-slate-400";
+      let label = "Conectando...";
+      let pulse = "";
+
+      if (syncStatus === 'syncing') {
+        icon = "RefreshCw";
+        color = "text-amber-500";
+        label = "Sincronizando...";
+        pulse = "animate-spin";
+      } else if (syncStatus === 'synced') {
+        icon = "CloudCheck";
+        color = "text-emerald-500";
+        label = "En tiempo real";
+      } else if (syncStatus === 'error') {
+        icon = "CloudOff";
+        color = "text-red-500";
+        label = "Error de conexión";
+      }
+
+      return (
+        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-100 ${sidebarCollapsed && !isMobile ? 'justify-center mx-auto' : ''}`} title={label}>
+          <Icon name={icon} size={isMobile ? 18 : (sidebarCollapsed ? 20 : 16)} className={`${color} ${pulse}`} />
+          {(!sidebarCollapsed || isMobile) && <span className={`text-[10px] uppercase tracking-wider font-bold ${color}`}>{label}</span>}
+        </div>
+      );
+    };
+
     return (
       <>
         {/* Overlay para mobile */}
@@ -448,8 +500,8 @@ export default function Dashboard() {
           ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}>
           {/* Header con logo */}
-          <div className="p-4">
-            <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} mb-4`}>
+          <div className="p-4 flex flex-col gap-2">
+            <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} mb-2`}>
               <div className={`flex items-center ${sidebarCollapsed ? '' : 'gap-3'}`}>
                 <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0">
                   <span className="text-white font-bold">{nombreInstitucion.charAt(0).toUpperCase()}</span>
@@ -474,11 +526,13 @@ export default function Dashboard() {
               )}
             </div>
 
+            <SyncStatusIndicator />
+
             {/* Botón colapsar - solo desktop - VISIBLE */}
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
               className={`
-                hidden lg:flex w-full items-center justify-center gap-2 p-3 rounded-xl mb-4 transition-all font-medium
+                hidden lg:flex w-full items-center justify-center gap-2 p-3 rounded-xl mb-4 transition-all font-medium mt-2
                 ${sidebarCollapsed
                   ? 'bg-violet-700 text-white hover:bg-violet-800'
                   : 'bg-violet-100 text-violet-700 hover:bg-violet-200 border-2 border-violet-300'}
@@ -572,23 +626,23 @@ export default function Dashboard() {
     )
   }
 
-  // ============================================
-  // MOBILE HEADER
-  // ============================================
   const MobileHeader = () => (
     <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-100 flex items-center justify-between px-4 z-30">
-      <button
-        onClick={() => setMobileMenuOpen(true)}
-        className="p-2 bg-red-500 text-white hover:bg-red-600 rounded-lg shadow-sm"
-      >
-        <Icon name="Menu" size={24} />
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => setMobileMenuOpen(true)}
+          className="p-2 bg-red-500 text-white hover:bg-red-600 rounded-lg shadow-sm"
+        >
+          <Icon name="Menu" size={24} />
+        </button>
+        <SyncStatusIndicator isMobile={true} />
+      </div>
 
       <div className="flex items-center gap-2">
         <div className="w-8 h-8 bg-gradient-to-br from-violet-600 to-purple-600 rounded-lg flex items-center justify-center">
           <span className="text-white font-bold text-sm">{nombreInstitucion.charAt(0).toUpperCase()}</span>
         </div>
-        <span className="font-bold text-slate-800">{nombreInstitucion}</span>
+        <span className="font-bold text-slate-800 text-sm truncate max-w-[100px]">{nombreInstitucion}</span>
       </div>
 
       <button
@@ -777,7 +831,7 @@ export default function Dashboard() {
       <main className={`transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'} pt-16 lg:pt-0`}>
         <div className="max-w-7xl mx-auto p-4 lg:p-8">
           {activeTab === 'dashboard' && (
-            <DashboardView 
+            <DashboardView
               user={user}
               isKeyMaster={isKeyMaster}
               metricas={metricas}
@@ -799,7 +853,7 @@ export default function Dashboard() {
           )}
 
           {activeTab === 'consultas' && (
-            <ConsultasView 
+            <ConsultasView
               isKeyMaster={isKeyMaster}
               canEdit={canEdit}
               handleNuevoLead={handleNuevoLead}
@@ -822,7 +876,7 @@ export default function Dashboard() {
           )}
 
           {activeTab === 'historial' && (
-            <HistorialView 
+            <HistorialView
               consultas={consultas}
               isKeyMaster={isKeyMaster}
               selectConsulta={selectConsulta}
@@ -831,7 +885,7 @@ export default function Dashboard() {
           )}
 
           {activeTab === 'detalle' && (
-            <DetalleView 
+            <DetalleView
               selectedConsulta={selectedConsulta}
               setSelectedConsulta={setSelectedConsulta}
               setActiveTab={setActiveTab}
@@ -848,7 +902,7 @@ export default function Dashboard() {
           )}
 
           {activeTab === 'reportes' && (
-            <ReportesView 
+            <ReportesView
               isRector={isRector}
               isKeyMaster={isKeyMaster}
               user={user}
@@ -863,7 +917,7 @@ export default function Dashboard() {
           )}
 
           {activeTab === 'formularios' && (
-            <FormulariosView 
+            <FormulariosView
               formularios={formularios}
               reloadFromSupabase={reloadFromSupabase}
               loadData={loadData}
@@ -876,7 +930,7 @@ export default function Dashboard() {
           )}
 
           {activeTab === 'usuarios' && (
-            <UsuariosView 
+            <UsuariosView
               user={user}
               reloadFromSupabase={reloadFromSupabase}
               setNotification={setNotification}
@@ -887,7 +941,7 @@ export default function Dashboard() {
           )}
 
           {activeTab === 'programas' && (
-            <ProgramasView 
+            <ProgramasView
               user={user}
               consultas={consultas}
               loadData={loadData}
@@ -896,7 +950,7 @@ export default function Dashboard() {
           )}
 
           {activeTab === 'importar' && (
-            <ImportarView 
+            <ImportarView
               user={user}
               loadData={loadData}
               setNotification={setNotification}
@@ -904,7 +958,7 @@ export default function Dashboard() {
           )}
 
           {activeTab === 'importaciones_sheets' && (
-            <ImportacionesSheetsView 
+            <ImportacionesSheetsView
               user={user}
               loadData={loadData}
               setNotification={setNotification}
@@ -912,7 +966,7 @@ export default function Dashboard() {
           )}
 
           {activeTab === 'configuracion' && (
-            <ConfiguracionView 
+            <ConfiguracionView
               user={user}
               institucion={institucion}
               planInfo={planInfo}
@@ -958,7 +1012,7 @@ export default function Dashboard() {
       )}
 
       {/* Modal nueva consulta */}
-      <ModalNuevaConsulta 
+      <ModalNuevaConsulta
         isOpen={showModal}
         onClose={() => setShowModal(false)}
         onCreated={() => loadData()}
@@ -1007,8 +1061,8 @@ export default function Dashboard() {
                         selectConsulta(c.id)
                       }}
                       className={`p-4 rounded-xl cursor-pointer transition-all hover:shadow-md ${c.nuevoInteres ? 'bg-violet-50 border border-violet-200' :
-                          c.atrasado ? 'bg-red-50 border border-red-200' :
-                            'bg-slate-50 border border-slate-200'
+                        c.atrasado ? 'bg-red-50 border border-red-200' :
+                          'bg-slate-50 border border-slate-200'
                         }`}
                     >
                       <div className="flex items-center justify-between">
@@ -1035,16 +1089,36 @@ export default function Dashboard() {
       )}
 
       {notification && (
-        <div className="fixed bottom-4 right-4 z-[100] animate-bounce">
-          <div className={`px-6 py-4 rounded-xl shadow-lg flex items-center gap-3 ${notification.type === 'success' ? 'bg-emerald-600 text-white' :
-              notification.type === 'info' ? 'bg-blue-600 text-white' :
-                'bg-violet-600 text-white'
+        <div className={`fixed ${notification.isBlocking ? 'inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4' : 'bottom-4 right-4 animate-bounce'} z-[200]`}>
+          <div className={`${notification.isBlocking ? 'max-w-sm w-full bg-white rounded-3xl shadow-2xl p-8 border-t-4 border-red-500' : 'px-6 py-4 rounded-xl shadow-lg flex items-center gap-3'} ${
+            notification.type === 'error' ? (notification.isBlocking ? 'bg-white' : 'bg-red-50 text-red-700') :
+              notification.type === 'success' ? (notification.isBlocking ? 'bg-white' : 'bg-emerald-600 text-white') :
+                'bg-blue-600 text-white'
             }`}>
-            <Icon name={notification.type === 'success' ? 'CheckCircle' : notification.type === 'info' ? 'Info' : 'Bell'} size={24} />
-            <p className="font-medium">{notification.message}</p>
-            <button onClick={() => setNotification(null)} className="ml-2 opacity-60 hover:opacity-100">
-              <Icon name="X" size={18} />
-            </button>
+            {notification.isBlocking ? (
+              <div className="text-center">
+                <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Icon name="AlertCircle" size={40} className="text-red-600" />
+                </div>
+                <h3 className="text-2xl font-bold text-slate-800 mb-2">Sesión Expirada</h3>
+                <p className="text-slate-500 mb-8">{notification.message}</p>
+                <button 
+                  onClick={handleLogout}
+                  className="w-full py-4 bg-red-600 text-white rounded-2xl font-bold hover:bg-red-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-200"
+                >
+                  <Icon name="LogOut" size={20} />
+                  Cerrar sesión e ingresar de nuevo
+                </button>
+              </div>
+            ) : (
+              <>
+                <Icon name={notification.type === 'success' ? 'CheckCircle' : notification.type === 'info' ? 'Info' : 'Bell'} size={24} />
+                <p className="font-medium">{notification.message}</p>
+                <button onClick={() => setNotification(null)} className="ml-2 opacity-60 hover:opacity-100">
+                  <Icon name="X" size={18} />
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1052,7 +1126,7 @@ export default function Dashboard() {
       {/* Botón flotante actualizar */}
       <button
         onClick={() => {
-          store.reloadStore() 
+          store.reloadStore()
           loadData()
           setNotification({ type: 'info', message: 'Datos actualizados' })
           setTimeout(() => setNotification(null), 2000)
@@ -1064,5 +1138,5 @@ export default function Dashboard() {
         <span className="text-sm font-medium">Actualizar</span>
       </button>
     </div>
-  )
+  );
 }

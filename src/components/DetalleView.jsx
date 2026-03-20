@@ -122,9 +122,13 @@ const DetalleView = memo(({
               </div>
 
               <div className="flex gap-2">
-                <a href={`whatsapp://send?phone=${c.telefono?.replace(/\D/g, '')}`} rel="noopener noreferrer"
-                  className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg transition-colors"
-                  title="WhatsApp"
+                <a
+                  href={c.telefono ? `https://api.whatsapp.com/send?phone=${c.telefono.replace(/\D/g, '')}` : '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => !c.telefono && e.preventDefault()}
+                  className={`p-2 rounded-lg transition-colors ${c.telefono ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-slate-50 text-slate-300 cursor-not-allowed'}`}
+                  title={c.telefono ? "WhatsApp" : "Sin teléfono"}
                 >
                   <Icon name="MessageCircle" size={20} />
                 </a>
@@ -290,14 +294,21 @@ const DetalleView = memo(({
                 <Icon name="Phone" size={20} />
                 Llamar
               </a>
-              <a href={`whatsapp://send?phone=${c.telefono?.replace(/\D/g, '')}`} rel="noopener noreferrer"
-                onClick={() => {
+              <a
+                href={c.telefono ? `https://api.whatsapp.com/send?phone=${c.telefono.replace(/\D/g, '')}` : '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => {
+                  if (!c.telefono) {
+                    e.preventDefault();
+                    return;
+                  }
                   store.registrarAccionContacto(c.id, user?.id, 'whatsapp')
                   loadData()
                 }}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors">
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${c.telefono ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-slate-50 text-slate-300 cursor-not-allowed'}`}>
                 <Icon name="MessageCircle" size={20} />
-                WhatsApp
+                WhatsApp {!c.telefono && '(Sin teléfono)'}
               </a>
               <a href={`mailto:${c.email}`}
                 onClick={() => {
