@@ -191,6 +191,25 @@ export default function Dashboard() {
       window.removeEventListener('admitio-data-loaded', handleStoreUpdate)
     }
   }, [user?.id])
+
+  // Chequeo preventivo de sesión (cada 10 seg)
+  useEffect(() => {
+    if (!user?.id || !isSupabaseConfigured()) return;
+
+    const sessionCheck = setInterval(async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        console.warn('⚠️ Sesión perdida detectada por el vigilante');
+        setNotification({
+          type: 'error',
+          message: 'Tu sesión ha expirado. Para proteger tus cambios, por favor inicia sesión de nuevo.',
+          isBlocking: true
+        });
+      }
+    }, 10000); // 10 segundos
+
+    return () => clearInterval(sessionCheck);
+  }, [user?.id]);
   // ========================================
 
   // Cargar importaciones pendientes (solo Enterprise)
