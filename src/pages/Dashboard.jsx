@@ -444,6 +444,13 @@ export default function Dashboard() {
       { id: 'configuracion', icon: 'Settings', label: 'Configuración', show: esAdmin },
     ]
 
+    const handleNavClick = (tabId) => {
+      setActiveTab(tabId)
+      setSelectedConsulta(null)
+      if (tabId === 'dashboard') setFilterEstado('todos')
+      setMobileMenuOpen(false) // Cerrar en mobile
+    }
+
   // ============================================
   // INDICADOR DE ESTADO DE SINCRONIZACIÓN
   // ============================================
