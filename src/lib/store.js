@@ -1332,7 +1332,7 @@ export function registrarIntentoWhatsApp(leadId, userId) {
   // Generar URL de WhatsApp
   const telefono = lead.telefono.replace(/\D/g, '')
   const mensaje = encodeURIComponent(`Hola ${lead.nombre}, soy ${store.usuarios.find(u => u.id === userId)?.nombre} de ${store.config?.nombre || 'nuestra institución'}. Me comunico por tu consulta sobre ${lead.carrera?.nombre || 'nuestras carreras'}.`)
-  return `https://wa.me/${telefono}?text=${mensaje}`
+  return `whatsapp://send?phone=${telefono}&text=${mensaje}`
 }
 
 export function registrarResultadoWhatsApp(leadId, userId, resultado) {
