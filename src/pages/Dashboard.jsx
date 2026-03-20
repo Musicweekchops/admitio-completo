@@ -59,6 +59,7 @@ export default function Dashboard() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [lastUpdate, setLastUpdate] = useState(new Date())
+  const [syncStatus, setSyncStatus] = useState('synced') // 'syncing' | 'synced' | 'error'
 
   // Protecciones para arrays que pueden ser undefined durante la carga
   const safeLeadsHoy = leadsHoy || []
@@ -443,48 +444,41 @@ export default function Dashboard() {
       { id: 'configuracion', icon: 'Settings', label: 'Configuración', show: esAdmin },
     ]
 
-    const handleNavClick = (tabId) => {
-      setActiveTab(tabId)
-      setSelectedConsulta(null)
-      if (tabId === 'dashboard') setFilterEstado('todos')
-      setMobileMenuOpen(false) // Cerrar en mobile
+  // ============================================
+  // INDICADOR DE ESTADO DE SINCRONIZACIÓN
+  // ============================================
+  const SyncStatusIndicator = ({ isMobile = false }) => {
+    let icon = "Cloud";
+    let color = "text-slate-400";
+    let label = "Conectando...";
+    let pulse = "";
+
+    if (syncStatus === 'syncing') {
+      icon = "RefreshCw";
+      color = "text-amber-500";
+      label = "Sincronizando...";
+      pulse = "animate-spin";
+    } else if (syncStatus === 'synced') {
+      icon = "CloudCheck";
+      color = "text-emerald-500";
+      label = "En tiempo real";
+    } else if (syncStatus === 'error') {
+      icon = "CloudOff";
+      color = "text-red-500";
+      label = "Error de conexión";
     }
 
-    // ============================================
-    // INDICADOR DE ESTADO DE SINCRONIZACIÓN
-    // ============================================
-    const SyncStatusIndicator = ({ isMobile = false }) => {
-      let icon = "Cloud";
-      let color = "text-slate-400";
-      let label = "Conectando...";
-      let pulse = "";
+    return (
+      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-100 ${sidebarCollapsed && !isMobile ? 'justify-center mx-auto' : ''}`} title={label}>
+        <Icon name={icon} size={isMobile ? 18 : (sidebarCollapsed ? 20 : 16)} className={`${color} ${pulse}`} />
+        {(!sidebarCollapsed || isMobile) && <span className={`text-[10px] uppercase tracking-wider font-bold ${color}`}>{label}</span>}
+      </div>
+    );
+  };
 
-      if (syncStatus === 'syncing') {
-        icon = "RefreshCw";
-        color = "text-amber-500";
-        label = "Sincronizando...";
-        pulse = "animate-spin";
-      } else if (syncStatus === 'synced') {
-        icon = "CloudCheck";
-        color = "text-emerald-500";
-        label = "En tiempo real";
-      } else if (syncStatus === 'error') {
-        icon = "CloudOff";
-        color = "text-red-500";
-        label = "Error de conexión";
-      }
-
-      return (
-        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-100 ${sidebarCollapsed && !isMobile ? 'justify-center mx-auto' : ''}`} title={label}>
-          <Icon name={icon} size={isMobile ? 18 : (sidebarCollapsed ? 20 : 16)} className={`${color} ${pulse}`} />
-          {(!sidebarCollapsed || isMobile) && <span className={`text-[10px] uppercase tracking-wider font-bold ${color}`}>{label}</span>}
-        </div>
-      );
-    };
-
+  const Sidebar = () => {
     return (
       <>
-        {/* Overlay para mobile */}
         {mobileMenuOpen && (
           <div
             className="fixed inset-0 bg-black/50 z-40 lg:hidden"
@@ -1138,5 +1132,6 @@ export default function Dashboard() {
         <span className="text-sm font-medium">Actualizar</span>
       </button>
     </div>
-  );
+  )
+}
 }
