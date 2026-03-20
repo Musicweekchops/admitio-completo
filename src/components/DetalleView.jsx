@@ -122,7 +122,7 @@ const DetalleView = memo(({
               </div>
 
               <div className="flex gap-2">
-                <a href={`whatsapp://send?phone=${c.telefono?.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer"
+                <a href={`whatsapp://send?phone=${c.telefono?.replace(/\D/g, '')}`} rel="noopener noreferrer"
                   className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg transition-colors"
                   title="WhatsApp"
                 >
@@ -290,7 +290,7 @@ const DetalleView = memo(({
                 <Icon name="Phone" size={20} />
                 Llamar
               </a>
-              <a href={`whatsapp://send?phone=${c.telefono?.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer"
+              <a href={`whatsapp://send?phone=${c.telefono?.replace(/\D/g, '')}`} rel="noopener noreferrer"
                 onClick={() => {
                   store.registrarAccionContacto(c.id, user?.id, 'whatsapp')
                   loadData()
