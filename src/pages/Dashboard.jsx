@@ -347,10 +347,11 @@ export default function Dashboard() {
     loadData()
 
     // Escuchar cuando el store se actualiza desde la nube
+    // Escuchar actualizaciones del store (desde storeSync y AuthContext)
     const handleDataLoaded = () => {
-      console.log('📡 Evento admitio-store-updated recibido')
-      // Ya no llamamos a reloadStore() porque lee de localStorage y queremos memoria limpia
-      loadData() // Recargar datos en el Dashboard
+      console.log('📡 Evento de datos recibido, actualizando vista...')
+      loadData()
+      setSyncStatus('synced') // Asegurar que el indicador vuelva a verde tras carga manual
     }
 
     // Escuchar estado de sincronización para el indicador visual
