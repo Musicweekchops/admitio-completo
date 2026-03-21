@@ -58,10 +58,10 @@ export default function Dashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [lastUpdate, setLastUpdate] = useState(new Date())
   const [syncStatus, setSyncStatus] = useState('synced')
-  const [lastHeartbeat, setLastHeartbeat] = useState(Date.now())
   const [showErrorBanner, setShowErrorBanner] = useState(false)
 
   // 2. REFS
+  const lastHeartbeatRef = useRef(Date.now())
   const retryCountRef = useRef(0)
   const MAX_RETRIES = 10
   const channelRef = useRef(null)
@@ -116,9 +116,9 @@ export default function Dashboard() {
         store.applyRealtimeUpdate(payload)
         loadData()
         setLastUpdate(new Date())
-        setLastHeartbeat(Date.now())
+        lastHeartbeatRef.current = Date.now()
       })
-      .on('broadcast', { event: 'heartbeat' }, () => setLastHeartbeat(Date.now()))
+      .on('broadcast', { event: 'heartbeat' }, () => { lastHeartbeatRef.current = Date.now() })
       .subscribe((status) => {
         setSyncStatus(status === 'SUBSCRIBED' ? 'synced' : 'error')
         if (status === 'SUBSCRIBED') {
@@ -296,25 +296,40 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (syncStatus !== 'synced') return
+    // Intervalo de latido: 15s
     const interval = setInterval(() => {
-      if (window._admitioChannel) window._admitioChannel.send({ type: 'broadcast', event: 'heartbeat', payload: { t: Date.now() } })
-      if (Date.now() - lastHeartbeat > 40000) { 
-        console.warn('💓 [Heartbeat] Latido perdido. Forzando reconexión...');
-        retryCountRef.current = 0 // Resetear para permitir nuevos intentos
-        setSyncStatus('error')
-        setupRealtime() 
+      if (window._admitioChannel) {
+        window._admitioChannel.send({ type: 'broadcast', event: 'heartbeat', payload: { t: Date.now() } })
+      }
+      
+      const tiempoSinLatido = Date.now() - lastHeartbeatRef.current;
+      if (tiempoSinLatido > 40000) { 
+        console.warn('💓 [Heartbeat] Latido perdido (40s). Forzando reconexión...');
+        lastHeartbeatRef.current = Date.now(); // Mentir temporalmente para que el intervalo no dispare repetidamente
+        retryCountRef.current = 0; 
+        setSyncStatus('error');
+        setupRealtime();
       }
     }, 15000)
+    
+    // Recuperación silenciosa al volver a la pestaña
     const handleVis = () => { 
-      if (document.visibilityState === 'visible' && Date.now() - lastHeartbeat > 60000) {
-        console.log('👁️ [Visibility] Tab activa y sin latido. Re-conectando...');
-        retryCountRef.current = 0
-        setSyncStatus('loading'); loadData(); setupRealtime() 
+      if (document.visibilityState === 'visible') {
+        const tiempoInactivo = Date.now() - lastHeartbeatRef.current;
+        if (tiempoInactivo > 60000) {
+          console.log('👁️ [Visibility] Tab regresó tras estar inactiva mucho tiempo. Re-conectando...');
+          retryCountRef.current = 0
+          lastHeartbeatRef.current = Date.now()
+          setSyncStatus('loading')
+          loadData()
+          setupRealtime()
+        }
       }
     }
+    
     window.addEventListener('visibilitychange', handleVis)
     return () => { clearInterval(interval); window.removeEventListener('visibilitychange', handleVis) }
-  }, [syncStatus, lastHeartbeat, loadData, setupRealtime])
+  }, [syncStatus, loadData, setupRealtime])
 
   useEffect(() => {
     const upd = () => loadData()
@@ -322,14 +337,11 @@ export default function Dashboard() {
     return () => { window.removeEventListener('admitio-store-updated', upd); window.removeEventListener('admitio-data-loaded', upd) }
   }, [loadData])
 
-  useEffect(() => {
-    if (!user?.id) return
-    const i = setInterval(async () => {
-      const { data: { user: a }, error } = await supabase.auth.getUser()
-      if (!a || error) setNotification({ type: 'error', message: 'Sesión expirada', isBlocking: true })
-    }, 15000)
-    return () => clearInterval(i)
-  }, [user?.id])
+  // ELIMINADO: Polling agresivo de 15s hacia supabase.auth.getUser()
+  // Motivo: Esto causaba el error "Lock broken by another request with the steal option"
+  // y re-montaba componentes prematuramente en pestañas múltiples. El auto-refresh
+  // de Supabase en auth.js (persistSession: true, autoRefreshToken: true) ya cubre
+  // la persistencia segura.
 
   useEffect(() => {
     if (planInfo?.plan === 'enterprise' && user?.institucion_id) {
