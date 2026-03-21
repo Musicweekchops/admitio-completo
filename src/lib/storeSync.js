@@ -712,7 +712,7 @@ export function syncImportarLeads(institucionId, leads) {
 export function getSyncStatus() {
   return {
     pendingTasks: syncQueue.length,
-    isSyncing,
+    isSyncing: isQueueProcessing,
     lastSync: lastSyncTimestamp
   };
 }
