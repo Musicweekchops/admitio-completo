@@ -472,9 +472,12 @@ export async function syncActualizarLeadDirecto(leadId, updates) {
 
   console.log('📤 Sync directo a Supabase:', leadId, Object.keys(supabaseUpdates));
 
-  // Nuevo: Protección de tiempo para evitar cuellos de botella (Timeout de 10s)
+  // Protección agresiva: Timeout de 5s para detectar Row Locks rápido
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  const timeoutId = setTimeout(() => {
+    console.warn('⚠️ Disparando aborto interno (5s de inactividad de DB)...');
+    controller.abort();
+  }, 5000);
 
   try {
     const { data, error } = await supabase

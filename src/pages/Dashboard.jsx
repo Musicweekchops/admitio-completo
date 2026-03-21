@@ -331,8 +331,8 @@ export default function Dashboard() {
       }
       
       const tiempoSinLatido = Date.now() - lastHeartbeatRef.current;
-      if (tiempoSinLatido > 40000) { 
-        console.warn('💓 [Heartbeat] Latido perdido (40s). Forzando reconexión...');
+      if (tiempoSinLatido > 60000) { 
+        console.warn('💓 [Heartbeat] Latido perdido (60s). Forzando reconexión...');
         lastHeartbeatRef.current = Date.now(); // Mentir temporalmente para que el intervalo no dispare repetidamente
         retryCountRef.current = 0; 
         setSyncStatus('error');
