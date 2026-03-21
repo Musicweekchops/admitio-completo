@@ -117,7 +117,11 @@ export default function Dashboard() {
     const channelName = 'admitio-leads-realtime'
     let isActive = true // Flag para evitar que desconexiones intencionales lancen reconexiones zombis
 
-    const channel = supabase.channel(channelName)
+    const channel = supabase.channel(channelName, {
+      config: {
+        broadcast: { ack: false, self: true }
+      }
+    })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'leads', filter: `institucion_id=eq.${user.institucion_id}` }, (payload) => {
         if (!isActive) return
         store.applyRealtimeUpdate(payload)
