@@ -55,6 +55,7 @@ export function AuthProvider({ children }) {
   // Guards para evitar llamadas duplicadas
   const isLoadingUser = React.useRef(false)
   const initialCheckDone = React.useRef(false)
+  const currentUserAuthId = React.useRef(null)
 
   useEffect(() => {
     // Limpiar datos viejos de localStorage al iniciar
@@ -92,13 +93,15 @@ export function AuthProvider({ children }) {
 
         // Solo procesar SIGNED_IN después de la carga inicial (para login manual o cambio real de usuario)
         if (event === 'SIGNED_IN' && session?.user && initialCheckDone.current) {
-          // Evitar recarga si es el mismo usuario (refresco de token)
-          if (user?.auth_id === session.user.id) {
+          // Evitar recarga si es el mismo usuario (refresco de token técnico al cambiar de pestaña)
+          // Usamos la REF porque el estado 'user' puede estar desactualizado en este cierre (closure)
+          if (currentUserAuthId.current === session.user.id) {
             console.log('⏸️ Ignorando SIGNED_IN - Mismo usuario (Token Refresh)')
             return
           }
           await loadUserFromAuth(session.user)
         } else if (event === 'SIGNED_OUT') {
+          currentUserAuthId.current = null
           setUser(null)
           setInstitucion(null)
           localStorage.removeItem('admitio_user')
@@ -321,6 +324,7 @@ export function AuthProvider({ children }) {
         permisos: rol.permisos || {}
       }
 
+      currentUserAuthId.current = enrichedUser.auth_id
       setUser(enrichedUser)
       setInstitucion(usuario.instituciones)
       localStorage.setItem('admitio_user', JSON.stringify(enrichedUser))
