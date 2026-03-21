@@ -426,12 +426,11 @@ export default function Dashboard() {
     }
   }, [planInfo?.plan, user?.institucion_id])
 
-  function loadData() {
+  const loadData = useCallback(() => {
     console.log('📊 loadData() - Rol:', user?.rol_id, 'isRector:', isRector)
 
     // Protección: verificar que el store esté listo
-    const storeReady = store.getConsultas && typeof store.getConsultas === 'function'
-    if (!storeReady) {
+    if (!store.getConsultas || typeof store.getConsultas !== 'function') {
       console.warn('⚠️ loadData: store no está listo')
       return
     }
@@ -442,8 +441,6 @@ export default function Dashboard() {
     if (isRector) {
       data = store.getConsultasParaReportes() || []
       console.log('📊 Rector - Leads cargados:', data?.length || 0)
-      console.log('📊 Rector - Usuarios:', store.getTodosLosUsuarios()?.length || 0)
-      console.log('📊 Rector - Encargados:', store.getEncargadosActivos()?.length || 0)
     } else {
       data = store.getConsultas(user?.id, user?.rol_id) || []
     }
@@ -454,20 +451,20 @@ export default function Dashboard() {
       setMetricas(store.getMetricasEncargado(user.id))
       setLeadsHoy(store.getLeadsContactarHoy(user.id, user.rol_id) || [])
     } else if (isKeyMaster || isRector) {
-      // Rector también ve los leads a contactar hoy (para tener contexto)
       setLeadsHoy(store.getLeadsContactarHoy() || [])
     }
     setMetricasGlobales(store.getMetricasGlobales())
     setFormularios(store.getFormularios() || [])
 
-    // ✅ Actualizar consulta seleccionada para refrescar historial/acciones
-    if (selectedConsulta) {
-      const updated = store.getConsultaById(selectedConsulta.id)
+    // ✅ Actualizar consulta seleccionada SIN disparar ciclos infinitos
+    // (Usamos el objeto actual del store para capturar cambios de tiempo real en la ficha abierta)
+    if (selectedConsultaRef.current) {
+      const updated = store.getConsultaById(selectedConsultaRef.current.id)
       if (updated) {
         setSelectedConsulta(updated)
       }
     }
-  }
+  }, [user?.id, user?.rol_id, isRector, isEncargado, isKeyMaster])
 
   // Cargar datos inicial y escuchar eventos de datos cargados
   useEffect(() => {
