@@ -107,7 +107,8 @@ export default function Dashboard() {
 
   const setupRealtime = useCallback(() => {
     if (!isSupabaseConfigured() || !user?.institucion_id) return
-    if (channelRef.current) supabase.removeChannel(channelRef.current)
+    // Limpieza global y profunda de canales para evitar "zombies"
+    supabase.removeAllChannels()
 
     const channelName = 'admitio-leads-realtime'
     const channel = supabase.channel(channelName)
@@ -297,9 +298,20 @@ export default function Dashboard() {
     if (syncStatus !== 'synced') return
     const interval = setInterval(() => {
       if (window._admitioChannel) window._admitioChannel.send({ type: 'broadcast', event: 'heartbeat', payload: { t: Date.now() } })
-      if (Date.now() - lastHeartbeat > 40000) { setSyncStatus('error'); setupRealtime() }
+      if (Date.now() - lastHeartbeat > 40000) { 
+        console.warn('💓 [Heartbeat] Latido perdido. Forzando reconexión...');
+        retryCountRef.current = 0 // Resetear para permitir nuevos intentos
+        setSyncStatus('error')
+        setupRealtime() 
+      }
     }, 15000)
-    const handleVis = () => { if (document.visibilityState === 'visible' && Date.now() - lastHeartbeat > 60000) { setSyncStatus('loading'); loadData(); setupRealtime() } }
+    const handleVis = () => { 
+      if (document.visibilityState === 'visible' && Date.now() - lastHeartbeat > 60000) {
+        console.log('👁️ [Visibility] Tab activa y sin latido. Re-conectando...');
+        retryCountRef.current = 0
+        setSyncStatus('loading'); loadData(); setupRealtime() 
+      }
+    }
     window.addEventListener('visibilitychange', handleVis)
     return () => { clearInterval(interval); window.removeEventListener('visibilitychange', handleVis) }
   }, [syncStatus, lastHeartbeat, loadData, setupRealtime])
@@ -730,6 +742,9 @@ export default function Dashboard() {
             <div className="flex items-center gap-2">
               <button 
                 onClick={() => {
+                   console.log('🔌 [Manual] Iniciando reconexión forzada...');
+                   retryCountRef.current = 0 // RESETEAR CONTADOR DE REINTENTOS
+                   setLastHeartbeat(Date.now()) // Dar 45s de gracia inmediatos
                    setSyncStatus('loading')
                    loadData()
                    setupRealtime()
