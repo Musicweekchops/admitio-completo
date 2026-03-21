@@ -62,9 +62,47 @@ export default function Dashboard() {
   const [lastUpdate, setLastUpdate] = useState(new Date())
   const [syncStatus, setSyncStatus] = useState('synced') // 'syncing' | 'synced' | 'error'
   const [lastHeartbeat, setLastHeartbeat] = useState(Date.now())
+  const [showErrorBanner, setShowErrorBanner] = useState(false)
 
   // Protecciones para arrays que pueden ser undefined durante la carga
   const safeLeadsHoy = leadsHoy || []
+
+  // Amortiguación del banner de error (Solo mostrar si dura más de 3 segundos)
+  useEffect(() => {
+    let timer;
+    if (syncStatus === 'error') {
+      timer = setTimeout(() => setShowErrorBanner(true), 3000)
+    } else {
+      setShowErrorBanner(false)
+      if (timer) clearTimeout(timer)
+    }
+    return () => timer && clearTimeout(timer)
+  }, [syncStatus])
+
+  // Monitor de Red Nativo (Online/Offline)
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log('🌐 [Admitio] Conexión a Internet recuperada. Reintentando sync...')
+      setSyncStatus('loading')
+      loadData()
+      // Forzar reconexión de Realtime
+      if (window._admitioChannel) {
+        supabase.removeChannel(window._admitioChannel)
+      }
+      setupRealtime()
+    }
+    const handleOffline = () => {
+      console.warn('📡 [Admitio] Sin conexión a Internet')
+      setSyncStatus('error')
+    }
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
 
   // ============================================
   // FUNCIÓN PARA FORMATEAR TIEMPO PROGRESIVO
@@ -1052,14 +1090,31 @@ export default function Dashboard() {
       <Sidebar />
       <MobileHeader />
 
-      {/* BANNER DE HONESTIDAD BRUTAL: Solo visible si hay problemas de conexión real */}
-      {syncStatus !== 'synced' && (
-        <div className="fixed top-0 left-0 right-0 z-[100] bg-red-600 text-white py-2 px-4 shadow-2xl animate-pulse">
-          <div className="max-w-7xl mx-auto flex items-center justify-center gap-3">
-            <Icon name="AlertCircle" size={20} />
-            <p className="font-bold text-sm lg:text-base">
-              CONEXIÓN INESTABLE - MODO SOLO LECTURA ACTIVO (Reintentando...)
-            </p>
+      {/* BANNER DE HONESTIDAD BRUTAL: Solo visible si hay problemas de conexión real persistentes */}
+      {showErrorBanner && (
+        <div className="fixed top-0 left-0 right-0 z-[100] bg-red-600 text-white animate-in slide-in-from-top duration-300">
+          <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 p-1.5 rounded-lg animate-pulse">
+                <Icon name="ShieldAlert" size={20} className="text-white" />
+              </div>
+              <div>
+                <span className="font-bold text-sm block">CONEXIÓN INESTABLE - REINTENTANDO...</span>
+                <span className="text-[11px] opacity-80 underline">Las ediciones están bloqueadas por seguridad hasta restablecer el latido.</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => {
+                   setSyncStatus('loading')
+                   loadData()
+                   setupRealtime()
+                }}
+                className="px-3 py-1 bg-white text-red-600 rounded-lg text-xs font-bold hover:bg-red-50 transition-colors whitespace-nowrap"
+              >
+                RECONECTAR AHORA
+              </button>
+            </div>
           </div>
         </div>
       )}
