@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import { enqueueSyncTask } from '../lib/storeSync'
 import * as store from '../lib/store'
 
 const AuthContext = createContext(null)
@@ -157,24 +158,27 @@ export function AuthProvider({ children }) {
   }, [user?.id])
 
   async function actualizarPresencia() {
-    if (!user?.id || !isSupabaseConfigured()) return
+    if (!user?.id || !isSupabaseConfigured()) return;
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    // ENCOLAR PRESENCIA PARA EVITAR COLISIONES CON LEADS
+    enqueueSyncTask('presencia', async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s es suficiente para un latido
 
-    try {
-      await supabase
-        .from('usuarios')
-        .update({ ultimo_activo: new Date().toISOString() })
-        .eq('id', user.id)
-        .abortSignal(controller.signal);
-      
-      clearTimeout(timeoutId);
-    } catch (err) {
-      clearTimeout(timeoutId);
-      // Silenciar errores de presencia, solo debug
-      console.debug('Error actualizando presencia:', err)
-    }
+      try {
+        await supabase
+          .from('usuarios')
+          .update({ ultimo_activo: new Date().toISOString() })
+          .eq('id', user.id)
+          .abortSignal(controller.signal);
+        
+        clearTimeout(timeoutId);
+      } catch (err) {
+        clearTimeout(timeoutId);
+        // Silenciar errores de presencia en prod/stg
+        console.debug('Error en latido de presencia:', err);
+      }
+    }).catch(() => {}); // Ignorar errores de la cola para este latido
   }
   // ==========================================
 

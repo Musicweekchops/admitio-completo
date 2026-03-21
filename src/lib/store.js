@@ -1062,7 +1062,7 @@ export async function updateConsultaAsync(id, updates, userId) {
 
   // Detectar cambio de estado
   if (updates.estado && oldConsulta.estado !== newConsulta.estado) {
-    addActividad(id, userId, 'cambio_estado', `Estado: ${oldConsulta.estado} → ${newConsulta.estado}`)
+    await addActividad(id, userId, 'cambio_estado', `Estado: ${oldConsulta.estado} → ${newConsulta.estado}`)
 
     // Primer contacto
     if (!oldConsulta.fecha_primer_contacto && newConsulta.estado !== 'nueva') {
@@ -1073,7 +1073,7 @@ export async function updateConsultaAsync(id, updates, userId) {
     if (newConsulta.estado === 'matriculado') {
       newConsulta.fecha_cierre = new Date().toISOString()
       newConsulta.matriculado = true
-      addActividad(id, userId, 'matriculado', '🎉 Lead matriculado exitosamente')
+      await addActividad(id, userId, 'matriculado', '🎉 Lead matriculado exitosamente')
       cancelarRecordatorios(id)
     }
 
@@ -1081,27 +1081,27 @@ export async function updateConsultaAsync(id, updates, userId) {
     if (newConsulta.estado === 'descartado') {
       newConsulta.fecha_cierre = new Date().toISOString()
       newConsulta.descartado = true
-      addActividad(id, userId, 'descartado', `Lead descartado: ${updates.motivo_descarte || 'Sin motivo especificado'}`)
+      await addActividad(id, userId, 'descartado', `Lead descartado: ${updates.motivo_descarte || 'Sin motivo especificado'}`)
       cancelarRecordatorios(id)
     }
   }
 
   // Detectar cambio de tipo_alumno
   if (updates.tipo_alumno && oldConsulta.tipo_alumno !== newConsulta.tipo_alumno) {
-    addActividad(id, userId, 'cambio_tipo', `Tipo: ${oldConsulta.tipo_alumno || 'nuevo'} → ${newConsulta.tipo_alumno}`)
+    await addActividad(id, userId, 'cambio_tipo', `Tipo: ${oldConsulta.tipo_alumno || 'nuevo'} → ${newConsulta.tipo_alumno}`)
   }
 
   // Detectar reasignación
   if (updates.asignado_a && oldConsulta.asignado_a !== newConsulta.asignado_a) {
     const oldEnc = store.usuarios.find(u => u.id === oldConsulta.asignado_a)
     const newEnc = store.usuarios.find(u => u.id === newConsulta.asignado_a)
-    addActividad(id, userId, 'reasignacion', `Reasignado de ${oldEnc?.nombre || 'Sin asignar'} a ${newEnc?.nombre || 'Sin asignar'}`)
+    await addActividad(id, userId, 'reasignacion', `Reasignado de ${oldEnc?.nombre || 'Sin asignar'} a ${newEnc?.nombre || 'Sin asignar'}`)
   }
 
   // Detectar cambio de notas
   if (updates.notas !== undefined && oldConsulta.notas !== newConsulta.notas) {
     const preview = newConsulta.notas ? newConsulta.notas.substring(0, 50) + (newConsulta.notas.length > 50 ? '...' : '') : '(vacío)'
-    addActividad(id, userId, 'nota_guardada', `Nota: "${preview}"`)
+    await addActividad(id, userId, 'nota_guardada', `Nota: "${preview}"`)
   }
 
   // Actualizar store local PRIMERO
@@ -1125,7 +1125,7 @@ export async function updateConsultaAsync(id, updates, userId) {
     syncUpdates.fecha_primer_contacto = newConsulta.fecha_primer_contacto
   }
 
-  // SYNC DIRECTO - Esperar respuesta
+  // SYNC DIRECTO - Esperar respuesta (Ahora secuencial tras la actividad)
   const syncResult = await syncActualizarLeadDirecto(id, syncUpdates)
 
   if (!syncResult.success) {
@@ -1303,7 +1303,7 @@ export function asignarDesdeColaA(leadId, userId, asignadoPor) {
 // ============================================
 // ACTIVIDAD
 // ============================================
-function addActividad(leadId, userId, tipo, descripcion, metadata = {}) {
+export async function addActividad(leadId, userId, tipo, descripcion, metadata = {}) {
   const usuario = store.usuarios.find(u => u.id === userId)
   const actividad = {
     id: `a-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,

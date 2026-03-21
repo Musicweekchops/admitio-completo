@@ -189,54 +189,75 @@ export async function cargarDatosInstitucion(institucionId) {
 }
 
 // ============================================
-// SINCRONIZAR CAMBIOS A SUPABASE
+// SINCRONIZAR CAMBIOS A SUPABASE (MUTEX SERIAL)
 // ============================================
 
-// Cola de sincronización para evitar conflictos
+// Cola de sincronización serializada para evitar bloqueos de base de datos (Row Locks)
 let syncQueue = [];
-let isSyncing = false;
+let isQueueProcessing = false;
+
+/**
+ * Encola una tarea de sincronización y devuelve una promesa que se resuelve
+ * cuando la tarea ha sido ejecutada serialmente.
+ */
+export function enqueueSyncTask(type, execute) {
+  return new Promise((resolve, reject) => {
+    syncQueue.push({ 
+      type, 
+      execute, 
+      resolve, 
+      reject, 
+      timestamp: Date.now() 
+    });
+    
+    // Iniciar procesamiento si no está corriendo
+    if (!isQueueProcessing) {
+      processSyncQueue();
+    }
+  });
+}
 
 async function processSyncQueue() {
-  if (isSyncing || syncQueue.length === 0) return;
+  if (isQueueProcessing || syncQueue.length === 0) return;
 
-  isSyncing = true;
+  isQueueProcessing = true;
   dispatchSyncStatus('syncing');
 
   while (syncQueue.length > 0) {
-    // SEGURIDAD: Validar sesión real antes de cada tarea en la cola
-    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-    
-    // Si no hay sesión o hay error de autenticación, bloqueamos de inmediato
-    if (!authUser || authError) {
-      console.warn('⚠️ Sesión pérdida o inválida detectada en el procesador de cola');
-      dispatchSyncError('auth', { status: 401, message: 'Sesión no encontrada o expirada' });
-      dispatchSyncStatus('error');
-      isSyncing = false;
-      return;
-    }
-
     const task = syncQueue.shift();
+    
     try {
-      await task.execute();
-      console.log(`✅ Sincronizado: ${task.type}`);
+      // SEGURIDAD: Validar sesión antes de cada tarea crítica
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+      
+      if (!authUser || authError) {
+        console.warn('⚠️ Sesión inválida detectada en la cola de sincronización');
+        const err = new Error('Sesión expirada');
+        task.reject(err);
+        dispatchSyncError('auth', err);
+        continue;
+      }
+
+      console.log(`⛓️ [Queue] Ejecutando: ${task.type}...`);
+      const result = await task.execute();
+      console.log(`✅ [Queue] Completado: ${task.type}`);
+      task.resolve(result);
     } catch (error) {
-      console.error(`❌ Error sincronizando ${task.type}:`, error);
+      console.error(`❌ [Queue] Error en ${task.type}:`, error);
+      task.reject(error);
       dispatchSyncError(task.type, error);
-      dispatchSyncStatus('error');
-      // No re-encolar para evitar bucles infinitos en caso de 401/403
     }
   }
 
-  isSyncing = false;
+  isQueueProcessing = false;
   if (syncQueue.length === 0) {
     dispatchSyncStatus('synced');
   }
 }
 
+// Alias para compatibilidad con código existente que no espera respuesta
 function addToSyncQueue(type, execute) {
-  syncQueue.push({ type, execute, timestamp: Date.now() });
-  // Procesar en background
-  setTimeout(processSyncQueue, 100);
+  enqueueSyncTask(type, execute).catch(() => {});
 }
 
 // ============================================
@@ -470,57 +491,54 @@ export async function syncActualizarLeadDirecto(leadId, updates) {
     return { success: true, message: 'Nada que sincronizar' };
   }
 
-  console.log('📤 Sync directo a Supabase:', leadId, Object.keys(supabaseUpdates));
+  // ENCOLAR TAREA SERIALIZADA
+  return enqueueSyncTask('actualizar_lead', async () => {
+    console.log('📤 [Queue] Sincronizando lead:', leadId, Object.keys(supabaseUpdates));
 
-  // Protección agresiva: Timeout de 5s para detectar Row Locks rápido
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    console.warn('⚠️ Disparando aborto interno (5s de inactividad de DB)...');
-    controller.abort();
-  }, 5000);
+    // Protección agresiva: Timeout de 5s para detectar Row Locks rápido
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.warn('⚠️ [Queue] Aborto interno (5s) - DB lenta o bloqueada');
+      controller.abort();
+    }, 5000);
 
-  try {
-    const { data, error } = await supabase
-      .from('leads')
-      .update(supabaseUpdates)
-      .eq('id', leadId)
-      .select()
-      .maybeSingle()
-      .abortSignal(controller.signal);
+    try {
+      const { data, error } = await supabase
+        .from('leads')
+        .update(supabaseUpdates)
+        .eq('id', leadId)
+        .select()
+        .maybeSingle()
+        .abortSignal(controller.signal);
 
-    clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
 
-    if (error) {
-      console.error('❌ Error en sync directo:', error);
-      return { success: false, error: error.message };
+      if (error) {
+        console.error('❌ [Queue] Error en sync directo:', error);
+        return { success: false, error: error.message };
+      }
+
+      if (!data) {
+        console.warn('⚠️ [Queue] Update no afectó ninguna fila. ¿El lead existe?', leadId);
+        return { success: false, error: 'Lead no encontrado o sin permisos' };
+      }
+
+      console.log('✅ [Queue] Sync directo exitoso:', leadId);
+
+      // Disparar notificación para otros navegadores
+      triggerRealtimeNotification(leadId, 'lead_updated');
+
+      return { success: true };
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        console.error('⏱️ [Queue] TIMEOUT (5s): Detección automática de BLOQUEO.');
+        return { success: false, error: 'Base de datos temporalmente bloqueada' };
+      }
+      console.error('❌ [Queue] Excepción en sync directo:', err);
+      return { success: false, error: err.message || 'Error de conexión' };
     }
-
-    if (!data) {
-      console.warn('⚠️ Update no afectó ninguna fila. ¿El lead existe?', leadId);
-      return { success: false, error: 'Lead no encontrado o sin permisos' };
-    }
-
-    console.log('✅ Sync directo exitoso:', leadId);
-
-    // Disparar notificación para otros navegadores
-    triggerRealtimeNotification(leadId, 'lead_updated');
-
-    return { success: true };
-  } catch (err) {
-    clearTimeout(timeoutId);
-    if (err.name === 'AbortError') {
-      console.error('⏱️ TIMEOUT (10s): La base de datos no responde. Probable bloqueo (LOCK).');
-      return { success: false, error: 'Tiempo de espera agotado (Base de datos bloqueada)' };
-    }
-    console.error('❌ Excepción en sync directo:', err);
-    // Loguear el error completo para diagnóstico en staging
-    console.error('Detalles del error:', {
-      leadId,
-      updates: Object.keys(supabaseUpdates),
-      error: err
-    });
-    return { success: false, error: err.message || 'Error de conexión' };
-  }
+  });
 }
 
 export function syncEliminarLead(leadId) {
@@ -565,31 +583,47 @@ export async function syncCrearAccion(leadId, accion, usuarioId) {
     insertData.usuario_id = usuarioId;
   }
 
-  console.log('📤 Sincronizando acción a Supabase:', insertData);
+  // ENCOLAR TAREA SERIALIZADA
+  return enqueueSyncTask('crear_accion', async () => {
+    console.log('📤 [Queue] Sincronizando acción:', insertData);
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.warn('⚠️ [Queue] Aborto interno (5s) - Acción colgada');
+      controller.abort();
+    }, 5000);
 
-  try {
-    const { data, error } = await supabase
-      .from('acciones_lead')
-      .insert(insertData)
-      .select()
-      .abortSignal(controller.signal);
+    try {
+      const { data, error } = await supabase
+        .from('acciones_lead')
+        .insert(insertData)
+        .select()
+        .abortSignal(controller.signal);
 
-    clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
 
-    if (error) {
-      console.error('❌ Error sincronizando acción:', error);
-      return;
+      if (error) {
+        console.error('❌ [Queue] Error sincronizando acción:', error);
+        return { success: false, error: error.message };
+      }
+
+      console.log('✅ [Queue] Acción sincronizada:', data);
+      
+      // Notificar a otros navegadores
+      triggerRealtimeNotification(leadId, 'accion_creada');
+      
+      return { success: true, data };
+
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        console.error('⏱️ [Queue] TIMEOUT (5s): Acción bloqueada en DB.');
+        return { success: false, error: 'Tiempo agotado creando acción' };
+      }
+      console.error('❌ [Queue] Excepción sincronizando acción:', err);
+      return { success: false, error: err.message };
     }
-    console.log('✅ Acción sincronizada:', data);
-
-    // Disparar notificación para otros navegadores
-    triggerRealtimeNotification(leadId, 'accion_creada');
-  } catch (err) {
-    console.error('❌ Excepción sincronizando acción:', err);
-  }
+  });
 }
 
 export function syncCrearUsuario(institucionId, userData) {
