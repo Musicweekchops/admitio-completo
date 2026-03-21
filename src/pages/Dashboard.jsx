@@ -107,29 +107,46 @@ export default function Dashboard() {
 
   const setupRealtime = useCallback(() => {
     if (!isSupabaseConfigured() || !user?.institucion_id) return
-    // Limpieza global y profunda de canales para evitar "zombies"
-    supabase.removeAllChannels()
+    
+    // Evitar acumulaciones de canales
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current)
+      channelRef.current = null
+    }
 
     const channelName = 'admitio-leads-realtime'
+    let isActive = true // Flag para evitar que desconexiones intencionales lancen reconexiones zombis
+
     const channel = supabase.channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'leads', filter: `institucion_id=eq.${user.institucion_id}` }, (payload) => {
+        if (!isActive) return
         store.applyRealtimeUpdate(payload)
         loadData()
         setLastUpdate(new Date())
         lastHeartbeatRef.current = Date.now()
       })
-      .on('broadcast', { event: 'heartbeat' }, () => { lastHeartbeatRef.current = Date.now() })
+      .on('broadcast', { event: 'heartbeat' }, () => {
+        if (!isActive) return
+        lastHeartbeatRef.current = Date.now()
+      })
       .subscribe((status) => {
+        if (!isActive) return
         setSyncStatus(status === 'SUBSCRIBED' ? 'synced' : 'error')
         if (status === 'SUBSCRIBED') {
           retryCountRef.current = 0
         } else if (['TIMED_OUT', 'CHANNEL_ERROR', 'CLOSED'].includes(status) && retryCountRef.current < MAX_RETRIES) {
           retryCountRef.current++
-          setTimeout(setupRealtime, 5000)
+          setTimeout(() => { if (isActive) setupRealtime() }, 5000)
         }
       })
 
-    channelRef.current = channel
+    channelRef.current = {
+      channel,
+      cleanup: () => {
+        isActive = false
+        supabase.removeChannel(channel)
+      }
+    }
     window._admitioChannel = channel
   }, [user?.institucion_id, loadData])
 
@@ -279,7 +296,14 @@ export default function Dashboard() {
   useEffect(() => {
     if (typeof window !== 'undefined') window._supabase = supabase
     if (user?.institucion_id) setupRealtime()
-    return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); window._admitioChannel = null }
+    
+    return () => { 
+      if (channelRef.current && channelRef.current.cleanup) {
+        channelRef.current.cleanup()
+        channelRef.current = null
+      }
+      window._admitioChannel = null 
+    }
   }, [user?.institucion_id, setupRealtime])
 
   useEffect(() => {
