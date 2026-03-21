@@ -135,6 +135,11 @@ export default function Dashboard() {
   }, [selectedConsulta])
 
   useEffect(() => {
+    // Exponer para consultas manuales en consola
+    if (typeof window !== 'undefined') {
+      window._supabase = supabase
+    }
+
     if (!isSupabaseConfigured() || !user?.institucion_id) return
 
     let retryCount = 0;
