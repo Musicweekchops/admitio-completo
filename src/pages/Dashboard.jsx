@@ -63,6 +63,11 @@ export default function Dashboard() {
   const [syncStatus, setSyncStatus] = useState('synced') // 'syncing' | 'synced' | 'error'
   const [lastHeartbeat, setLastHeartbeat] = useState(Date.now())
   const [showErrorBanner, setShowErrorBanner] = useState(false)
+  
+  // Refs para gestión de Realtime
+  const retryCountRef = useRef(0)
+  const MAX_RETRIES = 5
+  const channelRef = useRef(null)
 
   // Protecciones para arrays que pueden ser undefined durante la carga
   const safeLeadsHoy = leadsHoy || []
@@ -173,87 +178,85 @@ export default function Dashboard() {
     selectedConsultaRef.current = selectedConsulta
   }, [selectedConsulta])
 
+  // Definir setupRealtime al nivel del componente para que sea accesible en todo el archivo
+  const setupRealtime = useCallback(() => {
+    if (!isSupabaseConfigured() || !user?.institucion_id) return;
+
+    // Limpiar canal previo si existe
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+    }
+
+    const channelName = `admitio-leads-realtime`
+    console.log(`🔌 Conectando True Realtime: ${channelName} (Intento: ${retryCountRef.current + 1})`)
+
+    const channel = supabase
+      .channel(channelName)
+      .on('postgres_changes',
+        {
+          event: '*', 
+          schema: 'public', 
+          table: 'leads',
+          filter: `institucion_id=eq.${user.institucion_id}`
+        },
+        (payload) => {
+          console.log('📡 [True-RT] CAMBIO DETECTADO:', payload.eventType, payload.new?.id || payload.old?.id)
+          
+          // Inyectar actualización incremental directamente en el store
+          store.applyRealtimeUpdate(payload)
+          
+          // Refrescar UI (loadData lee del store que ya está actualizado)
+          loadData()
+          setLastUpdate(new Date())
+          setLastHeartbeat(Date.now()) // Cada mensaje real también cuenta como pulso
+        }
+      )
+      .on('broadcast', { event: 'heartbeat' }, () => {
+        setLastHeartbeat(Date.now())
+        console.log('💓 [True-RT] Latido recibido')
+      })
+      .subscribe((status) => {
+        console.log('📡 [rt-v4] Realtime status:', status)
+        
+        if (status === 'SUBSCRIBED') {
+          setSyncStatus('synced')
+          retryCountRef.current = 0; // Resetear contador al éxito
+        } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+          console.warn(`⚠️ [rt-v4] Canal desconectado (${status}).`)
+          setSyncStatus('error')
+          
+          // Lógica de Re-intento Automático
+          if (status !== 'CLOSED' || retryCountRef.current < MAX_RETRIES) {
+            retryCountRef.current++;
+            console.log(`🔄 [rt-v4] Re-intentando conexión en 5s... (${retryCountRef.current}/${MAX_RETRIES})`);
+            setTimeout(setupRealtime, 5000);
+          }
+        }
+      })
+
+    // Guardar referencia al canal
+    channelRef.current = channel
+    window._admitioChannel = channel
+  }, [user?.institucion_id, loadData])
+
   useEffect(() => {
     // Exponer para consultas manuales en consola
     if (typeof window !== 'undefined') {
       window._supabase = supabase
     }
 
-    if (!isSupabaseConfigured() || !user?.institucion_id) return
-
-    let retryCount = 0;
-    const MAX_RETRIES = 5;
-    let channel = null;
-
-    const setupRealtime = () => {
-      if (!user?.institucion_id) return;
-
-      // Limpiar canal previo si existe
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
-
-      const channelName = `admitio-leads-realtime`
-      console.log(`🔌 Conectando True Realtime: ${channelName} (Intento: ${retryCount + 1})`)
-
-      channel = supabase
-        .channel(channelName)
-        .on('postgres_changes',
-          {
-            event: '*', 
-            schema: 'public', 
-            table: 'leads',
-            filter: `institucion_id=eq.${user.institucion_id}`
-          },
-          (payload) => {
-            console.log('📡 [True-RT] CAMBIO DETECTADO:', payload.eventType, payload.new?.id || payload.old?.id)
-            
-            // Inyectar actualización incremental directamente en el store
-            store.applyRealtimeUpdate(payload)
-            
-            // Refrescar UI (loadData lee del store que ya está actualizado)
-            loadData()
-            setLastUpdate(new Date())
-            setLastHeartbeat(Date.now()) // Cada mensaje real también cuenta como pulso
-          }
-        )
-        .on('broadcast', { event: 'heartbeat' }, () => {
-          setLastHeartbeat(Date.now())
-          console.log('💓 [True-RT] Latido recibido')
-        })
-        .subscribe((status) => {
-          console.log('📡 [rt-v4] Realtime status:', status)
-          
-          if (status === 'SUBSCRIBED') {
-            setSyncStatus('synced')
-            retryCount = 0; // Resetear contador al éxito
-          } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
-            console.warn(`⚠️ [rt-v4] Canal desconectado (${status}).`)
-            setSyncStatus('error')
-            
-            // Lógica de Re-intento Automático
-            if (status !== 'CLOSED' || retryCount < MAX_RETRIES) {
-              retryCount++;
-              console.log(`🔄 [rt-v4] Re-intentando conexión en 5s... (${retryCount}/${MAX_RETRIES})`);
-              setTimeout(setupRealtime, 5000);
-            }
-          }
-        })
-
-      // Guardar referencia al canal para usarlo en broadcasts
-      window._admitioChannel = channel
-    }
-
+    if (!user?.institucion_id) return
+    
     setupRealtime();
 
     return () => {
       console.log('🔌 Desconectando Realtime...')
-      if (channel) {
-        supabase.removeChannel(channel)
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
       }
       window._admitioChannel = null
     }
-  }, [user?.institucion_id])
+  }, [user?.institucion_id, setupRealtime])
 
   // Monitor de Latido (Heartbeat) - Detecta Conexiones Fantasma
   useEffect(() => {
