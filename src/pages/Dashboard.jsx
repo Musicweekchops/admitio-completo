@@ -243,7 +243,30 @@ export default function Dashboard() {
       }
     }, 15000)
 
-    return () => clearInterval(interval)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const now = Date.now()
+        console.log('☀️ [True-RT] Pestaña enfocada. Verificando latido...')
+        
+        // Si no hay latido por más de 60 segundos, forzar reconexión y sync
+        if (now - lastHeartbeat > 60000) {
+          console.warn('⚡ [True-RT] Sistema despertando tras inactividad. Forzando reconexión...')
+          setSyncStatus('loading')
+          loadData() // Refrescar datos por HTTP por si acaso el websocket se perdió
+          if (window._admitioChannel) {
+            supabase.removeChannel(window._admitioChannel)
+          }
+          setupRealtime()
+        }
+      }
+    }
+
+    window.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [syncStatus, lastHeartbeat])
 
   // Escuchar actualizaciones del store (desde storeSync y AuthContext)
