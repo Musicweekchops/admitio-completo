@@ -494,6 +494,11 @@ export async function syncActualizarLeadDirecto(leadId, updates) {
 
     return { success: true };
   } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      console.error('⏱️ TIMEOUT (10s): La base de datos no responde. Probable bloqueo (LOCK).');
+      return { success: false, error: 'Tiempo de espera agotado (Base de datos bloqueada)' };
+    }
     console.error('❌ Excepción en sync directo:', err);
     // Loguear el error completo para diagnóstico en staging
     console.error('Detalles del error:', {
