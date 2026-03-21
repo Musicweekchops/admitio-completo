@@ -808,13 +808,11 @@ function generarCodigoEmbed(formData, institucionId) {
         notas: 'Lead desde formulario web: ${formData.nombre || 'Formulario Embebido'}'
       };
       
-      const response = await fetch(SUPABASE_URL + '/rest/v1/leads', {
+      const response = await fetch(SUPABASE_URL + '/functions/v1/submit-form', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': SUPABASE_KEY,
-          'Authorization': 'Bearer ' + SUPABASE_KEY,
-          'Prefer': 'return=minimal'
+          'Authorization': 'Bearer ' + SUPABASE_KEY
         },
         body: JSON.stringify(data)
       });

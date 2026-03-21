@@ -264,15 +264,20 @@ serve(async (req) => {
           institucionNombre: inst.nombre
         };
 
-        // Invocación interna (usando la URL del proyecto)
-        fetch(`${supabaseUrl}/functions/v1/notify-assignment`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${supabaseServiceKey}`
-          },
-          body: JSON.stringify(notifyParams)
-        }).catch(err => console.error('⚠️ Error disparando notificación:', err));
+        // Invocación interna con await para evitar la terminación anticipada de Deno
+        try {
+          await fetch(`${supabaseUrl}/functions/v1/notify-assignment`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseServiceKey}`
+            },
+            body: JSON.stringify(notifyParams)
+          });
+          console.log('✅ Notificación de asignación disparada exitosamente');
+        } catch (err) {
+          console.error('⚠️ Error disparando notificación:', err);
+        }
       }
     }
 
