@@ -26,10 +26,9 @@ import { getSyncStatus } from '../lib/storeSync'
 export default function Dashboard() {
   const { user, institucion, signOut, isKeyMaster, isRector, isEncargado, isAsistente, canViewAll, canEdit, canConfig, canCreateLeads, canReasignar, reloadFromSupabase, planInfo, actualizarUso, puedeCrearLead, puedeCrearUsuario, puedeCrearFormulario, inviteUser, notifyAssignment, resendVerification } = useAuth()
 
-  // Nombre dinámico de la institución
+  // 1. ESTADOS BÁSICOS
   const nombreInstitucion = institucion?.nombre || user?.institucion_nombre || store.getConfig()?.nombre || 'Mi Institución'
   const navigate = useNavigate()
-
   const [activeTab, setActiveTab] = useState(isRector ? 'reportes' : 'dashboard')
   const [viewMode, setViewMode] = useState('kanban')
   const [consultas, setConsultas] = useState([])
@@ -52,395 +51,39 @@ export default function Dashboard() {
   const [formularios, setFormularios] = useState([])
   const [embedCode, setEmbedCode] = useState('')
   const [notification, setNotification] = useState(null)
-  const [limiteAlerta, setLimiteAlerta] = useState(null) // { tipo: 'leads'|'usuarios'|'formularios', mensaje: '...' }
-  const [importacionesPendientes, setImportacionesPendientes] = useState(0) // Para badge del menú
-  const [selectedLeads, setSelectedLeads] = useState([]) // Para asignación masiva
-
-  // Estados para sidebar responsive
+  const [limiteAlerta, setLimiteAlerta] = useState(null)
+  const [importacionesPendientes, setImportacionesPendientes] = useState(0)
+  const [selectedLeads, setSelectedLeads] = useState([])
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [lastUpdate, setLastUpdate] = useState(new Date())
-  const [syncStatus, setSyncStatus] = useState('synced') // 'syncing' | 'synced' | 'error'
+  const [syncStatus, setSyncStatus] = useState('synced')
   const [lastHeartbeat, setLastHeartbeat] = useState(Date.now())
   const [showErrorBanner, setShowErrorBanner] = useState(false)
-  
-  // Refs para gestión de Realtime
-  const retryCountRef = useRef(0)
-  const MAX_RETRIES = 5
-  const channelRef = useRef(null)
 
-  // Protecciones para arrays que pueden ser undefined durante la carga
+  // 2. REFS
+  const retryCountRef = useRef(0)
+  const MAX_RETRIES = 10
+  const channelRef = useRef(null)
+  const selectedConsultaRef = useRef(null)
   const safeLeadsHoy = leadsHoy || []
 
-  // Amortiguación del banner de error (Solo mostrar si dura más de 3 segundos)
-  useEffect(() => {
-    let timer;
-    if (syncStatus === 'error') {
-      timer = setTimeout(() => setShowErrorBanner(true), 3000)
-    } else {
-      setShowErrorBanner(false)
-      if (timer) clearTimeout(timer)
-    }
-    return () => timer && clearTimeout(timer)
-  }, [syncStatus])
-
-  // Monitor de Red Nativo (Online/Offline)
-  useEffect(() => {
-    const handleOnline = () => {
-      console.log('🌐 [Admitio] Conexión a Internet recuperada. Reintentando sync...')
-      setSyncStatus('loading')
-      loadData()
-      // Forzar reconexión de Realtime
-      if (window._admitioChannel) {
-        supabase.removeChannel(window._admitioChannel)
-      }
-      setupRealtime()
-    }
-    const handleOffline = () => {
-      console.warn('📡 [Admitio] Sin conexión a Internet')
-      setSyncStatus('error')
-    }
-
-    window.addEventListener('online', handleOnline)
-    window.addEventListener('offline', handleOffline)
-    return () => {
-      window.removeEventListener('online', handleOnline)
-      window.removeEventListener('offline', handleOffline)
-    }
-  }, [])
-
-  // ============================================
-  // FUNCIÓN PARA FORMATEAR TIEMPO PROGRESIVO
-  // minutos → horas → días
-  // ============================================
-  const formatearTiempoRespuesta = (horas) => {
-    if (horas === null || horas === undefined || isNaN(horas)) return { valor: '-', unidad: '', color: 'text-slate-400' }
-
-    const minutos = horas * 60
-
-    // Determinar color según tiempo (basado en horas)
-    let color = 'text-emerald-600' // Bueno: < 4h
-    if (horas > 4 && horas <= 8) color = 'text-amber-500' // Regular: 4-8h
-    if (horas > 8 && horas <= 24) color = 'text-orange-500' // Malo: 8-24h
-    if (horas > 24) color = 'text-red-600' // Muy malo: > 24h
-
-    // Formato progresivo
-    if (minutos < 60) {
-      return {
-        valor: Math.round(minutos),
-        unidad: 'min',
-        color,
-        texto: `${Math.round(minutos)} min`
-      }
-    } else if (horas < 24) {
-      const h = Math.floor(horas)
-      const m = Math.round((horas - h) * 60)
-      return {
-        valor: horas.toFixed(1),
-        unidad: 'hrs',
-        color,
-        texto: m > 0 ? `${h}h ${m}m` : `${h} hrs`
-      }
-    } else {
-      const dias = horas / 24
-      return {
-        valor: dias.toFixed(1),
-        unidad: 'días',
-        color,
-        texto: `${dias.toFixed(1)} días`
-      }
-    }
-  }
-
-  // ========== ACTUALIZACIÓN MANUAL + REALTIME ==========
-  // Estilo Trello: Realtime para cambios, botón para forzar actualización
-
-  // Función para actualizar manualmente
-  const handleRefreshData = async () => {
-    if (!isSupabaseConfigured() || !user?.institucion_id) return
-    console.log('🔄 Actualizando datos manualmente...')
-    try {
-      await reloadFromSupabase()
-      loadData()
-      setLastUpdate(new Date())
-      setNotification({ type: 'success', message: 'Datos traídos de la nube' })
-      setTimeout(() => setNotification(null), 3000)
-    } catch (error) {
-      console.error('Error actualizando:', error)
-    }
-  }
-
-  // Supabase Realtime - Solo escucha cambios, no hace polling
-  const selectedConsultaRef = useRef(selectedConsulta)
-
-  // Mantener ref actualizado
+  // Sincronizar Ref
   useEffect(() => {
     selectedConsultaRef.current = selectedConsulta
   }, [selectedConsulta])
 
-  // Definir setupRealtime al nivel del componente para que sea accesible en todo el archivo
-  const setupRealtime = useCallback(() => {
-    if (!isSupabaseConfigured() || !user?.institucion_id) return;
-
-    // Limpiar canal previo si existe
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
-    }
-
-    const channelName = `admitio-leads-realtime`
-    console.log(`🔌 Conectando True Realtime: ${channelName} (Intento: ${retryCountRef.current + 1})`)
-
-    const channel = supabase
-      .channel(channelName)
-      .on('postgres_changes',
-        {
-          event: '*', 
-          schema: 'public', 
-          table: 'leads',
-          filter: `institucion_id=eq.${user.institucion_id}`
-        },
-        (payload) => {
-          console.log('📡 [True-RT] CAMBIO DETECTADO:', payload.eventType, payload.new?.id || payload.old?.id)
-          
-          // Inyectar actualización incremental directamente en el store
-          store.applyRealtimeUpdate(payload)
-          
-          // Refrescar UI (loadData lee del store que ya está actualizado)
-          loadData()
-          setLastUpdate(new Date())
-          setLastHeartbeat(Date.now()) // Cada mensaje real también cuenta como pulso
-        }
-      )
-      .on('broadcast', { event: 'heartbeat' }, () => {
-        setLastHeartbeat(Date.now())
-        console.log('💓 [True-RT] Latido recibido')
-      })
-      .subscribe((status) => {
-        console.log('📡 [rt-v4] Realtime status:', status)
-        
-        if (status === 'SUBSCRIBED') {
-          setSyncStatus('synced')
-          retryCountRef.current = 0; // Resetear contador al éxito
-        } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
-          console.warn(`⚠️ [rt-v4] Canal desconectado (${status}).`)
-          setSyncStatus('error')
-          
-          // Lógica de Re-intento Automático
-          if (status !== 'CLOSED' || retryCountRef.current < MAX_RETRIES) {
-            retryCountRef.current++;
-            console.log(`🔄 [rt-v4] Re-intentando conexión en 5s... (${retryCountRef.current}/${MAX_RETRIES})`);
-            setTimeout(setupRealtime, 5000);
-          }
-        }
-      })
-
-    // Guardar referencia al canal
-    channelRef.current = channel
-    window._admitioChannel = channel
-  }, [user?.institucion_id, loadData])
-
-  useEffect(() => {
-    // Exponer para consultas manuales en consola
-    if (typeof window !== 'undefined') {
-      window._supabase = supabase
-    }
-
-    if (!user?.institucion_id) return
-    
-    setupRealtime();
-
-    return () => {
-      console.log('🔌 Desconectando Realtime...')
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current)
-      }
-      window._admitioChannel = null
-    }
-  }, [user?.institucion_id, setupRealtime])
-
-  // Monitor de Latido (Heartbeat) - Detecta Conexiones Fantasma
-  useEffect(() => {
-    if (syncStatus !== 'synced') return
-
-    const interval = setInterval(() => {
-      const channel = window._admitioChannel
-      if (channel) {
-        channel.send({
-          type: 'broadcast',
-          event: 'heartbeat',
-          payload: { t: Date.now() }
-        })
-      }
-
-      // Si no hay pulso por más de 40 segundos, marcar error y REINTENTAR
-      if (Date.now() - lastHeartbeat > 40000) {
-        console.warn('💔 [True-RT] Conexión Fantasma detectada (Sin latido). Reintentando forcivamentre...')
-        setSyncStatus('error')
-        // Forzar limpieza y reconexión
-        if (window._admitioChannel) {
-          supabase.removeChannel(window._admitioChannel)
-        }
-        setupRealtime()
-      }
-    }, 15000)
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        const now = Date.now()
-        console.log('☀️ [True-RT] Pestaña enfocada. Verificando latido...')
-        
-        // Si no hay latido por más de 60 segundos, forzar reconexión y sync
-        if (now - lastHeartbeat > 60000) {
-          console.warn('⚡ [True-RT] Sistema despertando tras inactividad. Forzando reconexión...')
-          setSyncStatus('loading')
-          loadData() // Refrescar datos por HTTP por si acaso el websocket se perdió
-          if (window._admitioChannel) {
-            supabase.removeChannel(window._admitioChannel)
-          }
-          setupRealtime()
-        }
-      }
-    }
-
-    window.addEventListener('visibilitychange', handleVisibilityChange)
-
-    return () => {
-      clearInterval(interval)
-      window.removeEventListener('visibilitychange', handleVisibilityChange)
-    }
-  }, [syncStatus, lastHeartbeat])
-
-  // Escuchar actualizaciones del store (desde storeSync y AuthContext)
-  useEffect(() => {
-    const handleStoreUpdate = () => {
-      console.log('🔄 Reaccionando a actualización del store...')
-      loadData()
-    }
-
-    window.addEventListener('admitio-store-updated', handleStoreUpdate)
-    window.addEventListener('admitio-data-loaded', handleStoreUpdate)
-
-    return () => {
-      window.removeEventListener('admitio-store-updated', handleStoreUpdate)
-      window.removeEventListener('admitio-data-loaded', handleStoreUpdate)
-    }
-  }, [user?.id])
-
-  // Chequeo preventivo de sesión (cada 5 seg)
-  useEffect(() => {
-    if (!user?.id || !isSupabaseConfigured()) return;
-
-    const sessionCheck = setInterval(async () => {
-      // Usar getUser() es más confiable que getSession() en tiempo real
-      // ya que verifica más estrictamente el estado del cliente
-      const { data: { user: authUser }, error } = await supabase.auth.getUser();
-      
-      // Si no hay usuario en Auth o hay error de autenticación (401/403)
-      if (!authUser || error) {
-        console.warn('⚠️ Sesión perdida detectada por el vigilante:', error?.message);
-        setNotification({
-          type: 'error',
-          message: 'Tu sesión ha expirado. Por seguridad y para no perder tus cambios, por favor inicia sesión de nuevo.',
-          isBlocking: true
-        });
-      }
-    }, 5000); // 5 segundos
-
-    return () => clearInterval(sessionCheck);
-  }, [user?.id]);
-
-  // Vigilante de conectividad (Navegador)
-  useEffect(() => {
-    const handleOnline = () => {
-      console.log('🌐 Conexión restaurada');
-      setNotification({ type: 'success', message: 'Conexión restaurada' });
-      setTimeout(() => setNotification(null), 3000);
-      setSyncStatus('synced');
-    };
-
-    const handleOffline = () => {
-      console.warn('🌐 Conexión de red perdida');
-      setNotification({ 
-        type: 'error', 
-        message: 'Has perdido la conexión. Los cambios no se sincronizarán hasta volver a estar en línea.' 
-      });
-      setSyncStatus('error');
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    // Estado inicial
-    if (!navigator.onLine) handleOffline();
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-  // ========================================
-
-  // Cargar importaciones pendientes (solo Enterprise)
-  const cargarImportacionesPendientes = async () => {
-    if (planInfo?.plan !== 'enterprise') return
-
-    try {
-      const { count } = await supabase
-        .from('leads_importados')
-        .select('*', { count: 'exact', head: true })
-        .eq('institucion_id', user?.institucion_id)
-        .eq('estado', 'pendiente')
-
-      setImportacionesPendientes(count || 0)
-    } catch (e) {
-      console.error('Error cargando importaciones pendientes:', e)
-    }
-  }
-
-  useEffect(() => {
-    if (planInfo?.plan === 'enterprise' && user?.institucion_id) {
-      cargarImportacionesPendientes()
-
-      // Suscribirse a cambios en leads_importados
-      const channel = supabase
-        .channel('importaciones-changes')
-        .on('postgres_changes',
-          { event: 'INSERT', schema: 'public', table: 'leads_importados', filter: `institucion_id=eq.${user.institucion_id}` },
-          (payload) => {
-            console.log('📥 Nueva importación desde Sheets')
-            cargarImportacionesPendientes()
-
-            // Notificar solo si no hay throttling (la función SQL ya controla esto)
-            if (payload.new && payload.new.conflicto_detalles?.notificar !== false) {
-              setNotification({
-                type: 'info',
-                message: `Nuevo lead desde Sheets: ${payload.new.datos_raw?.nombre || 'Sin nombre'}`
-              })
-              setTimeout(() => setNotification(null), 4000)
-            }
-          }
-        )
-        .subscribe()
-
-      return () => supabase.removeChannel(channel)
-    }
-  }, [planInfo?.plan, user?.institucion_id])
+  // ============================================
+  // 3. FUNCIONES DE CARGA Y CONEXIÓN (Blindaje Atómico)
+  // ============================================
 
   const loadData = useCallback(() => {
     console.log('📊 loadData() - Rol:', user?.rol_id, 'isRector:', isRector)
+    if (!store.getConsultas || typeof store.getConsultas !== 'function') return
 
-    // Protección: verificar que el store esté listo
-    if (!store.getConsultas || typeof store.getConsultas !== 'function') {
-      console.warn('⚠️ loadData: store no está listo')
-      return
-    }
-
-    // Para Rector: cargar TODOS los leads de la institución (para reportes)
-    // Para otros roles: usar filtro normal
     let data
     if (isRector) {
       data = store.getConsultasParaReportes() || []
-      console.log('📊 Rector - Leads cargados:', data?.length || 0)
     } else {
       data = store.getConsultas(user?.id, user?.rol_id) || []
     }
@@ -456,63 +99,118 @@ export default function Dashboard() {
     setMetricasGlobales(store.getMetricasGlobales())
     setFormularios(store.getFormularios() || [])
 
-    // ✅ Actualizar consulta seleccionada SIN disparar ciclos infinitos
-    // (Usamos el objeto actual del store para capturar cambios de tiempo real en la ficha abierta)
     if (selectedConsultaRef.current) {
       const updated = store.getConsultaById(selectedConsultaRef.current.id)
-      if (updated) {
-        setSelectedConsulta(updated)
-      }
+      if (updated) setSelectedConsulta(updated)
     }
   }, [user?.id, user?.rol_id, isRector, isEncargado, isKeyMaster])
 
-  // Cargar datos inicial y escuchar eventos de datos cargados
-  useEffect(() => {
-    loadData()
+  const setupRealtime = useCallback(() => {
+    if (!isSupabaseConfigured() || !user?.institucion_id) return
+    if (channelRef.current) supabase.removeChannel(channelRef.current)
 
-    // Escuchar cuando el store se actualiza desde la nube
-    // Escuchar actualizaciones del store (desde storeSync y AuthContext)
-    const handleDataLoaded = () => {
-      console.log('📡 Evento de datos recibido, actualizando vista...')
+    const channelName = 'admitio-leads-realtime'
+    const channel = supabase.channel(channelName)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads', filter: `institucion_id=eq.${user.institucion_id}` }, (payload) => {
+        store.applyRealtimeUpdate(payload)
+        loadData()
+        setLastUpdate(new Date())
+        setLastHeartbeat(Date.now())
+      })
+      .on('broadcast', { event: 'heartbeat' }, () => setLastHeartbeat(Date.now()))
+      .subscribe((status) => {
+        setSyncStatus(status === 'SUBSCRIBED' ? 'synced' : 'error')
+        if (status === 'SUBSCRIBED') {
+          retryCountRef.current = 0
+        } else if (['TIMED_OUT', 'CHANNEL_ERROR', 'CLOSED'].includes(status) && retryCountRef.current < MAX_RETRIES) {
+          retryCountRef.current++
+          setTimeout(setupRealtime, 5000)
+        }
+      })
+
+    channelRef.current = channel
+    window._admitioChannel = channel
+  }, [user?.institucion_id, loadData])
+
+  // ============================================
+  // 4. HANDLERS DE ACCIÓN
+  // ============================================
+
+  const handleRefreshData = async () => {
+    if (!user?.institucion_id) return
+    console.log('🔄 Actualizando datos manualmente...')
+    try {
+      await reloadFromSupabase()
       loadData()
-      setSyncStatus('synced') // Asegurar que el indicador vuelva a verde tras carga manual
-    }
+      setLastUpdate(new Date())
+      setNotification({ type: 'success', message: 'Datos traídos de la nube' })
+      setTimeout(() => setNotification(null), 3000)
+    } catch (e) { console.error('Error actualizando:', e) }
+  }
 
-    // Escuchar estado de sincronización para el indicador visual
-    const handleSyncStatus = (event) => {
-      setSyncStatus(event.detail.status)
-    }
-
-    // Escuchar errores críticos (401/403) para bloquear UI y evitar pérdida de datos
-    const handleSyncError = (event) => {
-      const { detail } = event
-      if (detail.status === 401 || detail.status === 403 || detail.error?.includes('Unauthorized')) {
-        setNotification({
-          type: 'error',
-          message: 'Tu sesión ha expirado. Para proteger tus cambios, por favor inicia sesión de nuevo.',
-          isBlocking: true
-        })
+  const handleUpdateEstado = async (id, nuevoEstado) => {
+    setNotification({ type: 'info', message: 'Actualizando estado...' })
+    try {
+      const res = await store.updateConsultaAsync(id, { estado: nuevoEstado }, user.id)
+      if (res?.success) {
+        loadData(); if (selectedConsulta?.id === id) setSelectedConsulta(store.getConsultaById(id))
+        setNotification({ type: 'success', message: `Estado cambiado a "${nuevoEstado}"` })
+      } else {
+        setNotification({ type: 'error', message: res?.error || 'Error al cambiar estado' })
       }
+    } catch (e) {
+      console.error('Error cambiando estado:', e)
+      store.updateConsulta(id, { estado: nuevoEstado }, user.id); loadData()
+      if (selectedConsulta?.id === id) setSelectedConsulta(store.getConsultaById(id))
+      setNotification({ type: 'warning', message: 'Estado cambiado (sin confirmar servidor)' })
     }
+    setTimeout(() => setNotification(null), 3000)
+  }
 
-    window.addEventListener('admitio-store-updated', handleDataLoaded)
-    window.addEventListener('admitio-sync-status', handleSyncStatus)
-    window.addEventListener('admitio-sync-error', handleSyncError)
-
-    // Retry inicial para asegurar datos
-    const timer = setTimeout(() => {
-      loadData()
-    }, 500)
-
-    return () => {
-      clearTimeout(timer)
-      window.removeEventListener('admitio-store-updated', handleDataLoaded)
-      window.removeEventListener('admitio-sync-status', handleSyncStatus)
-      window.removeEventListener('admitio-sync-error', handleSyncError)
+  const handleReasignar = useCallback(async (id, nuevoEncargado) => {
+    const encargado = store.getUsuarios().find(u => u.id === nuevoEncargado)
+    store.updateConsulta(id, { asignado_a: nuevoEncargado }, user.id)
+    if (selectedConsulta?.id === id) setSelectedConsulta(store.getConsultaById(id))
+    
+    if (nuevoEncargado && encargado?.email) {
+      const lead = store.getConsultaById(id)
+      try {
+        await notifyAssignment({
+          encargadoId: nuevoEncargado,
+          encargadoEmail: encargado.email,
+          encargadoNombre: encargado.nombre,
+          lead: { id: lead.id, nombre: lead.nombre, carrera: lead.carrera?.nombre || 'Sin carrera' },
+          isBulk: false,
+          institucionNombre: nombreInstitucion
+        })
+      } catch (e) { console.error(e) }
     }
-  }, [user])
+    loadData()
+    setNotification({ type: 'success', message: `Asignado a ${encargado?.nombre}` })
+    setTimeout(() => setNotification(null), 3000)
+  }, [user?.id, nombreInstitucion, notifyAssignment, loadData, selectedConsulta?.id])
 
-  // Helper para abrir modal de nuevo lead con validación de límite
+  const handleBulkAssign = async (encargadoId) => {
+    if (!encargadoId || selectedLeads.length === 0) return
+    const encargado = store.getUsuarios().find(u => u.id === encargadoId)
+    selectedLeads.forEach(id => store.updateConsulta(id, { asignado_a: encargadoId }, user.id))
+    
+    if (encargado?.email) {
+      try {
+        await notifyAssignment({ encargadoId, encargadoEmail: encargado.email, encargadoNombre: encargado.nombre, leadsCount: selectedLeads.length, isBulk: true, institucionNombre: nombreInstitucion })
+      } catch (e) { console.error(e) }
+    }
+    setSelectedLeads([]); loadData()
+    setNotification({ type: 'success', message: 'Asignación masiva exitosa' })
+    setTimeout(() => setNotification(null), 3000)
+  }
+
+  const handleTipoAlumnoChange = useCallback((id, tipo) => {
+    store.updateConsulta(id, { tipo_alumno: tipo }, user.id)
+    if (selectedConsulta?.id === id) setSelectedConsulta(store.getConsultaById(id))
+    loadData()
+  }, [user?.id, loadData, selectedConsulta?.id])
+
   const handleNuevoLead = () => {
     if (!puedeCrearLead || !puedeCrearLead()) {
       setLimiteAlerta({
@@ -524,109 +222,124 @@ export default function Dashboard() {
     setShowModal(true)
   }
 
-  const filteredConsultas = (consultas || []).filter(c => {
-    const matchCarrera = filterCarrera === 'todas' || c.carrera?.nombre === filterCarrera
-
-    // Manejar estados especiales (matriculado/descartado)
-    let matchEstado = false
-    if (filterEstado === 'todos') {
-      matchEstado = true
-    } else if (filterEstado === 'matriculado') {
-      matchEstado = c.matriculado === true
-    } else if (filterEstado === 'descartado') {
-      matchEstado = c.descartado === true
-    } else {
-      // Estados normales: solo si NO está matriculado ni descartado
-      matchEstado = c.estado === filterEstado && !c.matriculado && !c.descartado
-    }
-
-    const matchTipo = filterTipoAlumno === 'todos' || c.tipo_alumno === filterTipoAlumno
-    const searchLower = searchTerm.toLowerCase()
-    const matchSearch = (c.nombre || '').toLowerCase().includes(searchLower) ||
-      (c.email || '').toLowerCase().includes(searchLower) ||
-      (c.telefono || '').toLowerCase().includes(searchLower)
-    return matchCarrera && matchEstado && matchTipo && matchSearch
-  })
-
-  async function handleUpdateEstado(id, nuevoEstado) {
-    // Mostrar feedback inmediato
-    setNotification({ type: 'info', message: 'Actualizando estado...' })
-
-    try {
-      // Usar versión async que espera confirmación de Supabase
-      const result = await store.updateConsultaAsync(id, { estado: nuevoEstado }, user.id)
-
-      if (!result || !result.success) {
-        setNotification({ type: 'error', message: result?.error || 'Error al cambiar estado' })
-        setTimeout(() => setNotification(null), 4000)
-        return
-      }
-
-      loadData()
-      if (selectedConsulta?.id === id) {
-        setSelectedConsulta(store.getConsultaById(id))
-      }
-
-      setNotification({ type: 'success', message: `Estado cambiado a "${nuevoEstado}"` })
-      setTimeout(() => setNotification(null), 2000)
-    } catch (error) {
-      console.error('Error cambiando estado:', error)
-      // Fallback: usar versión síncrona
-      store.updateConsulta(id, { estado: nuevoEstado }, user.id)
-      loadData()
-      if (selectedConsulta?.id === id) {
-        setSelectedConsulta(store.getConsultaById(id))
-      }
-      setNotification({ type: 'warning', message: 'Estado cambiado (sin confirmar servidor)' })
-      setTimeout(() => setNotification(null), 3000)
-    }
+  const handleEnviarEmail = (id) => {
+    const c = store.getConsultaById(id)
+    if (c.emails_enviados >= 2) { alert('Máximo de 2 emails alcanzado'); return }
+    store.updateConsulta(id, { emails_enviados: c.emails_enviados + 1 }, user.id)
+    loadData(); if (selectedConsulta?.id === id) setSelectedConsulta(store.getConsultaById(id))
   }
 
-  function handleEnviarEmail(id) {
-    const consulta = store.getConsultaById(id)
-    if (consulta.emails_enviados >= 2) {
-      alert('Máximo de 2 emails alcanzado')
-      return
-    }
-    store.updateConsulta(id, { emails_enviados: consulta.emails_enviados + 1 }, user.id)
-    loadData()
-    if (selectedConsulta?.id === id) {
-      setSelectedConsulta(store.getConsultaById(id))
-    }
+  const handleLogout = () => { signOut(); navigate('/login') }
+  const selectConsulta = useCallback((id) => { 
+    setSelectedConsulta(store.getConsultaById(id)); setActiveTab('detalle')
+  }, [])
+  const navigateToEstado = (estado) => { setFilterEstado(estado); setActiveTab('consultas'); setSelectedConsulta(null) }
+  const navigateToMatriculados = () => { setFilterEstado('matriculado'); setActiveTab('consultas'); setSelectedConsulta(null) }
+
+  // ============================================
+  // 5. UTILIDADES Y ESTADO DERIVADO
+  // ============================================
+
+  const formatearTiempoRespuesta = (horas) => {
+    if (horas == null || isNaN(horas)) return { valor: '-', unidad: '', color: 'text-slate-400' }
+    const mTotal = horas * 60
+    let color = horas < 4 ? 'text-emerald-600' : horas < 8 ? 'text-amber-500' : 'text-red-600'
+    if (mTotal < 60) return { valor: Math.round(mTotal), unidad: 'min', color, texto: `${Math.round(mTotal)} min` }
+    if (horas < 24) return { valor: horas.toFixed(1), unidad: 'hrs', color, texto: `${Math.floor(horas)}h ${Math.round((horas % 1) * 60)}m` }
+    return { valor: (horas / 24).toFixed(1), unidad: 'días', color, texto: `${(horas / 24).toFixed(1)} días` }
   }
 
-  function handleLogout() {
-    signOut()
-    navigate('/login')
-  }
+  const formatDate = (d) => d ? new Date(d).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'
+  const formatDateShort = (d) => d ? new Date(d).toLocaleDateString('es-CL', { day: '2-digit', month: 'short' }) : '-'
 
-  function navigateToEstado(estado) {
-    setFilterEstado(estado)
-    setActiveTab('consultas')
-    setSelectedConsulta(null)
-  }
-
-  function navigateToMatriculados() {
-    setFilterEstado('matriculado')
-    setActiveTab('consultas')
-    setSelectedConsulta(null)
-  }
-
-  function formatDate(dateStr) {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString('es-CL', {
-      day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  const filteredConsultas = useMemo(() => {
+    return (consultas || []).filter(c => {
+      const matchCarrera = filterCarrera === 'todas' || c.carrera?.nombre === filterCarrera
+      let matchEstado = filterEstado === 'todos' || (filterEstado === 'matriculado' ? c.matriculado : filterEstado === 'descartado' ? c.descartado : (c.estado === filterEstado && !c.matriculado && !c.descartado))
+      const matchTipo = filterTipoAlumno === 'todos' || c.tipo_alumno === filterTipoAlumno
+      const s = searchTerm.toLowerCase()
+      const matchSearch = (c.nombre || '').toLowerCase().includes(s) || (c.email || '').toLowerCase().includes(s) || (c.telefono || '').toLowerCase().includes(s)
+      return matchCarrera && matchEstado && matchTipo && matchSearch
     })
-  }
+  }, [consultas, filterCarrera, filterEstado, filterTipoAlumno, searchTerm])
 
-  function formatDateShort(dateStr) {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })
-  }
+  const cargarImportacionesPendientes = useCallback(async () => {
+    if (planInfo?.plan !== 'enterprise') return
+    try {
+      const { count } = await supabase.from('leads_importados').select('*', { count: 'exact', head: true }).eq('institucion_id', user?.institucion_id).eq('estado', 'pendiente')
+      setImportacionesPendientes(count || 0)
+    } catch (e) { console.error('Error cargando importaciones pendientes:', e) }
+  }, [user?.institucion_id, planInfo?.plan])
 
   // ============================================
-  // SIDEBAR - Responsive y Colapsable
+  // 6. CAPA DE EFECTOS (Side Effects)
   // ============================================
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') window._supabase = supabase
+    if (user?.institucion_id) setupRealtime()
+    return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); window._admitioChannel = null }
+  }, [user?.institucion_id, setupRealtime])
+
+  useEffect(() => {
+    let t; if (syncStatus === 'error') t = setTimeout(() => setShowErrorBanner(true), 3000); else { setShowErrorBanner(false); if (t) clearTimeout(t) }
+    return () => t && clearTimeout(t)
+  }, [syncStatus])
+
+  useEffect(() => {
+    const handleOnline = () => { setSyncStatus('loading'); loadData(); if (window._admitioChannel) supabase.removeChannel(window._admitioChannel); setupRealtime() }
+    const handleOffline = () => setSyncStatus('error')
+    window.addEventListener('online', handleOnline); window.addEventListener('offline', handleOffline)
+    return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline) }
+  }, [loadData, setupRealtime])
+
+  useEffect(() => {
+    if (syncStatus !== 'synced') return
+    const interval = setInterval(() => {
+      if (window._admitioChannel) window._admitioChannel.send({ type: 'broadcast', event: 'heartbeat', payload: { t: Date.now() } })
+      if (Date.now() - lastHeartbeat > 40000) { setSyncStatus('error'); setupRealtime() }
+    }, 15000)
+    const handleVis = () => { if (document.visibilityState === 'visible' && Date.now() - lastHeartbeat > 60000) { setSyncStatus('loading'); loadData(); setupRealtime() } }
+    window.addEventListener('visibilitychange', handleVis)
+    return () => { clearInterval(interval); window.removeEventListener('visibilitychange', handleVis) }
+  }, [syncStatus, lastHeartbeat, loadData, setupRealtime])
+
+  useEffect(() => {
+    const upd = () => loadData()
+    window.addEventListener('admitio-store-updated', upd); window.addEventListener('admitio-data-loaded', upd)
+    return () => { window.removeEventListener('admitio-store-updated', upd); window.removeEventListener('admitio-data-loaded', upd) }
+  }, [loadData])
+
+  useEffect(() => {
+    if (!user?.id) return
+    const i = setInterval(async () => {
+      const { data: { user: a }, error } = await supabase.auth.getUser()
+      if (!a || error) setNotification({ type: 'error', message: 'Sesión expirada', isBlocking: true })
+    }, 15000)
+    return () => clearInterval(i)
+  }, [user?.id])
+
+  useEffect(() => {
+    if (planInfo?.plan === 'enterprise' && user?.institucion_id) {
+      cargarImportacionesPendientes()
+      const c = supabase.channel('import-ch').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'leads_importados', filter: `institucion_id=eq.${user.institucion_id}` }, () => cargarImportacionesPendientes()).subscribe()
+      return () => supabase.removeChannel(c)
+    }
+  }, [user?.institucion_id, planInfo?.plan, cargarImportacionesPendientes])
+
+  useEffect(() => {
+    loadData()
+    const hs = (e) => setSyncStatus(e.detail.status)
+    window.addEventListener('admitio-sync-status', hs)
+    const t = setTimeout(() => loadData(), 500)
+    return () => { window.removeEventListener('admitio-sync-status', hs); clearTimeout(t) }
+  }, [user, loadData])
+
+
+  // ============================================
+  // 7. COMPONENTES INTERNOS
+  // ============================================
+
   const Sidebar = () => {
     // Restringir pestañas de configuración estricta solo a Admins
     const esAdmin = ['superowner', 'keymaster', 'superadmin'].includes(user?.rol_id)
@@ -915,96 +628,7 @@ export default function Dashboard() {
     </div>
   )
 }
-  // Handler para seleccionar consulta
-  const selectConsulta = useCallback((id) => {
-    const consulta = store.getConsultaById(id)
-    setSelectedConsulta(consulta)
-    setActiveTab('detalle')
-  }, [])
 
-  // Handler para cambiar estado
-  const handleEstadoChange = useCallback((id, nuevoEstado) => {
-    store.updateConsulta(id, { estado: nuevoEstado }, user.id)
-    if (selectedConsulta?.id === id) {
-      setSelectedConsulta(store.getConsultaById(id))
-    }
-    loadData()
-    setNotification({ type: 'success', message: `Estado cambiado a "${nuevoEstado}"` })
-    setTimeout(() => setNotification(null), 2000)
-  }, [selectedConsulta?.id, user?.id])
-
-  // Handler para reasignar
-  const handleReasignar = useCallback(async (id, nuevoEncargado) => {
-    const encargado = store.getUsuarios().find(u => u.id === nuevoEncargado)
-    store.updateConsulta(id, { asignado_a: nuevoEncargado }, user.id)
-    if (selectedConsulta?.id === id) {
-      setSelectedConsulta(store.getConsultaById(id))
-    }
-
-    // Notificación individual
-    if (nuevoEncargado && encargado?.email) {
-      const lead = store.getConsultaById(id)
-      try {
-        await notifyAssignment({
-          encargadoId: nuevoEncargado,
-          encargadoEmail: encargado.email,
-          encargadoNombre: encargado.nombre,
-          lead: { id: lead.id, nombre: lead.nombre, carrera: lead.carrera?.nombre || 'Sin carrera' },
-          isBulk: false,
-          institucionNombre: nombreInstitucion
-        })
-      } catch (e) {
-        console.error('Error notificando asignación:', e)
-      }
-    }
-
-    loadData()
-    setNotification({ type: 'success', message: `Lead asignado a ${encargado?.nombre || 'Sin asignar'}` })
-    setTimeout(() => setNotification(null), 3000)
-  }, [selectedConsulta?.id, user?.id, nombreInstitucion])
-
-  // Handler para asignación masiva
-  const handleBulkAssign = async (encargadoId) => {
-    if (!encargadoId || selectedLeads.length === 0) return
-
-    const encargado = store.getUsuarios().find(u => u.id === encargadoId)
-    const leadsCount = selectedLeads.length
-
-    // Actualizar cada lead en el store
-    selectedLeads.forEach(id => {
-      store.updateConsulta(id, { asignado_a: encargadoId }, user.id)
-    })
-
-    // Notificación masiva
-    if (encargado?.email) {
-      try {
-        await notifyAssignment({
-          encargadoId,
-          encargadoEmail: encargado.email,
-          encargadoNombre: encargado.nombre,
-          leadsCount: leadsCount,
-          isBulk: true,
-          institucionNombre: nombreInstitucion
-        })
-      } catch (e) {
-        console.error('Error notificando asignación masiva:', e)
-      }
-    }
-
-    setSelectedLeads([])
-    loadData()
-    setNotification({ type: 'success', message: `¡${leadsCount} leads asignados a ${encargado?.nombre}!` })
-    setTimeout(() => setNotification(null), 3000)
-  }
-
-  // Handler para cambiar tipo alumno
-  const handleTipoAlumnoChange = useCallback((id, tipo) => {
-    store.updateConsulta(id, { tipo_alumno: tipo }, user.id)
-    if (selectedConsulta?.id === id) {
-      setSelectedConsulta(store.getConsultaById(id))
-    }
-    loadData()
-  }, [selectedConsulta?.id, user?.id])
 
   // Vista especial para Asistente (solo crear leads)
   if (isAsistente) {
