@@ -36,13 +36,17 @@ export async function cargarDatosInstitucion(institucionId) {
   console.log('📥 Cargando datos desde Supabase...');
   dispatchSyncStatus('syncing');
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s para carga completa
+
   try {
     // 1. Cargar leads
     const { data: leads, error: leadsError } = await supabase
       .from('leads')
       .select('*')
       .eq('institucion_id', institucionId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .abortSignal(controller.signal);
 
     if (leadsError) throw leadsError;
 
@@ -50,7 +54,8 @@ export async function cargarDatosInstitucion(institucionId) {
     const { data: usuarios, error: usuariosError } = await supabase
       .from('usuarios')
       .select('*')
-      .eq('institucion_id', institucionId);
+      .eq('institucion_id', institucionId)
+      .abortSignal(controller.signal);
 
     if (usuariosError) throw usuariosError;
 
@@ -59,7 +64,8 @@ export async function cargarDatosInstitucion(institucionId) {
       .from('carreras')
       .select('*')
       .eq('institucion_id', institucionId)
-      .order('nombre', { ascending: true });
+      .order('nombre', { ascending: true })
+      .abortSignal(controller.signal);
 
     if (carrerasError) throw carrerasError;
 
@@ -68,7 +74,8 @@ export async function cargarDatosInstitucion(institucionId) {
       .from('formularios')
       .select('*')
       .eq('institucion_id', institucionId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .abortSignal(controller.signal);
 
     // 5. Cargar acciones de leads
     const leadIds = (leads || []).map(l => l.id);
@@ -78,9 +85,12 @@ export async function cargarDatosInstitucion(institucionId) {
         .from('acciones_lead')
         .select('*, usuario:usuarios(nombre)')
         .in('lead_id', leadIds)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .abortSignal(controller.signal);
       acciones = accionesData || [];
     }
+
+    clearTimeout(timeoutId);
 
     // Convertir formato Supabase → formato Store
     const storeData = {

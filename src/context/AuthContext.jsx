@@ -159,13 +159,20 @@ export function AuthProvider({ children }) {
   async function actualizarPresencia() {
     if (!user?.id || !isSupabaseConfigured()) return
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
     try {
       await supabase
         .from('usuarios')
         .update({ ultimo_activo: new Date().toISOString() })
         .eq('id', user.id)
+        .abortSignal(controller.signal);
+      
+      clearTimeout(timeoutId);
     } catch (err) {
-      // Silenciar errores de presencia
+      clearTimeout(timeoutId);
+      // Silenciar errores de presencia, solo debug
       console.debug('Error actualizando presencia:', err)
     }
   }
@@ -219,6 +226,9 @@ export function AuthProvider({ children }) {
     }
     isLoadingUser.current = true
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
     try {
       console.log('🔍 Cargando usuario:', authUser.email)
 
@@ -228,14 +238,18 @@ export function AuthProvider({ children }) {
         .select('*, instituciones(id, nombre, tipo, pais, ciudad, region, sitio_web, plan)')
         .eq('auth_id', authUser.id)
         .maybeSingle()
+        .abortSignal(controller.signal);
+
+      clearTimeout(timeoutId);
 
       let usuario = initialUser;
 
       if (error) {
+        clearTimeout(timeoutId);
         // Ignorar AbortError
         if (error.name === 'AbortError') {
-          console.log('⏸️ Consulta cancelada (normal en desarrollo)')
-          return { success: false, error: 'cancelled' }
+          console.log('⏱️ Timeout cargando usuario (15s)')
+          return { success: false, error: 'timeout' }
         }
         console.error('❌ Error consultando usuario:', error)
         return { success: false, error: 'Error al cargar usuario' }
