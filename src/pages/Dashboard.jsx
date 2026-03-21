@@ -1415,15 +1415,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Botón flotante refrescar */}
-      <button
-        onClick={handleRefreshData}
-        className="fixed bottom-4 left-72 z-40 flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-full shadow-lg hover:bg-slate-50 hover:shadow-xl transition-all"
-        title="Traer últimos datos de la nube"
-      >
-        <Icon name="RefreshCw" size={16} />
-        <span className="text-sm font-medium">Recibir de la Nube</span>
-      </button>
     </div>
   )
 }
