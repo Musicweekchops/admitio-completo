@@ -381,7 +381,16 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadData()
-    const hs = (e) => setSyncStatus(e.detail.status)
+    // Sincronizar estado visual inicial con el motor de sincronización
+    const hs = (e) => {
+      if (e && e.detail) setSyncStatus(e.detail.status)
+    }
+    
+    // Recuperar estado inicial inmediatamente
+    const currentSync = getSyncStatus()
+    if (currentSync.isSyncing) setSyncStatus('syncing')
+    else if (syncStatus === 'syncing') setSyncStatus('synced')
+
     window.addEventListener('admitio-sync-status', hs)
     const t = setTimeout(() => loadData(), 500)
     return () => { window.removeEventListener('admitio-sync-status', hs); clearTimeout(t) }

@@ -90,8 +90,13 @@ export function AuthProvider({ children }) {
           return
         }
 
-        // Solo procesar SIGNED_IN después de la carga inicial (para login manual)
+        // Solo procesar SIGNED_IN después de la carga inicial (para login manual o cambio real de usuario)
         if (event === 'SIGNED_IN' && session?.user && initialCheckDone.current) {
+          // Evitar recarga si es el mismo usuario (refresco de token)
+          if (user?.auth_id === session.user.id) {
+            console.log('⏸️ Ignorando SIGNED_IN - Mismo usuario (Token Refresh)')
+            return
+          }
           await loadUserFromAuth(session.user)
         } else if (event === 'SIGNED_OUT') {
           setUser(null)
@@ -704,7 +709,6 @@ export function AuthProvider({ children }) {
           emailRedirectTo: `${window.location.origin}/auth/callback`
         }
       })
-
       if (error) throw error
 
       return { success: true, message: 'Email de verificación reenviado' }
@@ -716,18 +720,26 @@ export function AuthProvider({ children }) {
 
   // ========== LOAD INSTITUCION DATA ==========
   async function loadInstitucionData(institucionId) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.warn('⚠️ [Auth] Timeout cargando datos iniciales (10s)');
+      controller.abort();
+    }, 10000);
+
     try {
       const { data: leads } = await supabase
         .from('leads')
         .select('*')
         .eq('institucion_id', institucionId)
         .order('created_at', { ascending: false })
+        .abortSignal(controller.signal);
 
       const { data: usuarios } = await supabase
         .from('usuarios')
         .select('*')
         .eq('institucion_id', institucionId)
         .eq('activo', true)
+        .abortSignal(controller.signal);
 
       const { data: carreras } = await supabase
         .from('carreras')
@@ -735,18 +747,23 @@ export function AuthProvider({ children }) {
         .eq('institucion_id', institucionId)
         .eq('activa', true)
         .order('nombre', { ascending: true })
+        .abortSignal(controller.signal);
 
       const { data: formularios } = await supabase
         .from('formularios')
         .select('*')
         .eq('institucion_id', institucionId)
         .order('created_at', { ascending: false })
+        .abortSignal(controller.signal);
 
       const { data: acciones } = await supabase
         .from('acciones_lead')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(100)
+        .abortSignal(controller.signal);
+
+      clearTimeout(timeoutId);
 
       const storeData = {
         consultas: (leads || []).map(lead => ({

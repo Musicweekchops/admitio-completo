@@ -223,35 +223,48 @@ async function processSyncQueue() {
   isQueueProcessing = true;
   dispatchSyncStatus('syncing');
 
-  while (syncQueue.length > 0) {
-    const task = syncQueue.shift();
-    
-    try {
-      // SEGURIDAD: Validar sesión antes de cada tarea crítica
-      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+  try {
+    while (syncQueue.length > 0) {
+      const task = syncQueue.shift();
+      if (!task) break;
       
-      if (!authUser || authError) {
-        console.warn('⚠️ Sesión inválida detectada en la cola de sincronización');
-        const err = new Error('Sesión expirada');
-        task.reject(err);
-        dispatchSyncError('auth', err);
-        continue;
+      try {
+        // SEGURIDAD: Validar sesión antes de cada tarea crítica (con timeout de 5s para evitar cuelgues)
+        const authController = new AbortController();
+        const authTimeout = setTimeout(() => authController.abort(), 5000);
+
+        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
+          .then(res => { clearTimeout(authTimeout); return res; })
+          .catch(err => { clearTimeout(authTimeout); throw err; });
+        
+        if (!authUser || authError) {
+          console.warn('⚠️ Sesión inválida en la cola de sincronización');
+          const err = new Error('Sesión expirada');
+          task.reject(err);
+          dispatchSyncError('auth', err);
+          continue;
+        }
+
+        console.log(`⛓️ [Queue] Ejecutando: ${task.type}...`);
+        const result = await task.execute();
+        console.log(`✅ [Queue] Completado: ${task.type}`);
+        task.resolve(result);
+      } catch (error) {
+        console.error(`❌ [Queue] Error en ${task.type}:`, error);
+        task.reject(error);
+        dispatchSyncError(task.type, error);
       }
-
-      console.log(`⛓️ [Queue] Ejecutando: ${task.type}...`);
-      const result = await task.execute();
-      console.log(`✅ [Queue] Completado: ${task.type}`);
-      task.resolve(result);
-    } catch (error) {
-      console.error(`❌ [Queue] Error en ${task.type}:`, error);
-      task.reject(error);
-      dispatchSyncError(task.type, error);
     }
-  }
-
-  isQueueProcessing = false;
-  if (syncQueue.length === 0) {
-    dispatchSyncStatus('synced');
+  } finally {
+    isQueueProcessing = false;
+    
+    // RE-CHECK ATÓMICO: Si entraron tareas mientras cerrábamos, relanzar solo si la cola no está vacía
+    if (syncQueue.length > 0) {
+      console.log('🔄 [Queue] Tareas entrantes detectadas al cierre, relanzando...');
+      setTimeout(processSyncQueue, 10);
+    } else {
+      dispatchSyncStatus('synced');
+    }
   }
 }
 
