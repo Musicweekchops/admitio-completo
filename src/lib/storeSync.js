@@ -462,13 +462,20 @@ export async function syncActualizarLeadDirecto(leadId, updates) {
 
   console.log('📤 Sync directo a Supabase:', leadId, Object.keys(supabaseUpdates));
 
+  // Nuevo: Protección de tiempo para evitar cuellos de botella (Timeout de 10s)
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+
   try {
     const { data, error } = await supabase
       .from('leads')
       .update(supabaseUpdates)
       .eq('id', leadId)
       .select()
-      .maybeSingle();
+      .maybeSingle()
+      .abortSignal(controller.signal);
+
+    clearTimeout(timeoutId);
 
     if (error) {
       console.error('❌ Error en sync directo:', error);
@@ -542,11 +549,17 @@ export async function syncCrearAccion(leadId, accion, usuarioId) {
 
   console.log('📤 Sincronizando acción a Supabase:', insertData);
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+
   try {
     const { data, error } = await supabase
       .from('acciones_lead')
       .insert(insertData)
-      .select();
+      .select()
+      .abortSignal(controller.signal);
+
+    clearTimeout(timeoutId);
 
     if (error) {
       console.error('❌ Error sincronizando acción:', error);
