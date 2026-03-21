@@ -119,6 +119,8 @@ export default function Dashboard() {
       await reloadFromSupabase()
       loadData()
       setLastUpdate(new Date())
+      setNotification({ type: 'success', message: 'Datos traídos de la nube' })
+      setTimeout(() => setNotification(null), 3000)
     } catch (error) {
       console.error('Error actualizando:', error)
     }
@@ -135,50 +137,71 @@ export default function Dashboard() {
   useEffect(() => {
     if (!isSupabaseConfigured() || !user?.institucion_id) return
 
-    const channelName = `admitio-${user.institucion_id}`
-    console.log(`🔌 Conectando Realtime a canal: ${channelName}`)
+    let retryCount = 0;
+    const MAX_RETRIES = 5;
+    let channel = null;
 
-    const channel = supabase
-      .channel('admitio-notifications-v4')
-      .on('postgres_changes',
-        {
-          event: 'INSERT',
-          table: 'lead_notifications'
-        },
-        async (payload) => {
-          console.log('📡 [rt-v4] RECIBIDA:', payload.new)
+    const setupRealtime = () => {
+      if (!user?.institucion_id) return;
 
-          // Filtrar por institución en el cliente (más robusto)
-          if (payload.new?.institucion_id && payload.new.institucion_id !== user.institucion_id) {
-            return
-          }
+      // Limpiar canal previo si existe
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
 
-          if (!selectedConsultaRef.current) {
-            console.log('🔄 [rt-v4] Refrescando Dashboard...')
-            await reloadFromSupabase()
-            store.reloadStore()
+      const channelName = `admitio-leads-realtime`
+      console.log(`🔌 Conectando True Realtime: ${channelName} (Intento: ${retryCount + 1})`)
+
+      channel = supabase
+        .channel(channelName)
+        .on('postgres_changes',
+          {
+            event: '*', 
+            schema: 'public', 
+            table: 'leads',
+            filter: `institucion_id=eq.${user.institucion_id}`
+          },
+          (payload) => {
+            console.log('📡 [True-RT] CAMBIO DETECTADO:', payload.eventType, payload.new?.id || payload.old?.id)
+            
+            // Inyectar actualización incremental directamente en el store
+            store.applyRealtimeUpdate(payload)
+            
+            // Refrescar UI (loadData lee del store que ya está actualizado)
             loadData()
             setLastUpdate(new Date())
           }
-        }
-      )
-      .subscribe((status) => {
-        console.log('📡 [rt-v4] Realtime status:', status)
-        // Reflejar estado del canal en el indicador visual
-        if (status === 'SUBSCRIBED') {
-          setSyncStatus('synced')
-        } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
-          console.warn('⚠️ [rt-v4] Canal de tiempo real desconectado:', status)
-          setSyncStatus('error')
-        }
-      })
+        )
+        .subscribe((status) => {
+          console.log('📡 [rt-v4] Realtime status:', status)
+          
+          if (status === 'SUBSCRIBED') {
+            setSyncStatus('synced')
+            retryCount = 0; // Resetear contador al éxito
+          } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+            console.warn(`⚠️ [rt-v4] Canal desconectado (${status}).`)
+            setSyncStatus('error')
+            
+            // Lógica de Re-intento Automático
+            if (status !== 'CLOSED' || retryCount < MAX_RETRIES) {
+              retryCount++;
+              console.log(`🔄 [rt-v4] Re-intentando conexión en 5s... (${retryCount}/${MAX_RETRIES})`);
+              setTimeout(setupRealtime, 5000);
+            }
+          }
+        })
 
-    // Guardar referencia al canal para usarlo en broadcasts
-    window._admitioChannel = channel
+      // Guardar referencia al canal para usarlo en broadcasts
+      window._admitioChannel = channel
+    }
+
+    setupRealtime();
 
     return () => {
       console.log('🔌 Desconectando Realtime...')
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
       window._admitioChannel = null
     }
   }, [user?.institucion_id])
@@ -533,26 +556,38 @@ export default function Dashboard() {
     // INDICADOR DE ESTADO DE SINCRONIZACIÓN (DENTRO DE SIDEBAR)
     // ============================================
     const SyncStatusIndicator = ({ isMobile = false }) => {
-      const sync = getSyncStatus() || { status: syncStatus };
-      let icon = "Cloud";
-      let color = "text-slate-400";
-      let label = "Conectando...";
+      const syncStatusInfo = getSyncStatus() || {};
+      const isActuallySyncing = syncStatus === 'syncing' || syncStatusInfo.isSyncing || syncStatusInfo.pendingTasks > 0;
+      
+      let icon = "CloudCheck";
+      let color = "text-emerald-500";
+      let label = "Sincronizado";
       let pulse = "";
 
-      if (syncStatus === 'syncing' || sync.isSyncing) {
+      // Prioridad 1: Error de conexión o de red
+      if (syncStatus === 'error' || !navigator.onLine) {
+        icon = "CloudOff";
+        color = "text-red-500 font-bold";
+        label = "DESCONECTADO";
+      } 
+      // Prioridad 2: Guardando cambios
+      else if (isActuallySyncing) {
         icon = "RefreshCw";
         color = "text-amber-500";
         label = "Sincronizando...";
         pulse = "animate-spin";
-      } else if (syncStatus === 'synced') {
+      }
+      // Prioridad 3: Reposo (Sincronizado)
+      else if (syncStatus === 'synced') {
         icon = "CloudCheck";
         color = "text-emerald-500";
-        const time = sync.lastSync ? new Date(sync.lastSync).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        const time = syncStatusInfo.lastSync ? new Date(syncStatusInfo.lastSync).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
         label = `Sincronizado ${time}`;
-      } else if (syncStatus === 'error') {
-        icon = "CloudOff";
-        color = "text-red-500";
-        label = "Error de conexión";
+      }
+      else {
+        icon = "Cloud";
+        color = "text-slate-400";
+        label = "Conectando...";
       }
 
       return (
@@ -709,26 +744,38 @@ export default function Dashboard() {
     // Definir localmente o pasar por prop si fuera necesario, 
     // pero para simplicidad lo definimos igual que en Sidebar
     const SyncStatusIndicatorLocal = ({ isMobile = true }) => {
-      const sync = getSyncStatus() || { status: syncStatus };
-      let icon = "Cloud";
-      let color = "text-slate-400";
-      let label = "Conectando...";
+      const syncStatusInfo = getSyncStatus() || {};
+      const isActuallySyncing = syncStatus === 'syncing' || syncStatusInfo.isSyncing || syncStatusInfo.pendingTasks > 0;
+      
+      let icon = "CloudCheck";
+      let color = "text-emerald-500";
+      let label = "Sincronizado";
       let pulse = "";
 
-      if (syncStatus === 'syncing' || sync.isSyncing) {
+      // Prioridad 1: Error de conexión o de red
+      if (syncStatus === 'error' || !navigator.onLine) {
+        icon = "CloudOff";
+        color = "text-red-500 font-bold";
+        label = "DESCONECTADO";
+      } 
+      // Prioridad 2: Guardando cambios
+      else if (isActuallySyncing) {
         icon = "RefreshCw";
         color = "text-amber-500";
         label = "Sincronizando...";
         pulse = "animate-spin";
-      } else if (syncStatus === 'synced') {
+      }
+      // Prioridad 3: Reposo (Sincronizado)
+      else if (syncStatus === 'synced') {
         icon = "CloudCheck";
         color = "text-emerald-500";
-        const time = sync.lastSync ? new Date(sync.lastSync).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        const time = syncStatusInfo.lastSync ? new Date(syncStatusInfo.lastSync).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
         label = `Sincronizado ${time}`;
-      } else if (syncStatus === 'error') {
-        icon = "CloudOff";
-        color = "text-red-500";
-        label = "Error de conexión";
+      }
+      else {
+        icon = "Cloud";
+        color = "text-slate-400";
+        label = "Conectando...";
       }
 
       return (
@@ -1239,12 +1286,7 @@ export default function Dashboard() {
 
       {/* Botón flotante refrescar */}
       <button
-        onClick={() => {
-          store.reloadStore()
-          loadData()
-          setNotification({ type: 'info', message: 'Datos traídos de la nube' })
-          setTimeout(() => setNotification(null), 2000)
-        }}
+        onClick={handleRefreshData}
         className="fixed bottom-4 left-72 z-40 flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-full shadow-lg hover:bg-slate-50 hover:shadow-xl transition-all"
         title="Traer últimos datos de la nube"
       >

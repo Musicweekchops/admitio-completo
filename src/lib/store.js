@@ -171,6 +171,32 @@ export function reloadStore() {
   return store
 }
 
+// NUEVO: Aplicar actualización incremental de Realtime
+export function applyRealtimeUpdate(payload) {
+  if (!payload || !payload.table === 'leads') return;
+  
+  const { eventType, new: newRecord, old: oldRecord } = payload;
+  console.log(`🔌 store.applyRealtimeUpdate: ${eventType} en ${payload.table} ID:${newRecord?.id || oldRecord?.id}`);
+
+  if (eventType === 'INSERT') {
+    // Evitar duplicados por si acaso el evento llega varias veces
+    if (!store.consultas.some(c => c.id === newRecord.id)) {
+      store.consultas = [newRecord, ...store.consultas];
+    }
+  } 
+  else if (eventType === 'UPDATE') {
+    store.consultas = store.consultas.map(c => 
+      c.id === newRecord.id ? { ...c, ...newRecord } : c
+    );
+  } 
+  else if (eventType === 'DELETE') {
+    store.consultas = store.consultas.filter(c => c.id !== oldRecord.id);
+  }
+
+  // Notificar a React (Dashboard.jsx escucha este evento para llamar a loadData)
+  window.dispatchEvent(new CustomEvent('admitio-store-updated'));
+}
+
 // NUEVO: Setear todos los datos (Usado por AuthContext)
 export function setAllData(newData) {
   if (!newData) return
