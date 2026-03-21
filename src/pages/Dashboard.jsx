@@ -109,8 +109,8 @@ export default function Dashboard() {
     if (!isSupabaseConfigured() || !user?.institucion_id) return
     
     // Evitar acumulaciones de canales
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current)
+    if (channelRef.current && channelRef.current.cleanup) {
+      channelRef.current.cleanup()
       channelRef.current = null
     }
 
@@ -780,7 +780,7 @@ export default function Dashboard() {
                 onClick={() => {
                    console.log('🔌 [Manual] Iniciando reconexión forzada...');
                    retryCountRef.current = 0 // RESETEAR CONTADOR DE REINTENTOS
-                   setLastHeartbeat(Date.now()) // Dar 45s de gracia inmediatos
+                   lastHeartbeatRef.current = Date.now() // Dar 45s de gracia inmediatos
                    setSyncStatus('loading')
                    loadData()
                    setupRealtime()
