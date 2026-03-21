@@ -61,6 +61,7 @@ export default function Dashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [lastUpdate, setLastUpdate] = useState(new Date())
   const [syncStatus, setSyncStatus] = useState('synced') // 'syncing' | 'synced' | 'error'
+  const [lastHeartbeat, setLastHeartbeat] = useState(Date.now())
 
   // Protecciones para arrays que pueden ser undefined durante la carga
   const safeLeadsHoy = leadsHoy || []
@@ -175,8 +176,13 @@ export default function Dashboard() {
             // Refrescar UI (loadData lee del store que ya está actualizado)
             loadData()
             setLastUpdate(new Date())
+            setLastHeartbeat(Date.now()) // Cada mensaje real también cuenta como pulso
           }
         )
+        .on('broadcast', { event: 'heartbeat' }, () => {
+          setLastHeartbeat(Date.now())
+          console.log('💓 [True-RT] Latido recibido')
+        })
         .subscribe((status) => {
           console.log('📡 [rt-v4] Realtime status:', status)
           
@@ -210,6 +216,35 @@ export default function Dashboard() {
       window._admitioChannel = null
     }
   }, [user?.institucion_id])
+
+  // Monitor de Latido (Heartbeat) - Detecta Conexiones Fantasma
+  useEffect(() => {
+    if (syncStatus !== 'synced') return
+
+    const interval = setInterval(() => {
+      const channel = window._admitioChannel
+      if (channel) {
+        channel.send({
+          type: 'broadcast',
+          event: 'heartbeat',
+          payload: { t: Date.now() }
+        })
+      }
+
+      // Si no hay pulso por más de 40 segundos, marcar error y REINTENTAR
+      if (Date.now() - lastHeartbeat > 40000) {
+        console.warn('💔 [True-RT] Conexión Fantasma detectada (Sin latido). Reintentando forcivamentre...')
+        setSyncStatus('error')
+        // Forzar limpieza y reconexión
+        if (window._admitioChannel) {
+          supabase.removeChannel(window._admitioChannel)
+        }
+        setupRealtime()
+      }
+    }, 15000)
+
+    return () => clearInterval(interval)
+  }, [syncStatus, lastHeartbeat])
 
   // Escuchar actualizaciones del store (desde storeSync y AuthContext)
   useEffect(() => {
@@ -994,6 +1029,18 @@ export default function Dashboard() {
       <Sidebar />
       <MobileHeader />
 
+      {/* BANNER DE HONESTIDAD BRUTAL: Solo visible si hay problemas de conexión real */}
+      {syncStatus !== 'synced' && (
+        <div className="fixed top-0 left-0 right-0 z-[100] bg-red-600 text-white py-2 px-4 shadow-2xl animate-pulse">
+          <div className="max-w-7xl mx-auto flex items-center justify-center gap-3">
+            <Icon name="AlertCircle" size={20} />
+            <p className="font-bold text-sm lg:text-base">
+              CONEXIÓN INESTABLE - MODO SOLO LECTURA ACTIVO (Reintentando...)
+            </p>
+          </div>
+        </div>
+      )}
+
       <main className={`transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'} pt-16 lg:pt-0`}>
         <div className="max-w-7xl mx-auto p-4 lg:p-8">
           {activeTab === 'dashboard' && (
@@ -1014,7 +1061,7 @@ export default function Dashboard() {
               selectConsulta={selectConsulta}
               filteredConsultas={filteredConsultas}
               handleNuevoLead={handleNuevoLead}
-              canEdit={canEdit}
+              canEdit={canEdit && syncStatus === 'synced'}
             />
           )}
 
@@ -1064,6 +1111,7 @@ export default function Dashboard() {
               handleEnviarEmail={handleEnviarEmail}
               formatDateShort={formatDateShort}
               isKeyMaster={isKeyMaster}
+              isSynced={syncStatus === 'synced'}
             />
           )}
 

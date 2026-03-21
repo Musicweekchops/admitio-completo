@@ -3,7 +3,7 @@ import Icon from './Icon'
 import { ESTADOS, MEDIOS } from '../data/mockData'
 import * as store from '../lib/store'
 
-const NotasTextarea = ({ consulta, userId, onSaved }) => {
+const NotasTextarea = ({ consulta, userId, onSaved, isSynced }) => {
   const [notas, setNotas] = useState(consulta?.notas || '')
   const [saved, setSaved] = useState(true)
 
@@ -13,11 +13,13 @@ const NotasTextarea = ({ consulta, userId, onSaved }) => {
   }, [consulta?.id, consulta?.notas])
 
   const handleChange = (e) => {
+    if (!isSynced) return
     setNotas(e.target.value)
     setSaved(e.target.value === (consulta?.notas || ''))
   }
 
   const handleSave = async () => {
+    if (!isSynced) return
     if (notas !== (consulta?.notas || '')) {
       const success = await store.updateConsultaAsync(consulta.id, { notas }, userId)
       if (success) {
@@ -28,13 +30,13 @@ const NotasTextarea = ({ consulta, userId, onSaved }) => {
   }
 
   return (
-    <div className={`bg-slate-50 rounded-lg p-4 border border-slate-200`}>
+    <div className={`bg-slate-50 rounded-lg p-4 border border-slate-200 ${!isSynced ? 'opacity-60 grayscale' : ''}`}>
       <div className="flex items-center justify-between mb-2">
         <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
           <Icon name="FileText" size={16} />
-          Notas de seguimiento
+          Notas de seguimiento {!isSynced && '(Modo Solo Lectura)'}
         </label>
-        {!saved && (
+        {!saved && isSynced && (
           <span className="text-xs text-amber-600">Sin guardar</span>
         )}
       </div>
@@ -42,15 +44,16 @@ const NotasTextarea = ({ consulta, userId, onSaved }) => {
         value={notas}
         onChange={handleChange}
         onBlur={handleSave}
-        placeholder="Escribe notas sobre este lead... (se guardan automáticamente)"
-        className={`w-full h-32 px-3 py-2 border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white`}
+        disabled={!isSynced}
+        placeholder={isSynced ? "Escribe notas... (se guardan automáticamente)" : "Conexión inestable - Notas deshabilitadas"}
+        className={`w-full h-32 px-3 py-2 border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white ${!isSynced ? 'cursor-not-allowed bg-slate-100' : ''}`}
       />
       <div className="flex items-center justify-between mt-2">
         <p className="text-xs text-slate-400">Las notas se guardan en el historial</p>
         <button
           onClick={handleSave}
-          disabled={saved}
-          className={`px-3 py-1 text-sm rounded-lg font-medium flex items-center gap-1 ${saved ? 'bg-slate-100 text-slate-400' : 'bg-violet-600 text-white hover:bg-violet-700'}`}
+          disabled={saved || !isSynced}
+          className={`px-3 py-1 text-sm rounded-lg font-medium flex items-center gap-1 ${saved || !isSynced ? 'bg-slate-100 text-slate-400' : 'bg-violet-600 text-white hover:bg-violet-700'}`}
         >
           <Icon name="Save" size={14} />
           {saved ? 'Guardado' : 'Guardar'}
@@ -72,7 +75,8 @@ const DetalleView = memo(({
   handleReasignar,
   handleEnviarEmail,
   formatDateShort,
-  isKeyMaster
+  isKeyMaster,
+  isSynced
 }) => {
   const c = selectedConsulta
   if (!c) return null
@@ -182,6 +186,7 @@ const DetalleView = memo(({
           <NotasTextarea
             consulta={c}
             userId={user.id}
+            isSynced={isSynced}
             onSaved={() => {
               loadData()
               if (setNotification) {
@@ -235,27 +240,30 @@ const DetalleView = memo(({
         <div className="space-y-6">
           <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
             <h3 className="font-semibold text-slate-800 mb-4">Cambiar Estado</h3>
-            <div className="space-y-2">
+            <div className={`space-y-2 ${!isSynced ? 'opacity-60 cursor-not-allowed' : ''}`}>
               {Object.values(ESTADOS).map(est => (
                 <button
                   key={est.id}
-                  onClick={() => handleEstadoChange(c.id, est.id)}
-                  className={`w-full text-left px-4 py-3 rounded-lg border transition-all flex items-center justify-between group ${c.estado === est.id ? `${est.bg} ${est.text} border-transparent font-bold` : 'bg-white border-slate-100 text-slate-600 hover:border-violet-200 hover:bg-violet-50'}`}
+                  onClick={() => isSynced && handleEstadoChange(c.id, est.id)}
+                  disabled={!isSynced}
+                  className={`w-full text-left px-4 py-3 rounded-lg border transition-all flex items-center justify-between group ${c.estado === est.id ? `${est.bg} ${est.text} border-transparent font-bold` : 'bg-white border-slate-100 text-slate-600 hover:border-violet-200 hover:bg-violet-50'} ${!isSynced ? 'cursor-not-allowed' : ''}`}
                 >
                   <span>{est.label}</span>
                   {c.estado === est.id && <Icon name="Check" size={16} />}
                 </button>
               ))}
               <div className="pt-2 border-t border-slate-100 mt-2">
-                <button onClick={() => store.toggleMatricula(c.id, user.id)}
-                  className={`w-full px-4 py-3 rounded-lg font-bold transition-all flex items-center justify-center gap-2 ${c.matriculado ? 'bg-emerald-100 text-emerald-700 border-2 border-emerald-500' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}>
+                <button onClick={() => isSynced && store.toggleMatricula(c.id, user.id)}
+                  disabled={!isSynced}
+                  className={`w-full px-4 py-3 rounded-lg font-bold transition-all flex items-center justify-center gap-2 ${!isSynced ? 'cursor-not-allowed bg-slate-100 text-slate-400' : c.matriculado ? 'bg-emerald-100 text-emerald-700 border-2 border-emerald-500' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}>
                   <Icon name={c.matriculado ? 'CheckCircle' : 'GraduationCap'} size={20} />
                   {c.matriculado ? '¡Matriculado!' : 'Marcar Matriculado'}
                 </button>
               </div>
               {!c.matriculado && (
-                <button onClick={() => store.toggleDescarte(c.id, user.id)}
-                  className={`w-full mt-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${c.descartado ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-100'}`}>
+                <button onClick={() => isSynced && store.toggleDescarte(c.id, user.id)}
+                  disabled={!isSynced}
+                  className={`w-full mt-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${!isSynced ? 'cursor-not-allowed text-slate-300' : c.descartado ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-100'}`}>
                   {c.descartado ? 'Reactivar Lead' : 'Descartar Lead'}
                 </button>
               )}

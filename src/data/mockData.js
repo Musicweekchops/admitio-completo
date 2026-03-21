@@ -136,8 +136,8 @@ export const ESTADOS = {
     text: 'text-purple-700',
     orden: 3 
   },
-  examen_admision: { 
-    id: 'examen_admision',
+  examen: { 
+    id: 'examen',
     nombre: 'Examen Adm.', 
     label: 'Examen Adm.',
     color: 'bg-indigo-100 text-indigo-700',
