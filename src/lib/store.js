@@ -675,8 +675,7 @@ export function createConsulta(data, userId, userRol = null) {
   let en_cola = false
 
   if (!asignado_a) {
-    // La asignación ahora ocurre en la base de datos (Trigger: tr_asignar_lead)
-    /*
+    // Restaurando asignación en frontend para asegurar integridad en cargas masivas
     const resultado = asignarLeadInteligente()
     if (resultado.enCola) {
       en_cola = true
@@ -684,9 +683,6 @@ export function createConsulta(data, userId, userRol = null) {
     } else {
       asignado_a = resultado.userId
     }
-    */
-    asignado_a = null
-    en_cola = false
   }
 
   // Obtener info del creador
@@ -1224,12 +1220,13 @@ function asignarLeadInteligente() {
     ).length
 
     // Si está al máximo, score = 0
-    if (leadsActivos >= config.max_leads_diarios_encargado) {
+    const maxLeadsDiarios = config.max_leads_diarios_encargado || 100
+    if (leadsActivos >= maxLeadsDiarios) {
       return { userId: enc.id, nombre: enc.nombre, score: 0, razon: 'al_maximo', leadsActivos }
     }
 
     // Calcular score
-    const capacidadDisponible = config.max_leads_diarios_encargado - leadsActivos
+    const capacidadDisponible = maxLeadsDiarios - leadsActivos
     const tasaConversion = metricas.tasa_conversion || 0.1
     const rapidez = 1 / (metricas.tiempo_promedio_primer_contacto_hrs || 5)
 
