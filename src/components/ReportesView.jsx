@@ -431,15 +431,32 @@ const ReportesView = memo(({
       if (!porEncargado[encargadoId]) {
         const usuario = todosUsuarios.find(u => u.id === encargadoId)
         const nombreEncargado = usuario?.nombre || c.encargado?.nombre || 'Sin asignar'
-        porEncargado[encargadoId] = { total: 0, matriculados: 0, nombre: nombreEncargado, tasa: 0 }
+        porEncargado[encargadoId] = { 
+          total: 0, 
+          matriculados: 0, 
+          contactados: 0,
+          seguimiento: 0,
+          gestionados: 0,
+          nombre: nombreEncargado, 
+          tasa: 0,
+          tasaGestion: 0
+        }
       }
       porEncargado[encargadoId].total++
       if (c.matriculado) porEncargado[encargadoId].matriculados++
+      
+      // Métricas de Gestión
+      if (c.estado === 'contactado') porEncargado[encargadoId].contactados++
+      if (c.estado === 'seguimiento') porEncargado[encargadoId].seguimiento++
+      
+      // Total Gestionados (Cualquier estado que no sea 'nueva')
+      if (c.estado !== 'nueva') porEncargado[encargadoId].gestionados++
     })
     
     Object.keys(porEncargado).forEach(id => {
       const e = porEncargado[id]
       e.tasa = e.total > 0 ? Math.round((e.matriculados / e.total) * 100) : 0
+      e.tasaGestion = e.total > 0 ? Math.round((e.gestionados / e.total) * 100) : 0
     })
 
     const porTipoAlumno = {
@@ -889,13 +906,16 @@ const ReportesView = memo(({
           {activeTab === 'encargados' && (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead><tr className="text-left text-slate-500"><th className="pb-3">Encargado</th><th className="pb-3 text-center">Leads</th><th className="pb-3 text-center">Matrículas</th><th className="pb-3 text-center">Conv.</th></tr></thead>
+                <thead><tr className="text-left text-slate-500"><th className="pb-3">Encargado</th><th className="pb-3 text-center">Leads</th><th className="pb-3 text-center">Cont.</th><th className="pb-3 text-center">Seg.</th><th className="pb-3 text-center">Matr.</th><th className="pb-3 text-center">% Gest.</th><th className="pb-3 text-center">Conv.</th></tr></thead>
                 <tbody>
                   {Object.entries(estadisticas?.porEncargado || {}).filter(([id]) => id !== 'sin_asignar').sort((a,b) => (b[1].tasa||0)-(a[1].tasa||0)).map(([id, d]) => (
                     <tr key={id} className="border-t border-slate-50">
                       <td className="py-3 font-medium">{d.nombre}</td>
                       <td className="py-3 text-center">{d.total}</td>
+                      <td className="py-3 text-center text-blue-600 font-medium">{d.contactados}</td>
+                      <td className="py-3 text-center text-purple-600 font-medium">{d.seguimiento}</td>
                       <td className="py-3 text-center text-emerald-600 font-bold">{d.matriculados}</td>
+                      <td className="py-3 text-center"><span className="px-2 py-1 bg-violet-50 text-violet-700 rounded-full font-bold">{d.tasaGestion}%</span></td>
                       <td className="py-3 text-center"><span className="px-2 py-1 bg-slate-100 rounded-full font-bold">{d.tasa}%</span></td>
                     </tr>
                   ))}

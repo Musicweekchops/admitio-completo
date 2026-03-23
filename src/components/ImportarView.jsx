@@ -31,23 +31,41 @@ const ImportarView = ({ user, loadData, setNotification }) => {
     setError(null)
 
     try {
-      const text = await file.text()
-      const rows = text.split('\n').map(row => row.split(',').map(cell => cell.trim()))
-      const headers = rows[0]
+      let text = await file.text()
+      
+      // 1. Limpiar BOM de Excel (\ufeff) si existe
+      text = text.replace(/^\ufeff/, '')
 
-      // Validar headers mínimos
+      // 2. Detectar delimitador inteligente (, o ;)
+      const firstLine = text.split('\n')[0]
+      const delimiter = firstLine.includes(';') ? ';' : ','
+      
+      const rows = text.split('\n')
+        .filter(line => line.trim()) // Ignorar líneas vacías
+        .map(row => row.split(delimiter).map(cell => cell.trim().replace(/^["']|["']$/g, ''))) // Limpiar comillas
+      
+      if (rows.length === 0) throw new Error('El archivo está vacío')
+
+      // Normalizar headers a minúsculas para validación robusta
+      const rawHeaders = rows[0]
+      const headers = rawHeaders.map(h => h.toLowerCase())
+
+      // 3. Validar headers mínimos (Insensible a mayúsculas)
       if (!headers.includes('nombre')) {
+        console.log('Headers detectados:', headers)
         throw new Error('El CSV debe incluir al menos la columna "nombre"')
       }
 
       setProgress(30)
 
       const jsonLeads = rows.slice(1)
-        .filter(row => row.length === headers.length && row[headers.indexOf('nombre')])
+        .filter(row => row.length >= headers.length && row[headers.indexOf('nombre')])
         .map(row => {
           const lead = {}
           headers.forEach((header, i) => {
-            lead[header.toLowerCase()] = row[i]
+            if (row[i] !== undefined) {
+              lead[header] = row[i]
+            }
           })
           return lead
         })
