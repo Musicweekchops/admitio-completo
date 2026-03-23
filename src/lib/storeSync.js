@@ -231,9 +231,10 @@ async function processSyncQueue() {
   dispatchSyncStatus('syncing');
 
   try {
-    if (totalTasksInBatch === 0) totalTasksInBatch = syncQueue.length;
-
     while (syncQueue.length > 0) {
+      // Actualizar total dinámicamente para que el porcentaje sea coherente si se agregan más tareas
+      totalTasksInBatch = Math.max(totalTasksInBatch, tasksProcessedInBatch + syncQueue.length);
+
       const task = syncQueue.shift();
       if (!task) break;
       
@@ -258,14 +259,14 @@ async function processSyncQueue() {
         const result = await task.execute();
         console.log(`✅ [Queue] Completado: ${task.type}`);
         
-        tasksProcessedInBatch++;
-        dispatchSyncProgress(tasksProcessedInBatch, totalTasksInBatch);
-        
         task.resolve(result);
       } catch (error) {
         console.error(`❌ [Queue] Error en ${task.type}:`, error);
         task.reject(error);
         dispatchSyncError(task.type, error);
+      } finally {
+        tasksProcessedInBatch++;
+        dispatchSyncProgress(tasksProcessedInBatch, totalTasksInBatch);
       }
     }
   } finally {
