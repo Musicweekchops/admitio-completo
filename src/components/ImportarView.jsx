@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Icon from './Icon'
 import { supabase } from '../lib/supabase'
 import * as store from '../lib/store'
@@ -10,6 +10,21 @@ const ImportarView = ({ user, loadData, setNotification }) => {
   const [results, setResults] = useState(null)
   const [error, setError] = useState(null)
   const [asignarA, setAsignarA] = useState('')
+  const [syncProgress, setSyncProgress] = useState(null)
+
+  useEffect(() => {
+    const handleProgress = (e) => {
+      setSyncProgress(e.detail)
+      // Limpiar progreso tras éxito total
+      if (e.detail.percentage === 100) {
+        setTimeout(() => {
+          setSyncProgress(prev => prev && prev.percentage === 100 ? null : prev)
+        }, 3000)
+      }
+    }
+    window.addEventListener('admitio-sync-progress', handleProgress)
+    return () => window.removeEventListener('admitio-sync-progress', handleProgress)
+  }, [])
 
   const usuarios = store.getUsuarios() || []
 
@@ -104,14 +119,16 @@ const ImportarView = ({ user, loadData, setNotification }) => {
       }
 
       setResults({ total: jsonLeads.length, exitosos, fallidos })
-      if (setNotification) setNotification({ type: 'success', message: `Importación finalizada: ${exitosos} exitosos` })
+      // No disparamos notificación de éxito global aquí, dejamos que la barra de sincronización
+      // que aparecerá en la derecha (vía useEffect) guíe al usuario hasta el 100% real.
       loadData()
       setProgress(100)
     } catch (e) {
       setError(e.message)
       if (setNotification) setNotification({ type: 'error', message: 'Error en la importación: ' + e.message })
     } finally {
-      setImporting(false)
+      // Mantenemos importing en true unos segundos si hay cola de sync activa
+      setTimeout(() => setImporting(false), 2000)
     }
   }
 
@@ -143,6 +160,19 @@ const ImportarView = ({ user, loadData, setNotification }) => {
           </div>
         </div>
       </div>
+
+      {/* Alerta Global de Sincronización */}
+      {syncProgress && (
+        <div className="bg-violet-600 text-white p-4 rounded-xl shadow-lg animate-pulse flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Icon name="RotateCw" className="animate-spin" size={20} />
+            <span className="font-bold">Sincronizando con la nube... No cierres esta ventana.</span>
+          </div>
+          <div className="bg-white/20 px-3 py-1 rounded-full text-sm font-bold">
+            {syncProgress.percentage}%
+          </div>
+        </div>
+      )}
 
       <div className="grid md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-6">
@@ -259,18 +289,34 @@ const ImportarView = ({ user, loadData, setNotification }) => {
                 
                 <button
                   onClick={async () => {
-                    if (setNotification) setNotification({ type: 'info', message: 'Iniciando asignación automática...' })
+                    setResults(null) // Limpiar resultados previos para priorizar el progreso de asignación
                     const res = await store.autoAsignarLeadsHuerfanos(user.id)
-                    if (res.success) {
-                      loadData()
-                      if (setNotification) setNotification({ type: 'success', message: `¡${res.count} leads asignados correctamente!` })
+                    if (res.success && res.count > 0) {
+                      // No enviamos éxito todavía, dejamos que la barra de progreso hable
+                    } else if (res.count === 0) {
+                      if (setNotification) setNotification({ type: 'info', message: 'No se encontraron leads para asignar.' })
                     }
                   }}
-                  className="w-full py-2.5 bg-violet-600 text-white rounded-lg font-bold hover:bg-violet-700 transition-all flex items-center justify-center gap-2"
+                  disabled={syncProgress && syncProgress.percentage < 100}
+                  className="w-full py-2.5 bg-violet-600 text-white rounded-lg font-bold hover:bg-violet-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   <Icon name="Zap" size={16} />
-                  Asignar Todos Automáticamente
+                  {syncProgress ? `Sincronizando... ${syncProgress.percentage}%` : 'Asignar Todos Automáticamente'}
                 </button>
+
+                {syncProgress && (
+                  <div className="mt-4 space-y-2">
+                    <div className="h-1.5 w-full bg-violet-200 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-violet-600 transition-all duration-300"
+                        style={{ width: `${syncProgress.percentage}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-center text-violet-500 font-bold uppercase tracking-wider">
+                      {syncProgress.processed} de {syncProgress.total} leads sincronizados
+                    </p>
+                  </div>
+                )}
               </div>
             )
           })()}

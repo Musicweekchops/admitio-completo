@@ -22,10 +22,15 @@ const dispatchSyncError = (type, error) => {
   }));
 };
 
-// Despachar estado de sincronización (para el indicador visual)
-const dispatchSyncStatus = (status) => {
-  // status: 'syncing' | 'synced' | 'error'
-  window.dispatchEvent(new CustomEvent('admitio-sync-status', { detail: { status } }));
+// Despachar estado de progreso (para barras de carga masivas)
+const dispatchSyncProgress = (processed, total) => {
+  window.dispatchEvent(new CustomEvent('admitio-sync-progress', { 
+    detail: { 
+      processed, 
+      total,
+      percentage: Math.round((processed / total) * 100)
+    } 
+  }));
 };
 
 // ============================================
@@ -195,6 +200,8 @@ export async function cargarDatosInstitucion(institucionId) {
 // Cola de sincronización serializada para evitar bloqueos de base de datos (Row Locks)
 let syncQueue = [];
 let isQueueProcessing = false;
+let totalTasksInBatch = 0;
+let tasksProcessedInBatch = 0;
 
 /**
  * Encola una tarea de sincronización y devuelve una promesa que se resuelve
@@ -224,6 +231,8 @@ async function processSyncQueue() {
   dispatchSyncStatus('syncing');
 
   try {
+    if (totalTasksInBatch === 0) totalTasksInBatch = syncQueue.length;
+
     while (syncQueue.length > 0) {
       const task = syncQueue.shift();
       if (!task) break;
@@ -248,6 +257,10 @@ async function processSyncQueue() {
         console.log(`⛓️ [Queue] Ejecutando: ${task.type}...`);
         const result = await task.execute();
         console.log(`✅ [Queue] Completado: ${task.type}`);
+        
+        tasksProcessedInBatch++;
+        dispatchSyncProgress(tasksProcessedInBatch, totalTasksInBatch);
+        
         task.resolve(result);
       } catch (error) {
         console.error(`❌ [Queue] Error en ${task.type}:`, error);
@@ -263,6 +276,8 @@ async function processSyncQueue() {
       console.log('🔄 [Queue] Tareas entrantes detectadas al cierre, relanzando...');
       setTimeout(processSyncQueue, 10);
     } else {
+      totalTasksInBatch = 0;
+      tasksProcessedInBatch = 0;
       dispatchSyncStatus('synced');
     }
   }
