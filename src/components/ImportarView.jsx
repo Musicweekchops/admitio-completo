@@ -240,6 +240,41 @@ const ImportarView = ({ user, loadData, setNotification }) => {
         </div>
 
         <div className="space-y-6">
+          {/* Asignación Retroactiva (Leads Huérfanos) */}
+          {(() => {
+            const huerfanos = (store.getConsultas() || []).filter(c => !c.asignado_a && !c.matriculado && !c.descartado && !c.en_cola)
+            if (huerfanos.length === 0) return null
+
+            return (
+              <div className="bg-violet-50 rounded-xl p-6 border border-violet-100 shadow-sm">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 bg-violet-600 rounded-lg flex items-center justify-center">
+                    <Icon name="UserPlus" className="text-white" size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-violet-900 line-clamp-1">Pendientes de Asignación</h3>
+                    <p className="text-xs text-violet-600 font-medium">Hay {huerfanos.length} leads sin encargado asignado</p>
+                  </div>
+                </div>
+                
+                <button
+                  onClick={async () => {
+                    if (setNotification) setNotification({ type: 'info', message: 'Iniciando asignación automática...' })
+                    const res = await store.autoAsignarLeadsHuerfanos(user.id)
+                    if (res.success) {
+                      loadData()
+                      if (setNotification) setNotification({ type: 'success', message: `¡${res.count} leads asignados correctamente!` })
+                    }
+                  }}
+                  className="w-full py-2.5 bg-violet-600 text-white rounded-lg font-bold hover:bg-violet-700 transition-all flex items-center justify-center gap-2"
+                >
+                  <Icon name="Zap" size={16} />
+                  Asignar Todos Automáticamente
+                </button>
+              </div>
+            )
+          })()}
+
           {/* Resultados */}
           {results && (
             <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">

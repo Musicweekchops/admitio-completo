@@ -1297,6 +1297,51 @@ export function asignarDesdeColaA(leadId, userId, asignadoPor) {
   return store.consultas[index]
 }
 
+export async function autoAsignarLeadsHuerfanos(userId) {
+  console.log('🤖 Iniciando barrido de leads huérfanos...');
+  const huerfanos = (store.consultas || []).filter(c => 
+    !c.asignado_a && 
+    !c.matriculado && 
+    !c.descartado && 
+    !c.en_cola
+  )
+
+  if (huerfanos.length === 0) {
+    console.log('✅ No hay leads huérfanos para asignar.');
+    return { success: true, count: 0 }
+  }
+
+  console.log(`📊 Encontrados ${huerfanos.length} leads huérfanos. Procesando...`);
+  let count = 0
+  
+  for (const lead of huerfanos) {
+    const resultado = asignarLeadInteligente()
+    if (!resultado.enCola && resultado.userId) {
+      // Actualizar localmente de forma inmediata para que el siguiente del loop vea la carga
+      const idx = store.consultas.findIndex(c => c.id === lead.id)
+      if (idx !== -1) {
+        store.consultas[idx].asignado_a = resultado.userId
+        
+        // Disparar sincronización asíncrona (encolada en storeSync por debajo)
+        try {
+          // Usamos updateConsultaAsync que ya tiene el mutex y los timeouts
+          updateConsultaAsync(lead.id, { asignado_a: resultado.userId }, userId)
+          count++
+        } catch (e) {
+          console.error(`❌ Fallo al sincronizar asignación de lead ${lead.id}:`, e)
+        }
+      }
+    }
+  }
+
+  if (count > 0) {
+    saveStore()
+    console.log(`✨ Barrido finalizado: ${count} leads asignados automáticamente.`);
+  }
+
+  return { success: true, count }
+}
+
 // ============================================
 // ACTIVIDAD
 // ============================================
