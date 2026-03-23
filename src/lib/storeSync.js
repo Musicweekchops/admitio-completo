@@ -22,13 +22,20 @@ const dispatchSyncError = (type, error) => {
   }));
 };
 
+// Despachar estado de sincronización (para el indicador visual)
+const dispatchSyncStatus = (status) => {
+  // status: 'syncing' | 'synced' | 'error'
+  window.dispatchEvent(new CustomEvent('admitio-sync-status', { detail: { status } }));
+};
+
 // Despachar estado de progreso (para barras de carga masivas)
 const dispatchSyncProgress = (processed, total) => {
+  const percentage = total > 0 ? Math.round((processed / total) * 100) : 100;
   window.dispatchEvent(new CustomEvent('admitio-sync-progress', { 
     detail: { 
       processed, 
       total,
-      percentage: Math.round((processed / total) * 100)
+      percentage
     } 
   }));
 };
