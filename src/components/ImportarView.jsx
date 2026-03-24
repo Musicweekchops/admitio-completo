@@ -92,43 +92,36 @@ const ImportarView = ({ user, loadData, setNotification }) => {
       setProgress(50)
 
       // Simular importación masiva (en producción usaríamos un RPC de Supabase)
-      let exitosos = 0
-      let fallidos = 0
+      // Mapear leads para inserción masiva
+      const leadsParaImportar = jsonLeads.map(lead => ({
+        nombre: lead.nombre,
+        email: lead.email || '',
+        telefono: lead.telefono || '',
+        carrera_nombre: lead.carrera || '',
+        medio_nombre: lead.medio || 'CSV',
+        notas: lead.notas || '',
+        asignado_a: asignarA || null,
+        tipo_alumno: lead.tipo_alumno || 'nuevo',
+        origen_entrada: 'manual'
+      }));
 
-      for (const lead of jsonLeads) {
-        try {
-          // Si hay asignación manual, usarla. Si no, dejar que el store decida
-          const asignacionManual = asignarA || null
+      // Ingesta Masiva Atómica (Detección de duplicados y asignaciones en el store)
+      setProgress(60);
+      const procesados = store.createConsultasBulk(leadsParaImportar, user.id);
+      
+      const exitosos = procesados || 0;
+      const fallidos = jsonLeads.length - exitosos;
+      setProgress(90);
 
-          store.createConsulta({
-            nombre: lead.nombre,
-            email: lead.email || '',
-            telefono: lead.telefono || '',
-            carrera_nombre: lead.carrera || '',
-            medio_nombre: lead.medio || 'CSV',
-            notas: lead.notas || '',
-            asignado_a: asignacionManual,
-            tipo_alumno: lead.tipo_alumno || 'nuevo'
-          }, user.id)
-          exitosos++
-        } catch (e) {
-          console.error('Error importando lead:', e)
-          fallidos++
-        }
-        setProgress(50 + (exitosos / jsonLeads.length) * 40)
-      }
-
-      setResults({ total: jsonLeads.length, exitosos, fallidos })
-      // No disparamos notificación de éxito global aquí, dejamos que la barra de sincronización
-      // que aparecerá en la derecha (vía useEffect) guíe al usuario hasta el 100% real.
-      loadData()
-      setProgress(100)
+      setResults({ total: jsonLeads.length, exitosos, fallidos });
+      loadData();
+      setProgress(100);
     } catch (e) {
-      setError(e.message)
-      if (setNotification) setNotification({ type: 'error', message: 'Error en la importación: ' + e.message })
+      console.error('Error importando leads:', e);
+      setError(e.message);
+      if (setNotification) setNotification({ type: 'error', message: 'Error en la importación: ' + e.message });
     } finally {
-      // Mantenemos importing en true unos segundos si hay cola de sync activa
-      setTimeout(() => setImporting(false), 2000)
+      setTimeout(() => setImporting(false), 2000);
     }
   }
 
