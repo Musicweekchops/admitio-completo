@@ -100,6 +100,16 @@ const ImportarView = ({ user, loadData, setNotification }) => {
           // Si hay asignación manual, usarla. Si no, dejar que el store decida
           const asignacionManual = asignarA || null
 
+          // NUEVO: Verificación de duplicados antes de insertar (O(N) rápida en memoria)
+          if (lead.email || lead.telefono) {
+            const dups = store.buscarDuplicados(lead.nombre, lead.email || '', lead.telefono || '');
+            if (dups.length > 0) {
+              console.warn(`⏭️ Lead duplicado saltado: ${lead.nombre} (${lead.email || lead.telefono})`);
+              fallidos++;
+              continue;
+            }
+          }
+
           store.createConsulta({
             nombre: lead.nombre,
             email: lead.email || '',
