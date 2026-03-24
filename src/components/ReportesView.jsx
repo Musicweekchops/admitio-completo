@@ -845,7 +845,7 @@ const ReportesView = memo(({
             { id: 'tendencia', icon: 'TrendingUp', label: 'Tendencia' },
             { id: 'carreras', icon: 'GraduationCap', label: 'Carreras' },
             { id: 'medios', icon: 'Share2', label: 'Medios' },
-            ...(isKeyMaster || user?.rol_id === 'superadmin' || isRector ? [{ id: 'encargados', icon: 'Users', label: 'Encargados' }] : [])
+            ...(isKeyMaster || user?.rol_id === 'superadmin' || user?.rol_id === 'superowner' || isRector ? [{ id: 'encargados', icon: 'Users', label: 'Encargados' }] : [])
           ].map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center gap-2 px-6 py-4 font-medium text-sm transition-colors ${activeTab === tab.id ? 'text-violet-600 border-b-2 border-violet-600 bg-violet-50/50' : 'text-slate-500 hover:bg-slate-50'}`}>
               <Icon name={tab.icon} size={18} /> {tab.label}

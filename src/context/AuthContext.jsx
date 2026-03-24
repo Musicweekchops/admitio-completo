@@ -731,41 +731,51 @@ export function AuthProvider({ children }) {
     }, 10000);
 
     try {
-      const { data: leads } = await supabase
-        .from('leads')
-        .select('*')
-        .eq('institucion_id', institucionId)
-        .order('created_at', { ascending: false })
-        .abortSignal(controller.signal);
-
-      const { data: usuarios } = await supabase
-        .from('usuarios')
-        .select('*')
-        .eq('institucion_id', institucionId)
-        .eq('activo', true)
-        .abortSignal(controller.signal);
-
-      const { data: carreras } = await supabase
-        .from('carreras')
-        .select('*')
-        .eq('institucion_id', institucionId)
-        .eq('activa', true)
-        .order('nombre', { ascending: true })
-        .abortSignal(controller.signal);
-
-      const { data: formularios } = await supabase
-        .from('formularios')
-        .select('*')
-        .eq('institucion_id', institucionId)
-        .order('created_at', { ascending: false })
-        .abortSignal(controller.signal);
-
-      const { data: acciones } = await supabase
-        .from('acciones_lead')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100)
-        .abortSignal(controller.signal);
+      // CARGA EN PARALELO (Mucho más rápido que secuencial)
+      const [
+        { data: leads },
+        { data: usuarios },
+        { data: carreras },
+        { data: formularios },
+        { data: acciones }
+      ] = await Promise.all([
+        supabase
+          .from('leads')
+          .select('*')
+          .eq('institucion_id', institucionId)
+          .order('created_at', { ascending: false })
+          .limit(1000) // Límite razonable para carga inicial rápida
+          .abortSignal(controller.signal),
+        
+        supabase
+          .from('usuarios')
+          .select('*')
+          .eq('institucion_id', institucionId)
+          .eq('activo', true)
+          .abortSignal(controller.signal),
+        
+        supabase
+          .from('carreras')
+          .select('*')
+          .eq('institucion_id', institucionId)
+          .eq('activa', true)
+          .order('nombre', { ascending: true })
+          .abortSignal(controller.signal),
+        
+        supabase
+          .from('formularios')
+          .select('*')
+          .eq('institucion_id', institucionId)
+          .order('created_at', { ascending: false })
+          .abortSignal(controller.signal),
+        
+        supabase
+          .from('acciones_lead')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(100)
+          .abortSignal(controller.signal)
+      ]);
 
       clearTimeout(timeoutId);
 
@@ -1037,7 +1047,7 @@ export function AuthProvider({ children }) {
 
 
   // Roles y permisos
-  const isSuperAdmin = user?.rol_id === 'superadmin'
+  const isSuperAdmin = user?.rol_id === 'superadmin' || user?.rol_id === 'superowner'
   const isKeyMaster = user?.rol_id === 'keymaster' || user?.rol_id === 'director' || isSuperAdmin
   const isEncargado = user?.rol_id === 'encargado' || user?.rol_id === 'director'
   const isAsistente = user?.rol_id === 'asistente'

@@ -41,6 +41,8 @@ import {
   syncCrearFormulario,
   syncActualizarFormulario,
   syncEliminarFormulario,
+  syncCrearLeadsBulk,
+  syncCrearAccionesBulk,
   getInstitucionIdFromStore
 } from './storeSync'
 
@@ -278,7 +280,7 @@ export function getNombreMedio(medioId) {
 
 export function getRolesDisponibles(requesterId = null) {
   const requester = store.usuarios.find(u => u.id === requesterId)
-  const isSuperAdmin = requester?.rol_id === 'superadmin'
+  const isSuperAdmin = requester?.rol_id === 'superadmin' || requester?.rol_id === 'superowner'
 
   // Filtrar roles ocultos si no es superadmin
   return Object.values(ROLES).filter(rol => {
