@@ -10,7 +10,7 @@ const UsuariosView = memo(({
   planInfo, 
   setLimiteAlerta 
 }) => {
-  const isSuperAdmin = user?.rol_id === 'superadmin'
+  const isSuperAdmin = user?.rol_id === 'superadmin' || user?.rol_id === 'superowner'
   const [usuarios, setUsuarios] = useState(store.getUsuarios(user?.id, isSuperAdmin))
   const [localEditingUser, setLocalEditingUser] = useState(null)
   const [localShowUserModal, setLocalShowUserModal] = useState(false)
@@ -193,7 +193,7 @@ const UsuariosView = memo(({
                   </div>
                 </td>
                 <td className="p-4">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${u.rol_id === 'superadmin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${['superadmin', 'superowner'].includes(u.rol_id) ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
                     {u.rol_id}
                   </span>
                 </td>

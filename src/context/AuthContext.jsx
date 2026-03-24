@@ -937,10 +937,28 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // Roles y permisos
+  const isSuperAdmin = user?.rol_id === 'superadmin' || user?.rol_id === 'superowner'
+  const isKeyMaster = user?.rol_id === 'keymaster' || user?.rol_id === 'director' || isSuperAdmin
+  const isEncargado = user?.rol_id === 'encargado' || user?.rol_id === 'director'
+  const isAsistente = user?.rol_id === 'asistente'
+  const isRector = user?.rol_id === 'rector'
+
+  const canViewAll = user?.permisos?.ver_todos || isSuperAdmin
+  const canViewOwn = user?.permisos?.ver_propios
+  const canEdit = user?.permisos?.editar || isSuperAdmin
+  const canReasignar = user?.permisos?.reasignar || isSuperAdmin
+  const canConfig = user?.permisos?.config || isSuperAdmin
+  const canManageUsers = user?.permisos?.usuarios || isSuperAdmin
+  const canViewReports = user?.permisos?.reportes || isEncargado || isSuperAdmin
+  const canManageForms = user?.permisos?.formularios || isSuperAdmin
+  const canCreateLeads = user?.permisos?.crear_leads || canEdit
+  const canDeleteKeyMaster = user?.permisos?.eliminar_keymaster || isSuperAdmin
+
   // Helpers
-  const puedeCrearLead = () => planInfo.uso.leads < planInfo.limites.max_leads
-  const puedeCrearUsuario = () => planInfo.uso.usuarios < planInfo.limites.max_usuarios
-  const puedeCrearFormulario = () => planInfo.uso.formularios < planInfo.limites.max_formularios
+  const puedeCrearLead = () => isSuperAdmin || planInfo.uso.leads < planInfo.limites.max_leads
+  const puedeCrearUsuario = () => isSuperAdmin || planInfo.uso.usuarios < planInfo.limites.max_usuarios
+  const puedeCrearFormulario = () => isSuperAdmin || planInfo.uso.formularios < planInfo.limites.max_formularios
   const porcentajeUsoLeads = () => Math.round((planInfo.uso.leads / planInfo.limites.max_leads) * 100)
   const porcentajeUsoUsuarios = () => Math.round((planInfo.uso.usuarios / planInfo.limites.max_usuarios) * 100)
   const porcentajeUsoFormularios = () => Math.round((planInfo.uso.formularios / planInfo.limites.max_formularios) * 100)
@@ -956,7 +974,7 @@ export function AuthProvider({ children }) {
       return { success: false, error: 'No disponible en modo local' }
     }
 
-    if (!user || !['keymaster', 'superadmin'].includes(user.rol_id)) {
+    if (!user || !['keymaster', 'superadmin', 'superowner'].includes(user.rol_id)) {
       return { success: false, error: 'No tienes permisos para crear usuarios' }
     }
 
@@ -1045,24 +1063,6 @@ export function AuthProvider({ children }) {
     }
   }
 
-
-  // Roles y permisos
-  const isSuperAdmin = user?.rol_id === 'superadmin' || user?.rol_id === 'superowner'
-  const isKeyMaster = user?.rol_id === 'keymaster' || user?.rol_id === 'director' || isSuperAdmin
-  const isEncargado = user?.rol_id === 'encargado' || user?.rol_id === 'director'
-  const isAsistente = user?.rol_id === 'asistente'
-  const isRector = user?.rol_id === 'rector'
-
-  const canViewAll = user?.permisos?.ver_todos || isSuperAdmin
-  const canViewOwn = user?.permisos?.ver_propios
-  const canEdit = user?.permisos?.editar || isSuperAdmin
-  const canReasignar = user?.permisos?.reasignar || isSuperAdmin
-  const canConfig = user?.permisos?.config || isSuperAdmin
-  const canManageUsers = user?.permisos?.usuarios || isSuperAdmin
-  const canViewReports = user?.permisos?.reportes || isEncargado || isSuperAdmin
-  const canManageForms = user?.permisos?.formularios || isSuperAdmin
-  const canCreateLeads = user?.permisos?.crear_leads || canEdit
-  const canDeleteKeyMaster = user?.permisos?.eliminar_keymaster || isSuperAdmin
 
   return (
     <AuthContext.Provider value={{
