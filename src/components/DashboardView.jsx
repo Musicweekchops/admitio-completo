@@ -69,7 +69,7 @@ const DashboardView = memo(({
 }) => {
   // Fallback: verificar rol directamente
   const esAdmin = isKeyMaster || user?.rol_id === 'keymaster' || user?.rol_id === 'superadmin'
-  const isSuperAdmin = user?.rol_id === 'superadmin' || user?.rol_id === 'superowner'
+  const isSuperAdmin = ['superadmin', 'superowner', 'keymaster'].includes(user?.rol_id)
 
   const stats = esAdmin ? metricasGlobales : metricas
 

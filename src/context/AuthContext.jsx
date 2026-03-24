@@ -886,7 +886,7 @@ export function AuthProvider({ children }) {
         .eq('id', institucionId)
         .single()
 
-      const planId = inst?.plan || 'free'
+      const planId = (inst?.plan || 'free').toLowerCase().trim()
       const limites = PLANES_DEFAULT[planId] || PLANES_DEFAULT.free
 
       const { count: formCount } = await supabase
@@ -956,9 +956,9 @@ export function AuthProvider({ children }) {
   const canDeleteKeyMaster = user?.permisos?.eliminar_keymaster || isSuperAdmin
 
   // Helpers
-  const puedeCrearLead = () => isSuperAdmin || planInfo.uso.leads < planInfo.limites.max_leads
-  const puedeCrearUsuario = () => isSuperAdmin || planInfo.uso.usuarios < planInfo.limites.max_usuarios
-  const puedeCrearFormulario = () => isSuperAdmin || planInfo.uso.formularios < planInfo.limites.max_formularios
+  const puedeCrearLead = () => isKeyMaster || planInfo.uso.leads < planInfo.limites.max_leads
+  const puedeCrearUsuario = () => isKeyMaster || planInfo.uso.usuarios < planInfo.limites.max_usuarios
+  const puedeCrearFormulario = () => isKeyMaster || planInfo.uso.formularios < planInfo.limites.max_formularios
   const porcentajeUsoLeads = () => Math.round((planInfo.uso.leads / planInfo.limites.max_leads) * 100)
   const porcentajeUsoUsuarios = () => Math.round((planInfo.uso.usuarios / planInfo.limites.max_usuarios) * 100)
   const porcentajeUsoFormularios = () => Math.round((planInfo.uso.formularios / planInfo.limites.max_formularios) * 100)

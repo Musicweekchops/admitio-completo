@@ -10,7 +10,7 @@ const UsuariosView = memo(({
   planInfo, 
   setLimiteAlerta 
 }) => {
-  const isSuperAdmin = user?.rol_id === 'superadmin' || user?.rol_id === 'superowner'
+  const isSuperAdmin = ['superadmin', 'superowner', 'keymaster'].includes(user?.rol_id)
   const [usuarios, setUsuarios] = useState(store.getUsuarios(user?.id, isSuperAdmin))
   const [localEditingUser, setLocalEditingUser] = useState(null)
   const [localShowUserModal, setLocalShowUserModal] = useState(false)
