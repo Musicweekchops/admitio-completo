@@ -1312,6 +1312,7 @@ export function reactivarLead(id, userId) {
 // ALGORITMO DE ASIGNACIÓN INTELIGENTE
 // ============================================
 function asignarLeadInteligente() {
+  const todasLasConsultas = store.consultas
   const encargados = getEncargadosActivos()
   const config = store.config
 
@@ -1319,7 +1320,28 @@ function asignarLeadInteligente() {
     return { enCola: true, razon: 'sin_encargados' }
   }
 
-  const scores = encargados.map(enc => {
+  // 1. FILTRAR ENCARGADOS INACTIVOS (Guardián de 3 días)
+  const AHORA = new Date()
+  const HRS_LIMITE = 72 // 3 días según solicitud del usuario
+  
+  const encargadosOperativos = encargados.filter(enc => {
+    if (!enc.ultimo_activo) return true // Para compatibilidad, si no hay dato asumimos activo
+    
+    const ultimoActivo = new Date(enc.ultimo_activo)
+    const diffHrs = (AHORA - ultimoActivo) / (1000 * 60 * 60)
+    
+    if (diffHrs > HRS_LIMITE) {
+      console.warn(`🕵️‍♂️ Saltando a ${enc.nombre}: Inactivo por ${Math.round(diffHrs)} horas (>72h)`)
+      return false
+    }
+    return true
+  })
+
+  // Si todos están inactivos, avisar pero usar todos (para no perder el lead)
+  // O usar el más reciente.
+  const candidatos = encargadosOperativos.length > 0 ? encargadosOperativos : encargados
+
+  const scores = candidatos.map(enc => {
     const metricas = store.metricas_encargados[enc.id] || {
       leads_recibidos_mes: 0,
       tasa_conversion: 0.1,
@@ -1327,7 +1349,7 @@ function asignarLeadInteligente() {
     }
 
     // Contar leads activos
-    const leadsActivos = store.consultas.filter(c =>
+    const leadsActivos = todasLasConsultas.filter(c =>
       c.asignado_a === enc.id &&
       !c.matriculado &&
       !c.descartado
