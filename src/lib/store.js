@@ -767,6 +767,112 @@ export function createConsulta(data, userId, userRol = null) {
   return enrichConsulta(newConsulta)
 }
 
+/**
+ * Creación MASIVA de consultas (Bulk Import) con Lógica de Negocio
+ * @param {Array} leadsData 
+ * @param {string} userId 
+ * @param {string} userRol 
+ */
+export function createConsultasBulk(leadsData, userId, userRol = null) {
+  if (!leadsData?.length) return;
+
+  console.log(`🚀 [Bulk] Iniciando creación masiva de ${leadsData.length} leads...`);
+
+  const institucionId = getInstitucionIdFromStore();
+  const creador = store.usuarios.find(u => u.id === userId);
+  
+  const newConsultas = [];
+  const newActividades = [];
+  const skipCount = { dups: 0 };
+
+  leadsData.forEach((data, index) => {
+    // 1. Verificación de duplicados (O(N) rápida en memoria)
+    if (data.email || data.telefono) {
+      const dups = buscarDuplicados(data.nombre, data.email || '', data.telefono || '');
+      if (dups.length > 0) {
+        skipCount.dups++;
+        return;
+      }
+    }
+
+    // 2. Vinculación inteligente de carrera
+    let carrera_nombre = data.carrera_nombre || null;
+    let carrera_id = data.carrera_id || null;
+    if (carrera_id && !carrera_nombre) {
+      const carrera = store.carreras.find(c => c.id === carrera_id || c.id === String(carrera_id));
+      carrera_nombre = carrera?.nombre || null;
+    } else if (!carrera_id && carrera_nombre) {
+      const carrera = store.carreras.find(c => c.nombre?.toLowerCase() === carrera_nombre.toLowerCase());
+      if (carrera) carrera_id = carrera.id;
+    }
+
+    // 3. Asignación inteligente
+    let asignado_a = data.asignado_a || null;
+    let en_cola = false;
+    if (!asignado_a) {
+      const resultado = asignarLeadInteligente();
+      if (resultado.enCola) {
+        en_cola = true;
+      } else {
+        asignado_a = resultado.userId;
+      }
+    }
+
+    // 4. Construir objeto Lead
+    const ts = Date.now() + index; // Evitar colisión de IDs locales
+    const newLead = {
+      id: `c-${ts}`,
+      ...data,
+      carrera_id,
+      carrera_nombre,
+      estado: 'nueva',
+      created_at: new Date().toISOString(),
+      asignado_a,
+      en_cola,
+      creado_por: userId,
+      origen_entrada: data.origen_entrada || 'manual'
+    };
+
+    newConsultas.push(newLead);
+
+    // 5. Construir Actividad
+    newActividades.push({
+      lead_id: newLead.id,
+      usuario_id: userId,
+      usuario_nombre: creador?.nombre || 'Sistema',
+      tipo: 'creacion',
+      descripcion: 'Lead ingresado por importación masiva',
+      created_at: newLead.created_at
+    });
+  });
+
+  if (newConsultas.length === 0) {
+    console.warn('⚠️ [Bulk] No se crearon leads (todos eran duplicados).');
+    return;
+  }
+
+  // 6. Actualización total del Store (Atómica localmente)
+  store.consultas.push(...newConsultas);
+  // Nota: store.actividad o store.actividades? Grep indicó store.consultas.push earlier.
+  // Re-confirmando nombre del array de actividad...
+  if (Array.isArray(store.actividad)) {
+    store.actividad.push(...newActividades);
+  } else if (Array.isArray(store.actividades)) {
+    store.actividades.push(...newActividades);
+  }
+
+  saveStore();
+
+  // 7. SYNC MASIVO CON SUPABASE
+  if (institucionId) {
+    syncCrearLeadsBulk(institucionId, newConsultas);
+    syncCrearAccionesBulk(institucionId, newActividades);
+  }
+
+  console.log(`✅ [Bulk] Procesados: ${newConsultas.length} | Saltados: ${skipCount.dups}`);
+  return newConsultas.length;
+}
+
 // ============================================
 // DETECCIÓN DE DUPLICADOS
 // ============================================

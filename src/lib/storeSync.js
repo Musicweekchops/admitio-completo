@@ -353,6 +353,56 @@ export function syncCrearLead(institucionId, leadData) {
   });
 }
 
+/**
+ * Sincronización MASIVA de leads (Batch Insert)
+ * @param {string} institucionId 
+ * @param {Array} leadsArray 
+ */
+export function syncCrearLeadsBulk(institucionId, leadsArray) {
+  if (!institucionId || !leadsArray?.length) return;
+
+  console.log(`🔄 [Bulk] Preparando sincronización de ${leadsArray.length} leads...`);
+
+  addToSyncQueue('crear_leads_bulk', async () => {
+    const batch = leadsArray.map(l => {
+      const insertData = {
+        institucion_id: institucionId,
+        nombre: l.nombre,
+        email: l.email || null,
+        telefono: l.telefono || null,
+        carrera_nombre: l.carrera_nombre || null,
+        medio: l.medio_id || 'CSV',
+        estado: l.estado || 'nueva',
+        prioridad: l.prioridad || 'media',
+        notas: l.notas || null
+      };
+
+      if (l.carrera_id && typeof l.carrera_id === 'string' && l.carrera_id.includes('-')) {
+        insertData.carrera_id = l.carrera_id;
+      }
+      if (l.asignado_a && typeof l.asignado_a === 'string' && l.asignado_a.includes('-')) {
+        insertData.asignado_a = l.asignado_a;
+      }
+      if (l.creado_por && typeof l.creado_por === 'string' && l.creado_por.includes('-')) {
+        insertData.creado_por = l.creado_por;
+      }
+
+      return insertData;
+    });
+
+    console.log(`📤 [Bulk] Enviando lote de ${batch.length} leads a Supabase...`);
+    const { data, error } = await supabase.from('leads').insert(batch).select();
+
+    if (error) {
+      console.error('❌ [Bulk] Error en inserción masiva:', error);
+      throw error;
+    }
+
+    console.log(`✅ [Bulk] Inserción masiva completada exitosamente (${data?.length} filas)`);
+    return data;
+  });
+}
+
 export function syncActualizarLead(leadId, updates) {
   console.log('🔄 syncActualizarLead llamado:', { leadId, updates: Object.keys(updates) });
 
@@ -659,6 +709,35 @@ export async function syncCrearAccion(leadId, accion, usuarioId) {
       console.error('❌ [Queue] Excepción sincronizando acción:', err);
       return { success: false, error: err.message };
     }
+  });
+}
+
+/**
+ * Sincronización MASIVA de acciones (Batch Insert)
+ * @param {string} institucionId 
+ * @param {Array} accionesArray 
+ */
+export function syncCrearAccionesBulk(institucionId, accionesArray) {
+  if (!institucionId || !accionesArray?.length) return;
+
+  console.log(`🔄 [Bulk] Preparando sincronización de ${accionesArray.length} acciones...`);
+
+  return enqueueSyncTask('crear_acciones_bulk', async () => {
+    const batch = accionesArray.map(a => ({
+      lead_id: a.lead_id,
+      usuario_id: a.usuario_id,
+      tipo: a.tipo,
+      descripcion: a.descripcion,
+      usuario_nombre: a.usuario_nombre || 'Sistema',
+      created_at: a.created_at || new Date().toISOString()
+    }));
+
+    const { error } = await supabase.from('acciones_lead').insert(batch);
+    if (error) {
+      console.error('❌ [Bulk] Error sincronizando acciones:', error);
+      throw error;
+    }
+    console.log(`✅ [Bulk] ${batch.length} acciones sincronizadas.`);
   });
 }
 
