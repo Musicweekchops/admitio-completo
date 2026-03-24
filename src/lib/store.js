@@ -688,16 +688,22 @@ export function createConsulta(data, userId, userRol = null) {
   // Obtener info del creador
   const creador = store.usuarios.find(u => u.id === userId)
 
-  // Extraer nombre de carrera si hay carrera_id
+  // Extraer nombre de carrera si hay carrera_id, o buscar ID si hay nombre
   let carrera_nombre = data.carrera_nombre || null
-  if (data.carrera_id && !carrera_nombre) {
-    const carrera = store.carreras.find(c => c.id === data.carrera_id || c.id === String(data.carrera_id))
+  let carrera_id = data.carrera_id || null
+
+  if (carrera_id && !carrera_nombre) {
+    const carrera = store.carreras.find(c => c.id === carrera_id || c.id === String(carrera_id))
     carrera_nombre = carrera?.nombre || null
+  } else if (!carrera_id && carrera_nombre) {
+    const carrera = store.carreras.find(c => c.nombre?.toLowerCase() === carrera_nombre.toLowerCase())
+    if (carrera) carrera_id = carrera.id
   }
 
   const newConsulta = {
     id: `c-${Date.now()}`,
     ...data,
+    carrera_id, // Asegurar el ID para que enrich funcione
     carrera_nombre, // Asegurar que siempre tenga el nombre
     estado: 'nueva',
     emails_enviados: 0,
