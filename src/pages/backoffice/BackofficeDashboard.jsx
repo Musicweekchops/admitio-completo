@@ -127,9 +127,9 @@ const BackofficeDashboard = () => {
       
       setDisputasPendientes(disputasData || [])
 
-      // Todas las instituciones
+      // Todas las instituciones (usando la nueva vista con leads_count)
       const { data: instTodas } = await supabase
-        .from('instituciones')
+        .from('backoffice_lista_instituciones')
         .select('*')
         .order('created_at', { ascending: false })
       
@@ -677,10 +677,11 @@ const BackofficeDashboard = () => {
               <table className="w-full">
                 <thead className="bg-slate-700/50">
                   <tr className="text-slate-400 text-sm">
-                    <th className="text-left px-6 py-3">Institución</th>
+                    <th className="text-left px-6 py-3">ID / Institución</th>
                     <th className="text-left px-6 py-3">Ubicación</th>
                     <th className="text-left px-6 py-3">Tipo</th>
                     <th className="text-left px-6 py-3">Plan</th>
+                    <th className="text-center px-6 py-3">Leads</th>
                     <th className="text-left px-6 py-3">Registro</th>
                     <th className="text-right px-6 py-3">Acciones</th>
                   </tr>
@@ -689,18 +690,21 @@ const BackofficeDashboard = () => {
                   {todasInstituciones.map((inst) => (
                     <tr key={inst.id} className="hover:bg-slate-700/30">
                       <td className="px-6 py-4">
-                        <p className="text-white font-medium">{inst.nombre}</p>
-                        {inst.sitio_web && (
-                          <a 
-                            href={inst.sitio_web} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-violet-400 text-xs hover:underline flex items-center gap-1"
-                          >
-                            <ExternalLink size={10} />
-                            {inst.sitio_web.replace(/https?:\/\//, '').slice(0, 30)}
-                          </a>
-                        )}
+                        <div className="flex flex-col">
+                          <p className="text-[10px] font-mono text-slate-500 uppercase tracking-tighter">{inst.id}</p>
+                          <p className="text-white font-medium">{inst.nombre}</p>
+                          {inst.sitio_web && (
+                            <a 
+                              href={inst.sitio_web} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-violet-400 text-xs hover:underline flex items-center gap-1"
+                            >
+                              <ExternalLink size={10} />
+                              {inst.sitio_web.replace(/https?:\/\//, '').slice(0, 30)}
+                            </a>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-slate-300">
                         {inst.ciudad || '-'}, {inst.pais || 'Chile'}
@@ -712,6 +716,12 @@ const BackofficeDashboard = () => {
                         <span className={`px-2 py-1 rounded text-xs font-medium ${getPlanColor(inst.plan)}`}>
                           {inst.plan || 'free'}
                         </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <div className="flex flex-col items-center">
+                          <span className="text-white font-bold">{formatNumber(inst.leads_count)}</span>
+                          <span className="text-[10px] text-slate-500 uppercase">Leads</span>
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-slate-400 text-sm">
                         {formatDate(inst.created_at)}
