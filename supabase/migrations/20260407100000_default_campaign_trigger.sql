@@ -1,7 +1,17 @@
 -- Migration: 20260407100000_default_campaign_trigger.sql
--- Description: Create 'Extensión' campaign as default, tag existing leads, and add fallback trigger.
+-- Description: Add unique constraint, create 'Extensión' default campaign, and tag existing leads.
 
--- 1. Create 'Extensión' campaign for all institutions if missing
+-- 1. Ensure unique constraint exists for ON CONFLICT to work
+DO $$ 
+BEGIN 
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'campanas_institucion_id_nombre_key'
+  ) THEN
+    ALTER TABLE public.campanas ADD CONSTRAINT campanas_institucion_id_nombre_key UNIQUE (institucion_id, nombre);
+  END IF;
+END $$;
+
+-- 2. Create 'Extensión' campaign for all institutions if missing
 DO $$
 DECLARE
     r RECORD;
@@ -18,14 +28,14 @@ BEGIN
         WHERE nombre = 'Extensión' AND institucion_id = r.id 
         LIMIT 1;
 
-        -- 2. Update existing leads that currenty have no campaign
+        -- 3. Update existing leads that currenty have no campaign
         UPDATE public.leads
         SET campana_id = v_camp_id
         WHERE campana_id IS NULL AND institucion_id = r.id;
     END LOOP;
 END $$;
 
--- 3. Trigger Function for silent fallback (for manual inserts or other tools)
+-- 4. Trigger Function for silent fallback
 CREATE OR REPLACE FUNCTION public.asignar_campana_default()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -49,12 +59,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 4. Apply trigger to 'leads' table
+-- 5. Apply trigger to 'leads' table
 DROP TRIGGER IF EXISTS tr_leads_campana_default ON public.leads;
 CREATE TRIGGER tr_leads_campana_default
 BEFORE INSERT ON public.leads
 FOR EACH ROW
 EXECUTE FUNCTION public.asignar_campana_default();
 
--- 5. Notify to reload cache
+-- 6. Notify to reload cache
 NOTIFY pgrst, 'reload schema';

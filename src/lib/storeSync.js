@@ -335,7 +335,8 @@ export function syncCrearLead(institucionId, leadData) {
       medio: leadData.medio_id || 'otro',
       estado: leadData.estado || 'nueva',
       prioridad: leadData.prioridad || 'media',
-      notas: leadData.notas || null
+      notas: leadData.notas || null,
+      campana_id: leadData.campana_id || null
     };
 
     // Solo incluir carrera_id si es UUID válido (string con guiones y largo)
@@ -389,7 +390,8 @@ export function syncCrearLeadsBulk(institucionId, leadsArray) {
         medio: l.medio_id || 'CSV',
         estado: l.estado || 'nueva',
         prioridad: l.prioridad || 'media',
-        notas: l.notas || null
+        notas: l.notas || null,
+        campana_id: l.campana_id || null
       };
 
       if (l.carrera_id && typeof l.carrera_id === 'string' && l.carrera_id.includes('-')) {

@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS public.campanas (
   fecha_inicio DATE,
   fecha_fin DATE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  UNIQUE (institucion_id, nombre)
 );
 
 -- 2. Add campana_id column to leads table
