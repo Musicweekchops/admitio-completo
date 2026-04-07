@@ -260,17 +260,17 @@ const LineChart = memo(({ data }) => {
   )
 })
 
-const ReportesView = memo(({ 
-  isRector, 
-  isKeyMaster, 
-  user, 
-  consultas, 
-  nombreInstitucion, 
-  reloadFromSupabase, 
-  loadData, 
-  handleRefreshData, 
+const ReportesView = memo(({
+  isRector,
+  isKeyMaster,
+  user,
+  consultas,
+  nombreInstitucion,
+  reloadFromSupabase,
+  loadData,
+  handleRefreshData,
   setNotification,
-  formatearTiempoRespuesta 
+  formatearTiempoRespuesta
 }) => {
   // Estados principales
   const [periodo, setPeriodo] = useState('mes') // 'semana', 'mes', 'trimestre', 'año'
@@ -431,28 +431,28 @@ const ReportesView = memo(({
       if (!porEncargado[encargadoId]) {
         const usuario = todosUsuarios.find(u => u.id === encargadoId)
         const nombreEncargado = usuario?.nombre || c.encargado?.nombre || 'Sin asignar'
-        porEncargado[encargadoId] = { 
-          total: 0, 
-          matriculados: 0, 
+        porEncargado[encargadoId] = {
+          total: 0,
+          matriculados: 0,
           contactados: 0,
           seguimiento: 0,
           gestionados: 0,
-          nombre: nombreEncargado, 
+          nombre: nombreEncargado,
           tasa: 0,
           tasaGestion: 0
         }
       }
       porEncargado[encargadoId].total++
       if (c.matriculado) porEncargado[encargadoId].matriculados++
-      
+
       // Métricas de Gestión
       if (c.estado === 'contactado') porEncargado[encargadoId].contactados++
       if (c.estado === 'seguimiento') porEncargado[encargadoId].seguimiento++
-      
+
       // Total Gestionados (Cualquier estado que no sea 'nueva')
       if (c.estado !== 'nueva') porEncargado[encargadoId].gestionados++
     })
-    
+
     Object.keys(porEncargado).forEach(id => {
       const e = porEncargado[id]
       e.tasa = e.total > 0 ? Math.round((e.matriculados / e.total) * 100) : 0
@@ -727,7 +727,7 @@ const ReportesView = memo(({
           }
         })
       }
-      
+
       // Footer
       const totalP = pdf.internal.getNumberOfPages()
       for (let i = 1; i <= totalP; i++) {
@@ -883,7 +883,7 @@ const ReportesView = memo(({
           )}
           {activeTab === 'carreras' && (
             <div className="space-y-3">
-              {Object.entries(estadisticas?.porCarrera || {}).sort((a,b) => b[1].total - a[1].total).map(([id, d]) => (
+              {Object.entries(estadisticas?.porCarrera || {}).sort((a, b) => b[1].total - a[1].total).map(([id, d]) => (
                 <div key={id} className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg">
                   <div className={`w-3 h-3 rounded-full ${d.color || 'bg-slate-400'}`} />
                   <span className="flex-1 text-slate-700">{d.nombre}</span>
@@ -894,7 +894,7 @@ const ReportesView = memo(({
           )}
           {activeTab === 'medios' && (
             <div className="space-y-3">
-              {Object.entries(estadisticas?.porMedio || {}).sort((a,b) => b[1].total - a[1].total).map(([id, d]) => (
+              {Object.entries(estadisticas?.porMedio || {}).sort((a, b) => b[1].total - a[1].total).map(([id, d]) => (
                 <div key={id} className="flex items-center gap-4 p-3 bg-slate-50 rounded-lg">
                   <Icon name="Share2" size={16} className="text-slate-400" />
                   <span className="flex-1 text-slate-700">{d.nombre}</span>
@@ -908,7 +908,7 @@ const ReportesView = memo(({
               <table className="w-full text-sm">
                 <thead><tr className="text-left text-slate-500"><th className="pb-3">Encargado</th><th className="pb-3 text-center">Leads</th><th className="pb-3 text-center">Cont.</th><th className="pb-3 text-center">Seg.</th><th className="pb-3 text-center">Matr.</th><th className="pb-3 text-center">% Gest.</th><th className="pb-3 text-center">Conv.</th></tr></thead>
                 <tbody>
-                  {Object.entries(estadisticas?.porEncargado || {}).filter(([id]) => id !== 'sin_asignar').sort((a,b) => (b[1].tasa||0)-(a[1].tasa||0)).map(([id, d]) => (
+                  {Object.entries(estadisticas?.porEncargado || {}).filter(([id]) => id !== 'sin_asignar').sort((a, b) => (b[1].tasa || 0) - (a[1].tasa || 0)).map(([id, d]) => (
                     <tr key={id} className="border-t border-slate-50">
                       <td className="py-3 font-medium">{d.nombre}</td>
                       <td className="py-3 text-center">{d.total}</td>

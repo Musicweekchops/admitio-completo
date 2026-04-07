@@ -10,6 +10,7 @@ const ImportarView = ({ user, loadData, setNotification }) => {
   const [results, setResults] = useState(null)
   const [error, setError] = useState(null)
   const [asignarA, setAsignarA] = useState('')
+  const [campanaId, setCampanaId] = useState('')
   const [syncProgress, setSyncProgress] = useState(null)
 
   useEffect(() => {
@@ -27,6 +28,7 @@ const ImportarView = ({ user, loadData, setNotification }) => {
   }, [])
 
   const usuarios = store.getUsuarios() || []
+  const campanasActivas = (store.getCampanas() || []).filter(c => c.activa)
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0]
@@ -101,6 +103,7 @@ const ImportarView = ({ user, loadData, setNotification }) => {
         medio_nombre: lead.medio || 'CSV',
         notas: lead.notas || '',
         asignado_a: asignarA || null,
+        campana_id: campanaId || null,
         tipo_alumno: lead.tipo_alumno || 'nuevo',
         origen_entrada: 'manual'
       }));
@@ -220,17 +223,34 @@ const ImportarView = ({ user, loadData, setNotification }) => {
                 <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0 font-bold">3</div>
                 <div>
                   <p className="font-medium text-slate-700">Asignación de leads (Opcional)</p>
-                  <p className="text-sm text-slate-500 mb-2">Selecciona un operador para asignar todos los leads importados.</p>
-                  <select
-                    value={asignarA}
-                    onChange={e => setAsignarA(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm"
-                  >
-                    <option value="">-- Distribución automática --</option>
-                    {usuarios.map(u => (
-                      <option key={u.id} value={u.id}>{u.nombre}</option>
-                    ))}
-                  </select>
+                  <div className="grid grid-cols-2 gap-4 mt-2">
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1 font-medium uppercase tracking-wider">Encargado</p>
+                      <select
+                        value={asignarA}
+                        onChange={e => setAsignarA(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm"
+                      >
+                        <option value="">-- Distribución automática --</option>
+                        {usuarios.map(u => (
+                          <option key={u.id} value={u.id}>{u.nombre}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1 font-medium uppercase tracking-wider">Campaña</p>
+                      <select
+                        value={campanaId}
+                        onChange={e => setCampanaId(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-violet-600"
+                      >
+                        <option value="" className="text-slate-500">-- Sin campaña --</option>
+                        {campanasActivas.map(c => (
+                          <option key={c.id} value={c.id}>{c.nombre}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

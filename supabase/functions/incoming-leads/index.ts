@@ -90,7 +90,7 @@ serve(async (req) => {
     }
 
     // ========== TRANSFORMACIONES DE DATOS (REFINADO) ==========
-    
+
     // Normalización de Teléfono
     if (telefono) {
       telefono = String(telefono).replace(/\D/g, '')
@@ -114,11 +114,11 @@ serve(async (req) => {
 
     // 4. Lógica de De-duplicación (SaaS Optimization)
     let existingLead = null
-    
+
     // Buscar por email o teléfono
     if (email || telefono) {
       console.log(`🔍 Buscando duplicados para ${email || 'S/E'} o ${telefono || 'S/T'}...`)
-      
+
       let query = supabase
         .from('leads')
         .select('id, nombre, carreras_interes, carrera_nombre, estado')
@@ -127,7 +127,7 @@ serve(async (req) => {
       // Búsqueda flexible de teléfono (con y sin +)
       let telConPlus = ''
       let telSinPlus = ''
-      
+
       if (telefono) {
         telConPlus = telefono.startsWith('+') ? telefono : `+${telefono}`
         telSinPlus = telefono.replace('+', '')
@@ -187,7 +187,7 @@ serve(async (req) => {
       // ACTUALIZAR LEAD EXISTENTE
       leadId = existingLead.id
       isUpdate = true
-      
+
       console.log(`♻️ Duplicado detectado, actualizando lead: ${leadId}`)
 
       // Para que el webhook sea visible:
@@ -199,7 +199,7 @@ serve(async (req) => {
       }
 
       await supabase.from('leads').update(updateData).eq('id', leadId)
-      
+
       await supabase.from('acciones_lead').insert({
         lead_id: leadId,
         tipo: 'actualizacion_automatica',
@@ -228,9 +228,9 @@ serve(async (req) => {
         console.error('❌ Error insertando lead:', leadError)
         throw new Error(`Error al crear el lead: ${leadError.message}`)
       }
-      
+
       leadId = newLead.id
-      
+
       await supabase.from('acciones_lead').insert({
         lead_id: leadId,
         tipo: 'creacion_automatica',
@@ -249,7 +249,7 @@ serve(async (req) => {
 
       if (fullLead && fullLead.asignado_a && fullLead.usuarios) {
         console.log(`📣 Disparando notificación para encargado: ${fullLead.usuarios.email}`);
-        
+
         // Llamar a la función notify-assignment
         // Lo hacemos de forma asíncrona (sin esperar) para no retrasar el webhook
         const notifyParams = {

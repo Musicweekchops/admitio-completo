@@ -89,7 +89,19 @@ export async function cargarDatosInstitucion(institucionId) {
       .order('created_at', { ascending: false })
       .abortSignal(controller.signal);
 
-    // 5. Cargar acciones de leads
+    if (formulariosError) throw formulariosError;
+
+    // 5. Cargar campañas
+    const { data: campanas, error: campanasError } = await supabase
+      .from('campanas')
+      .select('*')
+      .eq('institucion_id', institucionId)
+      .order('nombre', { ascending: true })
+      .abortSignal(controller.signal);
+
+    if (campanasError) throw campanasError;
+
+    // 6. Cargar acciones de leads
     const leadIds = (leads || []).map(l => l.id);
     let acciones = [];
     if (leadIds.length > 0) {

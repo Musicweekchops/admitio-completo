@@ -181,8 +181,8 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
             <div className="flex items-center justify-between mb-2">
               <span className="font-semibold text-slate-800">{selectedDuplicado.nombre}</span>
               <span className={`px-2 py-1 rounded-full text-xs font-medium ${selectedDuplicado.matriculado ? 'bg-emerald-100 text-emerald-700' :
-                  selectedDuplicado.descartado ? 'bg-slate-100 text-slate-600' :
-                    'bg-blue-100 text-blue-700'
+                selectedDuplicado.descartado ? 'bg-slate-100 text-slate-600' :
+                  'bg-blue-100 text-blue-700'
                 }`}>
                 {selectedDuplicado.matriculado ? 'Matriculado' :
                   selectedDuplicado.descartado ? 'Descartado' :

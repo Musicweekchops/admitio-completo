@@ -57,7 +57,7 @@ function initStore() {
   // Limpiamos datos riskosos previos si existen
   try {
     localStorage.removeItem(STORAGE_KEY)
-  } catch(e) {}
+  } catch (e) { }
 
   const userSession = localStorage.getItem('admitio_user')
 
@@ -88,6 +88,7 @@ function initStore() {
       correos_enviados: [],
       notificaciones: [],
       importaciones: [],
+      campanas: [],
       _supabase_sync: true
     }
   }
@@ -105,6 +106,7 @@ function initStore() {
     tipos_actividad: TIPOS_ACTIVIDAD,
     plantillas: PLANTILLAS_CORREO,
     formularios: FORMULARIOS,
+    campanas: [],
     config: CONFIG_ORG,
     metricas_encargados: METRICAS_ENCARGADOS,
     recordatorios: RECORDATORIOS_INICIALES,
@@ -130,8 +132,8 @@ export function resetStore() {
   try {
     localStorage.removeItem(STORAGE_KEY)
     localStorage.removeItem('admitio_version')
-  } catch(e) {}
-  
+  } catch (e) { }
+
   store = initStore()
   console.log('🔄 Store reseteado (Memoria Limpia)')
   return store
@@ -176,7 +178,7 @@ export function reloadStore() {
 // NUEVO: Aplicar actualización incremental de Realtime
 export function applyRealtimeUpdate(payload) {
   if (!payload || !payload.table === 'leads') return;
-  
+
   const { eventType, new: newRecord, old: oldRecord } = payload;
   console.log(`🔌 store.applyRealtimeUpdate: ${eventType} en ${payload.table} ID:${newRecord?.id || oldRecord?.id}`);
 
@@ -185,12 +187,12 @@ export function applyRealtimeUpdate(payload) {
     if (!store.consultas.some(c => c.id === newRecord.id)) {
       store.consultas = [newRecord, ...store.consultas];
     }
-  } 
+  }
   else if (eventType === 'UPDATE') {
-    store.consultas = store.consultas.map(c => 
+    store.consultas = store.consultas.map(c =>
       c.id === newRecord.id ? { ...c, ...newRecord } : c
     );
-  } 
+  }
   else if (eventType === 'DELETE') {
     store.consultas = store.consultas.filter(c => c.id !== oldRecord.id);
   }
@@ -662,11 +664,17 @@ export function getConsultaById(id) {
 }
 
 function enrichConsulta(c) {
+  const carrera = (store.carreras || []).find(ca => ca.id === c.carrera_id)
+  const medio = (store.medios || []).find(m => m.id === c.medio_id)
+  const encargado = (store.usuarios || []).find(u => u.id === c.asignado_a)
+  const campana = (store.campanas || []).find(cam => cam.id === c.campana_id)
+
   return {
     ...c,
-    carrera: (store.carreras || []).find(ca => ca.id === c.carrera_id),
-    medio: (store.medios || []).find(m => m.id === c.medio_id),
-    encargado: (store.usuarios || []).find(u => u.id === c.asignado_a),
+    carrera,
+    medio,
+    encargado,
+    campana,
     recordatorios: (store.recordatorios || []).filter(r => r.lead_id === c.id && !r.disparado)
   }
 }
@@ -782,7 +790,7 @@ export function createConsultasBulk(leadsData, userId, userRol = null) {
 
   const institucionId = getInstitucionIdFromStore();
   const creador = store.usuarios.find(u => u.id === userId);
-  
+
   const newConsultas = [];
   const newActividades = [];
   const skipCount = { dups: 0 };
@@ -1413,10 +1421,10 @@ export function asignarDesdeColaA(leadId, userId, asignadoPor) {
 
 export async function autoAsignarLeadsHuerfanos(userId) {
   console.log('🤖 Iniciando barrido de leads huérfanos...');
-  const huerfanos = (store.consultas || []).filter(c => 
-    !c.asignado_a && 
-    !c.matriculado && 
-    !c.descartado && 
+  const huerfanos = (store.consultas || []).filter(c =>
+    !c.asignado_a &&
+    !c.matriculado &&
+    !c.descartado &&
     !c.en_cola
   )
 
@@ -1427,7 +1435,7 @@ export async function autoAsignarLeadsHuerfanos(userId) {
 
   console.log(`📊 Encontrados ${huerfanos.length} leads huérfanos. Procesando...`);
   let count = 0
-  
+
   for (const lead of huerfanos) {
     const resultado = asignarLeadInteligente()
     if (!resultado.enCola && resultado.userId) {
@@ -1435,7 +1443,7 @@ export async function autoAsignarLeadsHuerfanos(userId) {
       const idx = store.consultas.findIndex(c => c.id === lead.id)
       if (idx !== -1) {
         store.consultas[idx].asignado_a = resultado.userId
-        
+
         // Disparar sincronización asíncrona (encolada en storeSync por debajo)
         try {
           // Usamos updateConsultaAsync que ya tiene el mutex y los timeouts
@@ -3118,3 +3126,81 @@ export function eliminarRegistroImportacion(id) {
 
 // Importar para uso externo
 export { ROLES, ESTADOS, TIPOS_ALUMNO, TIPOS_ACTIVIDAD }
+
+// ============================================
+// GESTIÓN DE CAMPAÑAS
+// ============================================
+
+export function getCampanas() {
+  return store.campanas || []
+}
+
+export async function createCampana(data) {
+  const institucionId = getInstitucionIdFromStore()
+  if (!institucionId) return { error: 'No se pudo obtener el ID de la institución' }
+
+  const newCampana = {
+    ...data,
+    institucion_id: institucionId,
+    activa: true,
+    created_at: new Date().toISOString()
+  }
+
+  try {
+    const { data: created, error } = await supabase
+      .from('campanas')
+      .insert(newCampana)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    store.campanas.push(created)
+    saveStore()
+    return { success: true, campana: created }
+  } catch (err) {
+    console.error('Error creando campaña:', err)
+    return { error: err.message }
+  }
+}
+
+export async function updateCampana(id, updates) {
+  try {
+    const { data: updated, error } = await supabase
+      .from('campanas')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    const index = store.campanas.findIndex(c => c.id === id)
+    if (index !== -1) {
+      store.campanas[index] = updated
+      saveStore()
+    }
+    return { success: true, campana: updated }
+  } catch (err) {
+    console.error('Error actualizando campaña:', err)
+    return { error: err.message }
+  }
+}
+
+export async function deleteCampana(id) {
+  try {
+    const { error } = await supabase
+      .from('campanas')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+
+    store.campanas = store.campanas.filter(c => c.id !== id)
+    saveStore()
+    return { success: true }
+  } catch (err) {
+    console.error('Error eliminando campaña:', err)
+    return { error: err.message }
+  }
+}

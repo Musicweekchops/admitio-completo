@@ -20,12 +20,12 @@ const SearchInput = memo(({ searchTerm, setSearchTerm }) => {
   return (
     <div className="flex-1 min-w-[200px] relative">
       <Icon name="Search" className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" size={20} />
-      <input 
-        type="text" 
+      <input
+        type="text"
         placeholder="Nombre, email o teléfono..."
-        value={localValue} 
+        value={localValue}
         onChange={(e) => setLocalValue(e.target.value)}
-        className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500" 
+        className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500"
       />
     </div>
   )
@@ -91,6 +91,11 @@ const KanbanView = memo(({ filteredConsultas, selectConsulta, isKeyMaster, selec
                     <span className="text-xs text-slate-500">{consulta.carrera?.nombre || consulta.carrera_nombre || 'Sin carrera'}</span>
                     {consulta.tipo_alumno === 'antiguo' && (
                       <span className="px-1.5 py-0.5 bg-violet-100 text-violet-600 text-xs rounded">Antiguo</span>
+                    )}
+                    {consulta.campana && (
+                      <span className={`px-1.5 py-0.5 ${consulta.campana.color || 'bg-violet-500'} text-white text-[10px] uppercase font-bold rounded shadow-sm`}>
+                        {consulta.campana.nombre}
+                      </span>
                     )}
                   </div>
                   <div className="flex items-center justify-between text-xs text-slate-400">
@@ -234,11 +239,11 @@ const ListView = memo(({ filteredConsultas, selectConsulta, isKeyMaster, selecte
   </div>
 ))
 
-const ConsultasView = memo(({ 
-  isKeyMaster, canEdit, handleNuevoLead, searchTerm, setSearchTerm, 
-  filterCarrera, setFilterCarrera, filterEstado, setFilterEstado, 
+const ConsultasView = memo(({
+  isKeyMaster, canEdit, handleNuevoLead, searchTerm, setSearchTerm,
+  filterCarrera, setFilterCarrera, filterEstado, setFilterEstado,
   filterTipoAlumno, setFilterTipoAlumno, viewMode, setViewMode,
-  filteredConsultas, selectConsulta, selectedLeads, setSelectedLeads, formatDateShort 
+  filteredConsultas, selectConsulta, selectedLeads, setSelectedLeads, formatDateShort
 }) => {
   const carrerasDisponibles = store.getCarreras().length > 0 ? store.getCarreras() : CARRERAS
 
@@ -299,7 +304,7 @@ const ConsultasView = memo(({
       </div>
 
       {viewMode === 'kanban' ? (
-        <KanbanView 
+        <KanbanView
           filteredConsultas={filteredConsultas}
           selectConsulta={selectConsulta}
           isKeyMaster={isKeyMaster}
@@ -308,7 +313,7 @@ const ConsultasView = memo(({
           formatDateShort={formatDateShort}
         />
       ) : (
-        <ListView 
+        <ListView
           filteredConsultas={filteredConsultas}
           selectConsulta={selectConsulta}
           isKeyMaster={isKeyMaster}

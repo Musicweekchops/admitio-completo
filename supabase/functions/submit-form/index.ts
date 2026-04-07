@@ -70,7 +70,7 @@ serve(async (req) => {
         .eq('activa', true)
         .limit(1)
         .single()
-      
+
       if (carreraMatch) {
         carrera_id = carreraMatch.id
       }
