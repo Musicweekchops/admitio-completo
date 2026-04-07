@@ -151,6 +151,9 @@ export async function cargarDatosInstitucion(institucionId) {
         nombre: f.nombre,
         activo: f.activo
       })),
+      campanas: (campanas || []).map(c => ({
+        ...c
+      })),
       actividad: acciones.slice(0, 50).map(a => ({
         id: a.id,
         tipo: a.tipo,
