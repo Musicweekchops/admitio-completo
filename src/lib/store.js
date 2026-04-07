@@ -712,7 +712,7 @@ export function createConsulta(data, userId, userRol = null) {
   }
 
   const newConsulta = {
-    id: `c-${Date.now()}`,
+    id: crypto.randomUUID(),
     ...data,
     carrera_id, // Asegurar el ID para que enrich funcione
     carrera_nombre, // Asegurar que siempre tenga el nombre
@@ -799,7 +799,7 @@ export function createConsultasBulk(leadsData, userId, userRol = null) {
   leadsData.forEach((data, index) => {
     // 1. Verificación de duplicados (O(N) rápida en memoria)
     if (data.email || data.telefono) {
-      const dups = buscarDuplicados(data.nombre, data.email || '', data.telefono || '');
+      const dups = buscarDuplicados(data.nombre, data.email || '', data.telefono || '', data.campana_id);
       if (dups.length > 0) {
         skipCount.dups++;
         return;
@@ -830,9 +830,8 @@ export function createConsultasBulk(leadsData, userId, userRol = null) {
     }
 
     // 4. Construir objeto Lead
-    const ts = Date.now() + index; // Evitar colisión de IDs locales
     const newLead = {
-      id: `c-${ts}`,
+      id: crypto.randomUUID(),
       ...data,
       carrera_id,
       carrera_nombre,
@@ -923,13 +922,22 @@ function calcularSimilitud(str1, str2) {
   return Math.round((coincidencias / maxPalabras) * 100)
 }
 
-export function buscarDuplicados(nombre, email = null, telefono = null) {
+export function buscarDuplicados(nombre, email = null, telefono = null, campanaId = null) {
   const nombreNormalizado = nombre.toLowerCase().trim()
   const UMBRAL_MINIMO = 95 // Solo mostrar si >= 95%
 
   const resultados = store.consultas.map(c => {
     let porcentajeCoincidencia = 0
     let tipoCoincidencia = []
+
+    // 0. Si se especifica campaña, ignorar registros de otras campañas
+    if (campanaId && c.campana_id !== campanaId) {
+      return {
+        consulta: c,
+        porcentajeCoincidencia: 0,
+        tipoCoincidencia: []
+      }
+    }
 
     // 1. Verificar email (coincidencia exacta = 100%)
     if (email && c.email) {

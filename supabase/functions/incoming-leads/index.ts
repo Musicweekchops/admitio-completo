@@ -33,7 +33,7 @@ serve(async (req) => {
       throw new Error('Método no permitido')
     }
 
-    // 1. Verificar API Key en Headers
+     // 1. Verificar API Key en Headers
     const apiKey = req.headers.get('x-api-key')
     if (!apiKey) {
       throw new Error('No se proporcionó API Key (x-api-key header missing)')
@@ -91,87 +91,30 @@ serve(async (req) => {
       throw new Error(`Límite de leads alcanzado (${inst.leads_count}/${planConfig.max_leads}).`)
     }
 
-    // ========== TRANSFORMACIONES DE DATOS (REFINADO) ==========
+    // ========== TRANSFORMACIONES Y RESOLUCIÓN ==========
 
-    // Normalización de Teléfono
-    if (telefono) {
-      telefono = String(telefono).replace(/\D/g, '')
-    }
-
+    // Normalización
+    if (telefono) telefono = String(telefono).replace(/\D/g, '')
+    if (email) email = email.toLowerCase().trim()
+    
     // Mapeo de Medio
     if (medio) {
       const medioLower = medio.toLowerCase().trim()
       const mappingMedio: Record<string, string> = {
-        'ig': 'instagram',
-        'fb': 'facebook',
-        'google': 'google ads',
-        'sheet': 'google sheets'
+        'ig': 'instagram', 'fb': 'facebook', 'google': 'google ads', 'sheet': 'google sheets'
       }
       medio = mappingMedio[medioLower] || medio
     }
 
-    if (email) email = email.toLowerCase().trim()
-
-    console.log(`📥 [SaaS] Lead para ${inst.nombre}: ${nombre} | Tel: ${telefono}`)
-
-    // 4. Lógica de De-duplicación (SaaS Optimization)
-    let existingLead = null
-
-    // Buscar por email o teléfono
-    if (email || telefono) {
-      console.log(`🔍 Buscando duplicados para ${email || 'S/E'} o ${telefono || 'S/T'}...`)
-
-      let query = supabase
-        .from('leads')
-        .select('id, nombre, carreras_interes, carrera_nombre, estado')
-        .eq('institucion_id', inst.id)
-
-      // Búsqueda flexible de teléfono (con y sin +)
-      let telConPlus = ''
-      let telSinPlus = ''
-
-      if (telefono) {
-        telConPlus = telefono.startsWith('+') ? telefono : `+${telefono}`
-        telSinPlus = telefono.replace('+', '')
-      }
-
-      if (email && telefono) {
-        query = query.or(`email.eq.${email},telefono.eq.${telefono},telefono.eq.${telConPlus},telefono.eq.${telSinPlus}`)
-      } else if (email) {
-        query = query.eq('email', email)
-      } else if (telefono) {
-        query = query.or(`telefono.eq.${telefono},telefono.eq.${telConPlus},telefono.eq.${telSinPlus}`)
-      }
-
-      // Traer el más reciente si hay varios para evitar el error de maybeSingle
-      const { data: duplicateData, error: searchError } = await query
-        .order('updated_at', { ascending: false })
-        .limit(1)
-
-      if (searchError) {
-        console.error('⚠️ Error en búsqueda de duplicados:', searchError)
-      } else if (duplicateData && duplicateData.length > 0) {
-        existingLead = duplicateData[0]
-        console.log(`✅ Duplicado encontrado: ${existingLead.nombre} (${existingLead.id})`)
-      } else {
-        console.log('✨ No se encontraron duplicados.')
-      }
-    }
-
-    // 5. Resolver carrera_id con lógica inteligente
+    // 3.1 Resolver carrera_id
     let carrera_id = null
     let carrera_nombre_final = carrera
-
     if (carrera) {
       const carreraLower = carrera.toLowerCase().trim()
       const { data: carrerasExistentes } = await supabase
-        .from('carreras')
-        .select('id, nombre')
-        .eq('institucion_id', inst.id)
-        .eq('activa', true)
-
+        .from('carreras').select('id, nombre').eq('institucion_id', inst.id).eq('activa', true)
       if (carrerasExistentes) {
-        const match = carrerasExistentes.find(c => {
+        const match = (carrerasExistentes as any[]).find(c => {
           const dbName = c.nombre.toLowerCase()
           return dbName.includes(carreraLower) || carreraLower.includes(dbName)
         })
@@ -182,24 +125,47 @@ serve(async (req) => {
       }
     }
 
-    // 5.1 Resolver campana_id
-    let campana_id_final = campana_id;
+    // 3.2 Resolver campana_id (CRÍTICO: Hacerlo antes de buscar duplicados)
+    let campana_id_final = campana_id
     if (!campana_id_final && campana) {
-      const campanaLower = campana.toLowerCase().trim();
+      const campanaLower = campana.toLowerCase().trim()
       const { data: campanasExistentes } = await supabase
-        .from('campanas')
-        .select('id, nombre')
-        .eq('institucion_id', inst.id)
-        .eq('activa', true);
-
+        .from('campanas').select('id, nombre').eq('institucion_id', inst.id).eq('activa', true)
       if (campanasExistentes) {
         const match = (campanasExistentes as any[]).find(c => {
-          const dbName = c.nombre.toLowerCase();
-          return dbName.includes(campanaLower) || campanaLower.includes(dbName);
-        });
-        if (match) {
-          campana_id_final = match.id;
-        }
+          const dbName = c.nombre.toLowerCase()
+          return dbName.includes(campanaLower) || campanaLower.includes(dbName)
+        })
+        if (match) campana_id_final = match.id
+      }
+    }
+
+    // 4. Lógica de De-duplicación (Ahora con Campaña)
+    let existingLead = null
+    if (email || telefono) {
+      console.log(`🔍 [SaaS] Buscando duplicados para ${email || 'S/E'} | Campaña: ${campana_id_final || 'Global'}`)
+      
+      let query = supabase.from('leads').select('*').eq('institucion_id', inst.id)
+      
+      // Filtro por campaña (El requerimiento: si es otra campaña, NO es duplicado)
+      if (campana_id_final) {
+        query = query.eq('campana_id', campana_id_final)
+      } else {
+        query = query.is('campana_id', null)
+      }
+
+      if (email && telefono) {
+        query = query.or(`email.eq.${email},telefono.eq.${telefono}`)
+      } else if (email) {
+        query = query.eq('email', email)
+      } else {
+        query = query.eq('telefono', telefono)
+      }
+
+      const { data: duplicateData } = await query.order('updated_at', { ascending: false }).limit(1)
+      if (duplicateData && duplicateData.length > 0) {
+        existingLead = duplicateData[0]
+        console.log(`✅ Duplicado encontrado en esta campaña: ${existingLead.id}`)
       }
     }
 

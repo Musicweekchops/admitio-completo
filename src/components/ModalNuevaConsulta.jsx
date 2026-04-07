@@ -21,7 +21,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
 
   const resetForm = () => {
     setFormData({
-      nombre: '', email: '', telefono: '', carrera_id: '', medio_id: 'web', notas: '', asignado_a: '', tipo_alumno: 'nuevo'
+      nombre: '', email: '', telefono: '', carrera_id: '', campana_id: '', medio_id: 'web', notas: '', asignado_a: '', tipo_alumno: 'nuevo'
     })
     setSuccess(false)
     setDuplicados([])
@@ -31,7 +31,7 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
 
   const verificarDuplicados = () => {
     if (formData.nombre.length >= 3 || formData.email.length >= 5) {
-      const encontrados = store.buscarDuplicados(formData.nombre, formData.email, formData.telefono)
+      const encontrados = store.buscarDuplicados(formData.nombre, formData.email, formData.telefono, formData.campana_id)
       setDuplicados(encontrados)
       return encontrados
     }
@@ -319,6 +319,24 @@ const ModalNuevaConsulta = ({ isOpen, onClose, onCreated, isKeyMaster, userId, u
               className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
               <option value="">Seleccionar carrera</option>
               {carrerasDisponibles.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Campaña (Opcional)</label>
+            <select value={formData.campana_id}
+              onChange={e => {
+                const newId = e.target.value;
+                setFormData({ ...formData, campana_id: newId });
+                // Re-verificar duplicados si cambia la campaña
+                if (formData.nombre.length >= 3 || formData.email.length >= 5) {
+                  store.buscarDuplicados(formData.nombre, formData.email, formData.telefono, newId);
+                }
+              }}
+              className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 font-medium text-violet-600">
+              <option value="">Sin campaña específica</option>
+              {(store.campanas || []).filter(c => c.activa).map(c => (
+                <option key={c.id} value={c.id}>{c.nombre}</option>
+              ))}
             </select>
           </div>
           <div>
