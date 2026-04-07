@@ -18,6 +18,8 @@ interface IncomingLead {
   telefono?: string
   carrera?: string // Nombre de la carrera
   medio?: string
+  campana?: string // Nombre de la campaña
+  campana_id?: string // UUID de la campaña
 }
 
 serve(async (req) => {
@@ -38,7 +40,7 @@ serve(async (req) => {
     }
 
     const body: IncomingLead = await req.json()
-    let { nombre, email, telefono, carrera, medio } = body
+    let { nombre, email, telefono, carrera, medio, campana, campana_id } = body
 
     if (!nombre) {
       throw new Error('El campo "nombre" (o "full_name") es obligatorio')
@@ -180,6 +182,27 @@ serve(async (req) => {
       }
     }
 
+    // 5.1 Resolver campana_id
+    let campana_id_final = campana_id;
+    if (!campana_id_final && campana) {
+      const campanaLower = campana.toLowerCase().trim();
+      const { data: campanasExistentes } = await supabase
+        .from('campanas')
+        .select('id, nombre')
+        .eq('institucion_id', inst.id)
+        .eq('activa', true);
+
+      if (campanasExistentes) {
+        const match = (campanasExistentes as any[]).find(c => {
+          const dbName = c.nombre.toLowerCase();
+          return dbName.includes(campanaLower) || campanaLower.includes(dbName);
+        });
+        if (match) {
+          campana_id_final = match.id;
+        }
+      }
+    }
+
     let leadId = null
     let isUpdate = false
 
@@ -217,6 +240,7 @@ serve(async (req) => {
           telefono,
           carrera_id,
           carrera_nombre: carrera_nombre_final,
+          campana_id: campana_id_final,
           medio: medio || 'API SaaS',
           estado: 'nueva',
           prioridad: 'media'
