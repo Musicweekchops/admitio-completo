@@ -29,21 +29,27 @@ const CampanasView = ({ user, setNotification }) => {
       fecha_fin: formData.get('fecha_fin') || null
     }
 
-    let res
-    if (editingCampana) {
-      res = await store.updateCampana(editingCampana.id, data)
-    } else {
-      res = await store.createCampana(data)
-    }
+    try {
+      let res
+      if (editingCampana) {
+        res = await store.updateCampana(editingCampana.id, data)
+      } else {
+        res = await store.createCampana(data)
+      }
 
-    if (res.success) {
-      setNotification({ type: 'success', message: editingCampana ? 'Campaña actualizada' : 'Campaña creada' })
-      setShowModal(false)
-      setEditingCampana(null)
-    } else {
-      setNotification({ type: 'error', message: res.error })
+      if (res.success) {
+        setNotification({ type: 'success', message: editingCampana ? 'Campaña actualizada' : 'Campaña creada' })
+        setShowModal(false)
+        setEditingCampana(null)
+      } else {
+        setNotification({ type: 'error', message: res.error || 'Error al procesar campaña' })
+      }
+    } catch (err) {
+      console.error('CRITICAL Error en handleSave:', err)
+      setNotification({ type: 'error', message: 'Error inesperado en el cliente' })
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const toggleStatus = async (campana) => {

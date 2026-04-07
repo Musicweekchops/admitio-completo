@@ -212,6 +212,7 @@ export function setAllData(newData) {
     usuarios: newData.usuarios || [],
     carreras: newData.carreras || [],
     formularios: newData.formularios || [],
+    campanas: newData.campanas || store.campanas || [],
     actividad: newData.actividad || []
   }
 }
@@ -3155,6 +3156,7 @@ export async function createCampana(data) {
 
     if (error) throw error
 
+    if (!store.campanas) store.campanas = []
     store.campanas.push(created)
     saveStore()
     return { success: true, campana: created }
