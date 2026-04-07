@@ -737,6 +737,7 @@ export function AuthProvider({ children }) {
         { data: usuarios },
         { data: carreras },
         { data: formularios },
+        { data: campanas },
         { data: acciones }
       ] = await Promise.all([
         supabase
@@ -770,6 +771,13 @@ export function AuthProvider({ children }) {
           .abortSignal(controller.signal),
         
         supabase
+          .from('campanas')
+          .select('*')
+          .eq('institucion_id', institucionId)
+          .order('nombre', { ascending: true })
+          .abortSignal(controller.signal),
+        
+        supabase
           .from('acciones_lead')
           .select('*')
           .order('created_at', { ascending: false })
@@ -798,6 +806,7 @@ export function AuthProvider({ children }) {
           fecha_cierre: lead.fecha_cierre,
           matriculado: lead.matriculado || false,
           descartado: lead.descartado || false,
+          campana_id: lead.campana_id,
           updated_at: lead.updated_at
         })),
         usuarios: (usuarios || []).map(u => ({
@@ -835,6 +844,9 @@ export function AuthProvider({ children }) {
           usuario_id: a.usuario_id,
           lead_id: a.lead_id
         })),
+        campanas: (campanas || []).map(c => ({
+          ...c
+        })),
         medios: [
           { id: 'instagram', nombre: 'Instagram', icono: 'Instagram', color: 'text-pink-500' },
           { id: 'web', nombre: 'Sitio Web', icono: 'Globe', color: 'text-blue-500' },
@@ -863,7 +875,8 @@ export function AuthProvider({ children }) {
         leads: storeData.consultas.length,
         usuarios: storeData.usuarios.length,
         carreras: storeData.carreras.length,
-        formularios: storeData.formularios.length
+        formularios: storeData.formularios.length,
+        campanas: storeData.campanas.length
       })
 
       await loadPlanInfo(institucionId, storeData.consultas.length, storeData.usuarios.length)
