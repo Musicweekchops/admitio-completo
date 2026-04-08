@@ -127,14 +127,17 @@ serve(async (req) => {
 
     // 3.2 Resolver campana_id (CRÍTICO: Hacerlo antes de buscar duplicados)
     let campana_id_final = campana_id
-    if (!campana_id_final && campana) {
-      const campanaLower = campana.toLowerCase().trim()
-      const { data: campanasExistentes } = await supabase
-        .from('campanas').select('id, nombre').eq('institucion_id', inst.id).eq('activa', true)
+    
+    // Si no viene campaña, buscar 'Extensión' como default (para mantener coherencia con el trigger)
+    const { data: campanasExistentes } = await supabase
+      .from('campanas').select('id, nombre').eq('institucion_id', inst.id).eq('activa', true)
+    
+    if (!campana_id_final) {
+      const campanaBusqueda = campana ? campana.toLowerCase().trim() : 'extensión';
       if (campanasExistentes) {
         const match = (campanasExistentes as any[]).find(c => {
           const dbName = c.nombre.toLowerCase()
-          return dbName.includes(campanaLower) || campanaLower.includes(dbName)
+          return dbName.includes(campanaBusqueda) || campanaBusqueda.includes(dbName)
         })
         if (match) campana_id_final = match.id
       }
