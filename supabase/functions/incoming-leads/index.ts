@@ -202,7 +202,7 @@ serve(async (req) => {
       await supabase.from('acciones_lead').insert({
         lead_id: leadId,
         tipo: 'actualizacion_automatica',
-        descripcion: `Re-entrada vía API SaaS (${medio || 'Externo'}). Perfil/Notas: ${notas || 'Sin cambios'}`
+        descripcion: `Re-entrada vía API SaaS. Medio: ${medio}. Notas: ${notas || 'Sin cambios'}`
       })
 
     } else {
@@ -234,8 +234,8 @@ serve(async (req) => {
 
       await supabase.from('acciones_lead').insert({
         lead_id: leadId,
-        tipo: 'actualizacion_automatica',
-        descripcion: `Re-entrada vía API SaaS (${medio || 'Externo'}). Perfil/Notas: ${notas || 'Sin cambios'}`
+        tipo: 'creacion_automatica',
+        descripcion: `Lead cargado vía API SaaS. Medio: ${medio}. Notas: ${notas || 'Ninguna'}`
       })
     }
 
@@ -291,7 +291,6 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         message: isUpdate ? `♻️ Lead actualizado: ${nombre}` : `✅ Lead creado: ${nombre}`,
-        lead_id: leadId,
         lead_nombre: nombre,
         is_update: isUpdate,
         leads_total: inst.leads_count + (isUpdate ? 0 : 1),
