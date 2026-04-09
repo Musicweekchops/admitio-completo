@@ -202,7 +202,7 @@ serve(async (req) => {
       await supabase.from('acciones_lead').insert({
         lead_id: leadId,
         tipo: 'actualizacion_automatica',
-        descripcion: `Re-entrada vía API SaaS. Medio: ${medio}. Notas: ${notas || 'Sin cambios'}`
+        descripcion: `[VERSIÓN 2.5] Re-entrada vía Webhook. Medio: ${medio}. Notas: ${notas || 'Sin cambios'}`
       })
 
     } else {
@@ -235,7 +235,7 @@ serve(async (req) => {
       await supabase.from('acciones_lead').insert({
         lead_id: leadId,
         tipo: 'creacion_automatica',
-        descripcion: `Lead cargado vía API SaaS. Medio: ${medio}. Notas: ${notas || 'Ninguna'}`
+        descripcion: `[VERSIÓN 2.5] Nuevo Lead vía Webhook. Medio: ${medio}. Notas: ${notas || 'Ninguna'}`
       })
     }
 
