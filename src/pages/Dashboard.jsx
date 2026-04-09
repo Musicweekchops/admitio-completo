@@ -18,6 +18,7 @@ import DashboardView from '../components/DashboardView'
 import ConsultasView from '../components/ConsultasView'
 import HistorialView from '../components/HistorialView'
 import DetalleView from '../components/DetalleView'
+import CampanasView from '../components/CampanasView'
 import ModalNuevaConsulta from '../components/ModalNuevaConsulta'
 import PieChart from '../components/PieChart'
 import { getSyncStatus } from '../lib/storeSync'
@@ -107,7 +108,7 @@ export default function Dashboard() {
 
   const setupRealtime = useCallback(() => {
     if (!isSupabaseConfigured() || !user?.institucion_id) return
-    
+
     // Evitar acumulaciones de canales
     if (channelRef.current && channelRef.current.cleanup) {
       channelRef.current.cleanup()
@@ -193,7 +194,7 @@ export default function Dashboard() {
     const encargado = store.getUsuarios().find(u => u.id === nuevoEncargado)
     store.updateConsulta(id, { asignado_a: nuevoEncargado }, user.id)
     if (selectedConsulta?.id === id) setSelectedConsulta(store.getConsultaById(id))
-    
+
     if (nuevoEncargado && encargado?.email) {
       const lead = store.getConsultaById(id)
       try {
@@ -216,7 +217,7 @@ export default function Dashboard() {
     if (!encargadoId || selectedLeads.length === 0) return
     const encargado = store.getUsuarios().find(u => u.id === encargadoId)
     selectedLeads.forEach(id => store.updateConsulta(id, { asignado_a: encargadoId }, user.id))
-    
+
     if (encargado?.email) {
       try {
         await notifyAssignment({ encargadoId, encargadoEmail: encargado.email, encargadoNombre: encargado.nombre, leadsCount: selectedLeads.length, isBulk: true, institucionNombre: nombreInstitucion })
@@ -252,7 +253,7 @@ export default function Dashboard() {
   }
 
   const handleLogout = () => { signOut(); navigate('/login') }
-  const selectConsulta = useCallback((id) => { 
+  const selectConsulta = useCallback((id) => {
     setSelectedConsulta(store.getConsultaById(id)); setActiveTab('detalle')
   }, [])
   const navigateToEstado = (estado) => { setFilterEstado(estado); setActiveTab('consultas'); setSelectedConsulta(null) }
@@ -300,13 +301,13 @@ export default function Dashboard() {
   useEffect(() => {
     if (typeof window !== 'undefined') window._supabase = supabase
     if (user?.institucion_id) setupRealtime()
-    
-    return () => { 
+
+    return () => {
       if (channelRef.current && channelRef.current.cleanup) {
         channelRef.current.cleanup()
         channelRef.current = null
       }
-      window._admitioChannel = null 
+      window._admitioChannel = null
     }
   }, [user?.institucion_id, setupRealtime])
 
@@ -329,19 +330,19 @@ export default function Dashboard() {
       if (window._admitioChannel) {
         window._admitioChannel.send({ type: 'broadcast', event: 'heartbeat', payload: { t: Date.now() } })
       }
-      
+
       const tiempoSinLatido = Date.now() - lastHeartbeatRef.current;
-      if (tiempoSinLatido > 60000) { 
+      if (tiempoSinLatido > 60000) {
         console.warn('💓 [Heartbeat] Latido perdido (60s). Forzando reconexión...');
         lastHeartbeatRef.current = Date.now(); // Mentir temporalmente para que el intervalo no dispare repetidamente
-        retryCountRef.current = 0; 
+        retryCountRef.current = 0;
         setSyncStatus('error');
         setupRealtime();
       }
     }, 15000)
-    
+
     // Recuperación silenciosa al volver a la pestaña
-    const handleVis = () => { 
+    const handleVis = () => {
       if (document.visibilityState === 'visible') {
         const tiempoInactivo = Date.now() - lastHeartbeatRef.current;
         if (tiempoInactivo > 60000) {
@@ -354,7 +355,7 @@ export default function Dashboard() {
         }
       }
     }
-    
+
     window.addEventListener('visibilitychange', handleVis)
     return () => { clearInterval(interval); window.removeEventListener('visibilitychange', handleVis) }
   }, [syncStatus, loadData, setupRealtime])
@@ -385,7 +386,7 @@ export default function Dashboard() {
     const hs = (e) => {
       if (e && e.detail) setSyncStatus(e.detail.status)
     }
-    
+
     // Recuperar estado inicial inmediatamente
     const currentSync = getSyncStatus()
     if (currentSync.isSyncing) setSyncStatus('syncing')
@@ -416,6 +417,7 @@ export default function Dashboard() {
       { id: 'usuarios', icon: 'User', label: 'Usuarios', show: esAdmin },
       { id: 'programas', icon: 'GraduationCap', label: 'Carreras/Cursos', show: esAdmin },
       { id: 'importar', icon: 'Upload', label: 'Importar', show: esAdmin },
+      { id: 'campanas', icon: 'Megaphone', label: 'Campañas', show: esAdmin || esEncargado },
       { id: 'importaciones_sheets', icon: 'Table', label: 'Google Sheets', show: esAdmin && planInfo?.plan === 'enterprise', badge: importacionesPendientes },
       { id: 'configuracion', icon: 'Settings', label: 'Configuración', show: esAdmin },
     ]
@@ -433,7 +435,7 @@ export default function Dashboard() {
     const SyncStatusIndicator = ({ isMobile = false }) => {
       const syncStatusInfo = getSyncStatus() || {};
       const isActuallySyncing = syncStatus === 'syncing' || syncStatusInfo.isSyncing || syncStatusInfo.pendingTasks > 0;
-      
+
       let icon = "CloudCheck";
       let color = "text-emerald-500";
       let label = "Sincronizado";
@@ -444,7 +446,7 @@ export default function Dashboard() {
         icon = "CloudOff";
         color = "text-red-500 font-bold";
         label = "DESCONECTADO";
-      } 
+      }
       // Prioridad 2: Guardando cambios
       else if (isActuallySyncing) {
         icon = "RefreshCw";
@@ -621,7 +623,7 @@ export default function Dashboard() {
     const SyncStatusIndicatorLocal = ({ isMobile = true }) => {
       const syncStatusInfo = getSyncStatus() || {};
       const isActuallySyncing = syncStatus === 'syncing' || syncStatusInfo.isSyncing || syncStatusInfo.pendingTasks > 0;
-      
+
       let icon = "CloudCheck";
       let color = "text-emerald-500";
       let label = "Sincronizado";
@@ -632,7 +634,7 @@ export default function Dashboard() {
         icon = "CloudOff";
         color = "text-red-500 font-bold";
         label = "DESCONECTADO";
-      } 
+      }
       // Prioridad 2: Guardando cambios
       else if (isActuallySyncing) {
         icon = "RefreshCw";
@@ -673,22 +675,22 @@ export default function Dashboard() {
           <SyncStatusIndicatorLocal isMobile={true} />
         </div>
 
-      <div className="flex items-center gap-2">
-        <div className="w-8 h-8 bg-gradient-to-br from-violet-600 to-purple-600 rounded-lg flex items-center justify-center">
-          <span className="text-white font-bold text-sm">{nombreInstitucion.charAt(0).toUpperCase()}</span>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-gradient-to-br from-violet-600 to-purple-600 rounded-lg flex items-center justify-center">
+            <span className="text-white font-bold text-sm">{nombreInstitucion.charAt(0).toUpperCase()}</span>
+          </div>
+          <span className="font-bold text-slate-800 text-sm truncate max-w-[100px]">{nombreInstitucion}</span>
         </div>
-        <span className="font-bold text-slate-800 text-sm truncate max-w-[100px]">{nombreInstitucion}</span>
-      </div>
 
-      <button
-        onClick={handleNuevoLead}
-        className="p-2 text-violet-600 hover:bg-violet-50 rounded-lg"
-      >
-        <Icon name="Plus" size={24} />
-      </button>
-    </div>
-  )
-}
+        <button
+          onClick={handleNuevoLead}
+          className="p-2 text-violet-600 hover:bg-violet-50 rounded-lg"
+        >
+          <Icon name="Plus" size={24} />
+        </button>
+      </div>
+    )
+  }
 
 
   // Vista especial para Asistente (solo crear leads)
@@ -789,14 +791,14 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button 
+              <button
                 onClick={() => {
-                   console.log('🔌 [Manual] Iniciando reconexión forzada...');
-                   retryCountRef.current = 0 // RESETEAR CONTADOR DE REINTENTOS
-                   lastHeartbeatRef.current = Date.now() // Dar 45s de gracia inmediatos
-                   setSyncStatus('loading')
-                   loadData()
-                   setupRealtime()
+                  console.log('🔌 [Manual] Iniciando reconexión forzada...');
+                  retryCountRef.current = 0 // RESETEAR CONTADOR DE REINTENTOS
+                  lastHeartbeatRef.current = Date.now() // Dar 45s de gracia inmediatos
+                  setSyncStatus('loading')
+                  loadData()
+                  setupRealtime()
                 }}
                 className="px-3 py-1 bg-white text-red-600 rounded-lg text-xs font-bold hover:bg-red-50 transition-colors whitespace-nowrap"
               >
@@ -955,6 +957,13 @@ export default function Dashboard() {
               setNotification={setNotification}
             />
           )}
+
+          {activeTab === 'campanas' && (
+            <CampanasView
+              user={user}
+              setNotification={setNotification}
+            />
+          )}
         </div>
       </main>
 
@@ -1070,8 +1079,7 @@ export default function Dashboard() {
 
       {notification && (
         <div className={`fixed ${notification.isBlocking ? 'inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4' : 'bottom-4 right-4 animate-bounce'} z-[200]`}>
-          <div className={`${notification.isBlocking ? 'max-w-sm w-full bg-white rounded-3xl shadow-2xl p-8 border-t-4 border-red-500' : 'px-6 py-4 rounded-xl shadow-lg flex items-center gap-3'} ${
-            notification.type === 'error' ? (notification.isBlocking ? 'bg-white' : 'bg-red-50 text-red-700') :
+          <div className={`${notification.isBlocking ? 'max-w-sm w-full bg-white rounded-3xl shadow-2xl p-8 border-t-4 border-red-500' : 'px-6 py-4 rounded-xl shadow-lg flex items-center gap-3'} ${notification.type === 'error' ? (notification.isBlocking ? 'bg-white' : 'bg-red-50 text-red-700') :
               notification.type === 'success' ? (notification.isBlocking ? 'bg-white' : 'bg-emerald-600 text-white') :
                 'bg-blue-600 text-white'
             }`}>
@@ -1082,7 +1090,7 @@ export default function Dashboard() {
                 </div>
                 <h3 className="text-2xl font-bold text-slate-800 mb-2">Sesión Expirada</h3>
                 <p className="text-slate-500 mb-8">{notification.message}</p>
-                <button 
+                <button
                   onClick={handleLogout}
                   className="w-full py-4 bg-red-600 text-white rounded-2xl font-bold hover:bg-red-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-200"
                 >

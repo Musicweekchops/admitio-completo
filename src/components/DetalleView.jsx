@@ -161,6 +161,13 @@ const DetalleView = memo(({
                     <p className="text-slate-700">{c.medio?.nombre || 'Web'}</p>
                   </div>
                 </div>
+                <div>
+                  <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Campaña</p>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${c.campana?.color || 'bg-slate-300'}`} />
+                    <p className="font-semibold text-slate-700">{c.campana?.nombre || 'Ninguna'}</p>
+                  </div>
+                </div>
               </div>
               <div className="space-y-4">
                 <div>
