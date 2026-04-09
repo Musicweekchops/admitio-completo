@@ -101,9 +101,15 @@ serve(async (req) => {
     if (medio) {
       const medioLower = medio.toLowerCase().trim()
       const mappingMedio: Record<string, string> = {
-        'ig': 'instagram', 'fb': 'facebook', 'google': 'google ads', 'sheet': 'google sheets'
+        'ig': 'instagram', 
+        'fb': 'facebook', 
+        'facebook': 'facebook',
+        'instagram': 'instagram',
+        'google': 'google ads', 
+        'sheet': 'google sheets',
+        'web': 'web'
       }
-      medio = mappingMedio[medioLower] || medio
+      medio = mappingMedio[medioLower] || medioLower
     }
 
     // 3.1 Resolver carrera_id
