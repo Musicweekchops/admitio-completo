@@ -196,7 +196,7 @@ serve(async (req) => {
       await supabase.from('acciones_lead').insert({
         lead_id: leadId,
         tipo: 'actualizacion_automatica',
-        descripcion: `Re-entrada vía API SaaS (${medio || 'Externo'}). Carrera interés: ${carrera_nombre_final || 'No especificada'}`
+        descripcion: `Re-entrada vía API SaaS (${medio || 'Externo'}). Perfil/Notas: ${notas || 'Sin cambios'}`
       })
 
     } else {
@@ -228,8 +228,8 @@ serve(async (req) => {
 
       await supabase.from('acciones_lead').insert({
         lead_id: leadId,
-        tipo: 'creacion_automatica',
-        descripcion: `Lead cargado vía API SaaS (${medio || 'Externo'})`
+        tipo: 'actualizacion_automatica',
+        descripcion: `Re-entrada vía API SaaS (${medio || 'Externo'}). Perfil/Notas: ${notas || 'Sin cambios'}`
       })
     }
 
