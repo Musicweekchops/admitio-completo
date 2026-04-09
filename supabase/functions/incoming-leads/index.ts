@@ -54,21 +54,10 @@ serve(async (req) => {
     }
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // 2. Validar Institución y Plan
+    // 2. Validar Institución
     const { data: inst, error: instError } = await supabase
       .from('instituciones')
-      .select(`
-        id, 
-        nombre, 
-        plan, 
-        leads_count, 
-        estado,
-        planes_config!inner (
-          id,
-          max_leads,
-          api_acceso
-        )
-      `)
+      .select(`id, nombre, plan, leads_count, estado`)
       .eq('api_key', apiKey)
       .single()
 
@@ -81,8 +70,18 @@ serve(async (req) => {
       throw new Error('La institución no está activa')
     }
 
-    // 3. Validar permisos del Plan (SaaS Logic)
-    const planConfig = inst.planes_config as any
+    // 3. Validar permisos del Plan (SaaS Logic) - Consulta separada para evitar fallos de join
+    const { data: planConfig, error: planError } = await supabase
+      .from('planes_config')
+      .select('id, max_leads, api_acceso')
+      .eq('id', inst.plan)
+      .single()
+
+    if (planError || !planConfig) {
+      console.error('❌ Error cargando configuración del plan:', planError)
+      throw new Error('Error de configuración del plan de la institución')
+    }
+
     if (!planConfig.api_acceso) {
       throw new Error(`Tu plan (${inst.plan}) no tiene acceso a la API. Sube de nivel para usar esta función.`)
     }

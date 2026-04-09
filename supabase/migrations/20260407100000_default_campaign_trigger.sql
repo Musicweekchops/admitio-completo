@@ -15,23 +15,12 @@ END $$;
 DO $$
 DECLARE
     r RECORD;
-    v_camp_id UUID;
 BEGIN
     FOR r IN SELECT id FROM instituciones LOOP
         -- Create 'Extensión' campaign with a distinctive blue color
         INSERT INTO public.campanas (institucion_id, nombre, color, activa)
         VALUES (r.id, 'Extensión', 'bg-blue-500', true)
         ON CONFLICT (institucion_id, nombre) DO NOTHING;
-
-        -- Find the ID (whether created now or before)
-        SELECT id INTO v_camp_id FROM public.campanas 
-        WHERE nombre = 'Extensión' AND institucion_id = r.id 
-        LIMIT 1;
-
-        -- 3. Update existing leads that currenty have no campaign
-        UPDATE public.leads
-        SET campana_id = v_camp_id
-        WHERE campana_id IS NULL AND institucion_id = r.id;
     END LOOP;
 END $$;
 
