@@ -20,6 +20,7 @@ interface IncomingLead {
   medio?: string
   campana?: string // Nombre de la campaña
   campana_id?: string // UUID de la campaña
+  notas?: string // Notas adicionales
 }
 
 serve(async (req) => {
@@ -40,7 +41,7 @@ serve(async (req) => {
     }
 
     const body: IncomingLead = await req.json()
-    let { nombre, email, telefono, carrera, medio, campana, campana_id } = body
+    let { nombre, email, telefono, carrera, medio, campana, campana_id, notas } = body
 
     if (!nombre) {
       throw new Error('El campo "nombre" (o "full_name") es obligatorio')
@@ -186,6 +187,7 @@ serve(async (req) => {
       // 2. Actualizamos updated_at para que suba en el Dashboard
       const updateData: any = {
         estado: 'nueva',
+        notas: notas || existingLead.notas,
         updated_at: new Date().toISOString()
       }
 
@@ -211,7 +213,8 @@ serve(async (req) => {
           campana_id: campana_id_final,
           medio: medio || 'API SaaS',
           estado: 'nueva',
-          prioridad: 'media'
+          prioridad: 'media',
+          notas: notas
         })
         .select()
         .single()
