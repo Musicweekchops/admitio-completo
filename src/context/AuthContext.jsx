@@ -897,7 +897,7 @@ export function AuthProvider({ children }) {
         .from('instituciones')
         .select('plan')
         .eq('id', institucionId)
-        .single()
+        .maybeSingle()
 
       const planId = (inst?.plan || 'free').toLowerCase().trim()
       const limites = PLANES_DEFAULT[planId] || PLANES_DEFAULT.free
