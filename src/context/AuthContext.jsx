@@ -745,7 +745,6 @@ export function AuthProvider({ children }) {
           .select('*')
           .eq('institucion_id', institucionId)
           .order('created_at', { ascending: false })
-          .limit(1000) // Límite razonable para carga inicial rápida
           .abortSignal(controller.signal),
         
         supabase
